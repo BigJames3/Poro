@@ -1,0 +1,55 @@
+# Node
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+
+# Go
+*.exe
+*.test
+*.out
+vendor/
+
+# Kotlin/Android
+*.iml
+.gradle/
+local.properties
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# iOS
+Pods/
+DerivedData/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Secrets
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+.cursor/*
+!.cursor/rules
+
+# OS
+.DS_Store
+Thumbs.db
