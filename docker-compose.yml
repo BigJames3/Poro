@@ -1,17 +1,23 @@
 # =============================================================
-# Poro — Docker Compose (développement local)
+# Poro — Docker Compose (développement local UNIQUEMENT)
 # =============================================================
-# Ports Windows : Interne Docker
+# Ports hôte (tous liés à 127.0.0.1 : rien n'est exposé sur le réseau) : Interne Docker
 # - Postgres    : 5433 : 5432   (évite cvstudio sur 5432)
-# - Redis       : 6380 : 6379   (évite cvstudio sur 6379)
+# - Redis       : 6380 : 6379   (évite cvstudio sur 6379, mot de passe requis)
 # - SeaweedFS   : 9000 : 8333   (S3 API)
 #                 9001 : 9333   (Master UI)
+#                 9002 : 8888   (Filer UI)
 # - Redpanda    : 9092 : 9092   (Kafka)
+#                 9644 : 9644   (Admin API)
+#                 8080 : 8080   (HTTP Proxy)
 # - ClickHouse  : 8123 : 8123   (HTTP)
 #                 9440 : 9000   (TCP, évite conflit avec SeaweedFS)
 # - Qdrant      : 6333 : 6333   (HTTP)
 #                 6334 : 6334   (gRPC)
 # - Auth        : 8081 : 8081
+#
+# Identifiants : lus depuis .env (copier .env.example). Aucun secret dans ce fichier.
+# Images : versions exactes (jamais :latest) pour des environnements reproductibles.
 # =============================================================
 
 services:
@@ -20,18 +26,18 @@ services:
   # ─────────────────────────────────────────────
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine3.23
     container_name: poro-postgres
     environment:
-      POSTGRES_USER: poro
-      POSTGRES_PASSWORD: poro_dev_password
-      POSTGRES_DB: poro_auth
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER manquant dans .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans .env}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB manquant dans .env}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - poro_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U poro -d poro_auth"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,15 +47,28 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.11-alpine3.21
     container_name: poro-redis
-    command: redis-server --appendonly yes
+    # `sh -c` court-circuite la baisse de privilèges de l'entrypoint officiel : on la force ici.
+    user: redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD manquant dans .env}
+    # Configuration passée sur stdin : le mot de passe n'apparaît pas dans la liste des processus.
+    command:
+      - sh
+      - -c
+      - |
+        exec redis-server - <<EOF
+        requirepass "$$REDIS_PASSWORD"
+        appendonly yes
+        EOF
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - poro_redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # REDISCLI_AUTH évite de passer le mot de passe en argument.
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli -h 127.0.0.1 ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -62,15 +81,21 @@ services:
   # ─────────────────────────────────────────────
 
   seaweedfs:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:4.48
     container_name: poro-seaweedfs
     command: server -s3 -dir=/data -master.volumeSizeLimitMB=1024
     ports:
-      - "9000:8333"   # S3 API
-      - "9001:9333"   # Master UI
-      - "9002:8888"   # Filer UI
+      - "127.0.0.1:9000:8333"   # S3 API
+      - "127.0.0.1:9001:9333"   # Master UI
+      - "127.0.0.1:9002:8888"   # Filer UI
     volumes:
       - poro_seaweedfs_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9333/cluster/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
     networks:
       - poro-network
     restart: unless-stopped
@@ -80,7 +105,7 @@ services:
   # ─────────────────────────────────────────────
 
   redpanda:
-    image: redpandadata/redpanda:latest
+    image: redpandadata/redpanda:v26.2.3
     container_name: poro-redpanda
     command:
       - redpanda
@@ -94,11 +119,17 @@ services:
       - --kafka-addr=PLAINTEXT://0.0.0.0:9092
       - --advertise-kafka-addr=PLAINTEXT://localhost:9092
     ports:
-      - "9092:9092"   # Kafka API
-      - "9644:9644"   # Admin API
-      - "8080:8080"   # HTTP Proxy
+      - "127.0.0.1:9092:9092"   # Kafka API
+      - "127.0.0.1:9644:9644"   # Admin API (interface d'administration : jamais exposée)
+      - "127.0.0.1:8080:8080"   # HTTP Proxy
     volumes:
       - poro_redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -Eq 'Healthy:.+true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
     networks:
       - poro-network
     restart: unless-stopped
@@ -108,22 +139,27 @@ services:
   # ─────────────────────────────────────────────
 
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:25.8.33.6-alpine
     container_name: poro-clickhouse
     environment:
       CLICKHOUSE_DB: poro_analytics
-      CLICKHOUSE_USER: poro
-      CLICKHOUSE_PASSWORD: poro_dev_password
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?CLICKHOUSE_USER manquant dans .env}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD manquant dans .env}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - "8123:8123"   # HTTP
-      - "9440:9000"   # TCP (native)
+      - "127.0.0.1:8123:8123"   # HTTP
+      - "127.0.0.1:9440:9000"   # TCP (native)
     volumes:
       - poro_clickhouse_data:/var/lib/clickhouse
     ulimits:
       nofile:
         soft: 262144
         hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
       - poro-network
     restart: unless-stopped
@@ -133,13 +169,21 @@ services:
   # ─────────────────────────────────────────────
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.19.1
     container_name: poro-qdrant
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY manquant dans .env}
     ports:
-      - "6333:6333"   # HTTP
-      - "6334:6334"   # gRPC
+      - "127.0.0.1:6333:6333"   # HTTP
+      - "127.0.0.1:6334:6334"   # gRPC
     volumes:
       - poro_qdrant_data:/qdrant/storage
+    healthcheck:
+      # /livez ne requiert pas la clé API ; bash seul (pas de curl/wget dans l'image).
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333 && printf 'GET /livez HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3 && read -r l <&3 && [[ $$l == *' 200 '* ]]"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
       - poro-network
     restart: unless-stopped
@@ -154,22 +198,22 @@ services:
       dockerfile: Dockerfile
     container_name: poro-auth
     environment:
-      APP_ENV: dev
+      APP_ENV: ${APP_ENV:-dev}
       APP_PORT: "8081"
-      LOG_LEVEL: debug
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
 
       # Postgres — port INTERNE du conteneur
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
-      POSTGRES_USER: poro
-      POSTGRES_PASSWORD: poro_dev_password
-      POSTGRES_DB: poro_auth
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_SSLMODE: disable
 
       # Redis — port INTERNE du conteneur
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      REDIS_PASSWORD: ""
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       REDIS_DB: "0"
 
       # JWT
@@ -181,13 +225,23 @@ services:
       # OTP
       OTP_TTL: 5m
       OTP_MAX_ATTEMPTS: "3"
-      OTP_PROVIDER_URL: ""
-      OTP_PROVIDER_KEY: ""
+      OTP_PROVIDER_URL: ${OTP_PROVIDER_URL:-}
+      OTP_PROVIDER_KEY: ${OTP_PROVIDER_KEY:-}
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     volumes:
       - ./services/auth/keys:/app/keys:ro
       - ./services/auth/migrations:/app/migrations:ro
+    # Sonde IPv4 explicite : `localhost` peut se résoudre en ::1 alors que le service écoute en IPv4.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     depends_on:
       postgres:
         condition: service_healthy
