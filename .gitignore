@@ -53,3 +53,24 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Go binaries
+bin/
+/services/auth/bin/
+coverage.out
+coverage.html
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+
+# Test artifacts
+*.test
+*.prof
+
+# Logs
+*.log
+logs/
