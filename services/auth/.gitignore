@@ -1,0 +1,17 @@
+# Local env
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+bin/
+tmp/
+*.exe
+*.exe~
+*.test
+coverage.out
+vendor/
+
+# Private keys (keep the directory via .gitkeep)
+keys/*
+!keys/.gitkeep
