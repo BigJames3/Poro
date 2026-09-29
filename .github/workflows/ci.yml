@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: '1.22' }
-      - run: echo "Tests backend à configurer"
+      - run: echo "Tests backend Ã  configurer"
 
   mobile-build:
     needs: detect-changes
@@ -43,4 +43,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: '17' }
-      - run: echo "Build Android à configurer"
+      - run: echo "Build Android Ã  configurer"
