@@ -17,7 +17,10 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
+      shared-go: ${{ steps.filter.outputs.shared-go }}
       auth: ${{ steps.filter.outputs.auth }}
+      relay: ${{ steps.filter.outputs.relay }}
+      user: ${{ steps.filter.outputs.user }}
       mobile: ${{ steps.filter.outputs.mobile }}
     steps:
       - uses: actions/checkout@v4
@@ -25,12 +28,72 @@ jobs:
         id: filter
         with:
           filters: |
+            shared-go:
+              - 'packages/shared-go/**'
+              - '.github/workflows/ci.yml'
             auth:
               - 'services/auth/**'
               - 'packages/shared-go/**'
               - '.github/workflows/ci.yml'
+            relay:
+              - 'services/outbox-relay/**'
+              - 'packages/shared-go/**'
+              - '.github/workflows/ci.yml'
+            user:
+              - 'services/user/**'
+              - 'packages/contracts/events/**'
+              - '.github/workflows/ci.yml'
             mobile:
               - 'apps/mobile-android/**'
+
+  shared-go:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.shared-go == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/shared-go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/shared-go/go.mod
+          cache-dependency-path: packages/shared-go/go.sum
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: Tests
+        run: go test ./... -count=1 -cover
+
+  outbox-relay:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.relay == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/outbox-relay
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/outbox-relay/go.mod
+          cache-dependency-path: |
+            services/outbox-relay/go.sum
+            packages/shared-go/go.sum
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: Tests
+        run: go test ./... -count=1 -cover
+      - name: Docker build
+        working-directory: .
+        run: docker build -f services/outbox-relay/Dockerfile -t poro-outbox-relay:${{ github.sha }} .
 
   auth:
     needs: detect-changes
@@ -44,7 +107,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: services/auth/go.mod
-          cache-dependency-path: services/auth/go.sum
+          cache-dependency-path: |
+            services/auth/go.sum
+            packages/shared-go/go.sum
 
       - name: gofmt
         run: |
@@ -61,7 +126,35 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Docker build
-        run: docker build -t poro-auth:${{ github.sha }} .
+        working-directory: .
+        run: docker build -f services/auth/Dockerfile -t poro-auth:${{ github.sha }} .
+
+  user:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.user == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/user
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: services/user/package-lock.json
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Format
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests
+        run: npm run test:cov
+      - name: Docker build
+        run: docker build -t poro-user:${{ github.sha }} .
 
   mobile-build:
     needs: detect-changes
@@ -70,5 +163,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with: { distribution: 'temurin', java-version: '17' }
+        with: { distribution: "temurin", java-version: "17" }
       - run: echo "Build Android à configurer"
