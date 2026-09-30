@@ -9,7 +9,7 @@ COPY services/outbox-relay /src/services/outbox-relay
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/relay ./cmd/relay
 
 FROM alpine:3.22
-RUN apk add --no-cache ca-certificates && adduser -D -H -u 10001 app
+RUN apk add --no-cache ca-certificates wget && adduser -D -H -u 10001 app
 COPY --from=builder /out/relay /app/relay
 USER app
 EXPOSE 9100
