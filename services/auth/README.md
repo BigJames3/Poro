@@ -55,11 +55,19 @@ En `dev`, les codes OTP sont écrits dans les logs (`dev sms otp`).
 | `OTP_HMAC_SECRET` | *(vide)* | ≥ 32 octets, obligatoire hors `dev` |
 | `OTP_REQUEST_COOLDOWN` | `60s` | Délai entre deux codes pour un numéro |
 | `OTP_MAX_REQUESTS_PER_HOUR` | `5` | Codes par numéro et par heure |
-| `SMS_PROVIDER` | `log` | `log` = dev uniquement ; aucun fournisseur réel encore intégré |
+| `OTP_ALLOWED_CALLING_CODES` | `+225,+221,+237,+234` | Pays autorisés à recevoir un code ; vide = tous (déconseillé : fraude SMS) |
+| `SMS_PROVIDER` | `log` | `log` (dev uniquement, codes dans les logs) ou `africastalking` |
+| `AFRICASTALKING_USERNAME` | *(vide)* | Nom d'application ; `sandbox` = bac à sable (interdit en prod) |
+| `AFRICASTALKING_API_KEY` | *(vide)* | Clé API, à fournir par le gestionnaire de secrets |
+| `AFRICASTALKING_SENDER_ID` | *(vide)* | Sender ID enregistré (ex. `PORO`) ; vide = expéditeur par défaut du compte |
 | `MIGRATIONS_PATH` | recherche de `migrations/` | Défini à `/app/migrations` dans l'image |
 
 La configuration est validée au démarrage ; hors `dev`, `SMS_PROVIDER=log`, un secret OTP absent
 ou Postgres sans TLS empêchent le lancement.
+
+Pour tester l'envoi réel sans SMS réel : `SMS_PROVIDER=africastalking`,
+`AFRICASTALKING_USERNAME=sandbox` et la clé du bac à sable ; les messages apparaissent dans le
+simulateur Africa's Talking.
 
 ## Endpoints
 

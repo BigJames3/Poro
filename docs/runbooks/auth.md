@@ -19,6 +19,8 @@ Le démarrage est volontairement strict. Lire la première ligne `fatal` des log
 | `postgres …` / `migrations …` | base injoignable ou migration en échec | vérifier réseau et identifiants ; en cas de migration « dirty », voir plus bas |
 | `redis …` | Redis injoignable | vérifier Redis ; le service n'accepte pas de fonctionner sans (blacklist et limites) |
 | `token service …` | clés absentes, < 2048 bits, ou privée et publique non appariées | remonter la bonne paire |
+| `read private key: … permission denied` | le processus tourne en non-root (`app`) et ne peut pas lire la clé | Kubernetes : `securityContext.fsGroup` + `defaultMode: 0440` sur le secret ; Docker : clé lisible par l'UID de `app` |
+| `invalid config: AFRICASTALKING_…` | identifiants SMS absents, ou bac à sable en prod | fournir `AFRICASTALKING_USERNAME` / `AFRICASTALKING_API_KEY` |
 
 ## Clés JWT
 
@@ -50,6 +52,26 @@ UPDATE refresh_tokens SET revoked_at = now() WHERE revoked_at IS NULL;
   doit sérialiser ses refresh (voir ADR-0002).
 - **Pic de `otp_throttled` / coût SMS** : ajuster `OTP_REQUEST_COOLDOWN` et
   `OTP_MAX_REQUESTS_PER_HOUR` ; les compteurs sont dans Redis (`auth:otp:*`).
+
+## SMS (Africa's Talking)
+
+Les échecs d'envoi sont loggés en `error` avec le message `request failed` et la cause
+`africastalking: …` ; le client reçoit seulement `sms_unavailable` (503) ou `phone_unreachable` (422).
+
+| Cause dans les logs | Signification | Action |
+|---|---|---|
+| `http 401` | clé API invalide ou mauvais nom d'application | vérifier le secret et `AFRICASTALKING_USERNAME` |
+| `405 InsufficientBalance` | solde épuisé : **plus aucun utilisateur ne peut se connecter par SMS** | recharger le compte ; configurer l'alerte de solde bas |
+| `402 InvalidSenderId` | Sender ID non enregistré pour ce pays | enregistrer le Sender ID ou vider `AFRICASTALKING_SENDER_ID` |
+| `401 RiskHold`, `407 CouldNotRoute` | blocage anti-fraude ou route indisponible vers l'opérateur | contacter le support Africa's Talking |
+| `http 5xx`, timeout | panne du fournisseur | aucun renvoi automatique ; les clients peuvent réessayer tout de suite |
+
+Chaque SMS accepté produit un log `sms otp sent` avec `message_id`, utile pour les réclamations
+auprès du fournisseur. Les numéros sont masqués.
+
+**Suspicion de SMS pumping** (hausse soudaine du volume de `otp issued` vers des numéros
+consécutifs ou un seul opérateur) : réduire `OTP_ALLOWED_CALLING_CODES` au pays concerné ou
+abaisser `OTP_MAX_REQUESTS_PER_HOUR`, puis redémarrer.
 
 ## Rate limiting derrière un proxy
 

@@ -20,7 +20,10 @@ paths:
       tags: [otp]
       security: []
       summary: Send a 6-digit code by SMS
-      description: Rate limited to 5 requests/min per IP, one code per phone every 60 s and 5 per hour.
+      description: |
+        Only numbers from the launch countries (+225, +221, +237, +234) are accepted.
+        Rate limited to 5 requests/min per IP, one code per phone every 60 s and 5 per hour.
+        A failed delivery lifts the 60 s cooldown but still counts toward the hourly cap.
       requestBody:
         required: true
         content:
@@ -46,6 +49,12 @@ paths:
                           message: { type: string, example: otp sent }
                           expires_in: { type: integer, description: seconds, example: 300 }
         "400": { $ref: "#/components/responses/InvalidRequest" }
+        "422":
+          description: "`phone_country_not_supported` (outside the launch countries) or `phone_unreachable` (the SMS provider refuses the number)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "503":
+          description: "`sms_unavailable`: provider failure; the client may retry immediately"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "429":
           description: "`otp_throttled` (per phone) or `rate_limited` (per IP)"
           headers:
@@ -273,6 +282,9 @@ components:
                 - otp_expired
                 - otp_too_many_attempts
                 - otp_throttled
+                - phone_country_not_supported
+                - phone_unreachable
+                - sms_unavailable
                 - invalid_credentials
                 - refresh_token_invalid
                 - session_revoked

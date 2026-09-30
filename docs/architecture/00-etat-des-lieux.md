@@ -38,7 +38,7 @@ il est mis à jour à chaque jalon P0.
 ## 3. Risques et dette restants
 
 **Sécurité**
-- Aucun fournisseur SMS réel : le service refuse volontairement de démarrer hors `dev` (`SMS_PROVIDER=log` interdit). Choix du fournisseur à faire (décision coût/contrat).
+- SMS : Africa's Talking est intégré, mais aucun compte de production n'est encore configuré. Hors `dev`, le service refuse de démarrer sans identifiants (`SMS_PROVIDER=log` interdit).
 - Clés JWT sur disque. En production : secret Kubernetes chiffré (SOPS/Sealed Secrets) ou Vault, rotation via plusieurs `kid` dans le JWKS.
 - Pas encore de scan de conteneur (Trivy), de SAST (golangci-lint/gosec), de DAST, de signature d'image.
 
@@ -97,7 +97,7 @@ Chaque service vérifie les JWT localement via `GET /.well-known/jwks.json` du s
 | P0-7 | Feed : following, chronologique, trending, For You à règles ; pagination par curseur ; cache Redis | À faire |
 | P0-8 | Notifications push FCM | À faire |
 | P0-9 | Modération de base : signalement, filtre texte, actions ADMIN/MODERATOR | À faire |
-| P0-10 | Fournisseur SMS réel derrière l'interface `SMSSender` | Bloqué : choix du fournisseur |
+| P0-10 | Fournisseur SMS réel (Africa's Talking), liste des pays autorisés, anti-SMS pumping | **Fait** — [ADR-0004](adr/0004-decisions-produit-lancement.md) ; reste : compte, Sender ID, tarifs |
 | P0-11 | CI : golangci-lint, gosec, Trivy (actions épinglées par SHA), Dependabot | À faire |
 | P0-12 | Staging : Terraform + k3s + Helm + ingress, sauvegardes Postgres (après vérification des prix actuels) | À faire |
 | P0-13 | Observabilité minimale : Prometheus, Grafana, Loki, Tempo | À faire |
@@ -114,9 +114,12 @@ Recommandation ML, analytics ClickHouse, recherche, chat, ranking personnalisé.
 ### P3 — futur
 Live, économie des créateurs, publicité.
 
-## 6. Décisions qui reviennent au propriétaire
+## 6. Décisions du propriétaire
 
-1. **Périmètre du MVP** : la marketplace fait-elle partie du premier MVP (prompt maître) ou vient-elle après le social (règles Cursor) ?
-2. **Fournisseur SMS** (Africa's Talking, Twilio, Termii, opérateur local…) : coût par SMS et couverture par pays.
-3. **Fournisseurs de paiement** à contractualiser en premier (CinetPay, Flutterwave, Paystack, Wave, Stripe, GeniusPay…) : décision financière et juridique.
-4. **Pays de lancement** : impacte les indicatifs, les langues, les fournisseurs et la conformité (protection des données).
+Prises le 30 septembre 2026, détaillées dans [ADR-0004](adr/0004-decisions-produit-lancement.md) :
+social d'abord puis marketplace en P1 ; lancement en Côte d'Ivoire, Sénégal, Cameroun et
+Nigeria ; SMS via Africa's Talking ; paiements Wave et GeniusPay en premier.
+
+Conformité à prévoir avant le lancement : lois de protection des données de chaque pays
+(CI : loi 2013-450 / ARTCI ; SN : loi 2008-12 / CDP ; CM : loi 2024-017 ; NG : NDPA 2023 / NDPC).
+À faire valider par un juriste.
