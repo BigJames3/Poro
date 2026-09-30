@@ -9,6 +9,8 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/poro/shared-go/httpx"
+
 	"github.com/poro/auth/internal/dto"
 	"github.com/poro/auth/internal/middleware"
 	"github.com/poro/auth/internal/service"
@@ -121,10 +123,10 @@ func (h *AuthHandler) Me(c *fiber.Ctx) error {
 
 func decode(c *fiber.Ctx, validate *validator.Validate, dst any) error {
 	if err := c.BodyParser(dst); err != nil {
-		return middleware.NewAPIError(fiber.StatusBadRequest, "invalid_json", "invalid json")
+		return httpx.NewAPIError(fiber.StatusBadRequest, "invalid_json", "invalid json")
 	}
 	if err := validate.Struct(dst); err != nil {
-		return middleware.NewAPIError(fiber.StatusBadRequest, "invalid_request", "invalid request")
+		return httpx.NewAPIError(fiber.StatusBadRequest, "invalid_request", "invalid request")
 	}
 	return nil
 }
@@ -133,40 +135,40 @@ func writeData(c *fiber.Ctx, status int, data any) error {
 	return c.Status(status).JSON(fiber.Map{
 		"data":  data,
 		"error": nil,
-		"meta":  fiber.Map{"request_id": middleware.RequestIDFrom(c)},
+		"meta":  fiber.Map{"request_id": httpx.RequestIDFrom(c)},
 	})
 }
 
 func mapAuthError(err error) error {
 	switch {
 	case errors.Is(err, service.ErrEmailTaken):
-		return middleware.NewAPIError(fiber.StatusConflict, "email_taken", "email already registered")
+		return httpx.NewAPIError(fiber.StatusConflict, "email_taken", "email already registered")
 	case errors.Is(err, service.ErrAccountBlocked):
-		return middleware.NewAPIError(fiber.StatusForbidden, "account_blocked", "account blocked")
+		return httpx.NewAPIError(fiber.StatusForbidden, "account_blocked", "account blocked")
 	case errors.Is(err, service.ErrAccountNotFound):
-		return middleware.NewAPIError(fiber.StatusNotFound, "account_not_found", "account not found")
+		return httpx.NewAPIError(fiber.StatusNotFound, "account_not_found", "account not found")
 	case errors.Is(err, service.ErrOTPTooManyAttempts):
-		return middleware.NewAPIError(fiber.StatusTooManyRequests, "otp_too_many_attempts", "too many attempts, request a new code")
+		return httpx.NewAPIError(fiber.StatusTooManyRequests, "otp_too_many_attempts", "too many attempts, request a new code")
 	case errors.Is(err, service.ErrOTPThrottled):
-		return middleware.NewAPIError(fiber.StatusTooManyRequests, "otp_throttled", "too many code requests")
+		return httpx.NewAPIError(fiber.StatusTooManyRequests, "otp_throttled", "too many code requests")
 	case errors.Is(err, service.ErrPhoneCountryNotSupported):
-		return middleware.NewAPIError(fiber.StatusUnprocessableEntity, "phone_country_not_supported", "phone country not supported")
+		return httpx.NewAPIError(fiber.StatusUnprocessableEntity, "phone_country_not_supported", "phone country not supported")
 	case errors.Is(err, service.ErrPhoneUnreachable):
-		return middleware.NewAPIError(fiber.StatusUnprocessableEntity, "phone_unreachable", "this number cannot receive sms")
+		return httpx.NewAPIError(fiber.StatusUnprocessableEntity, "phone_unreachable", "this number cannot receive sms")
 	case errors.Is(err, service.ErrSMSUnavailable):
-		return middleware.NewAPIError(fiber.StatusServiceUnavailable, "sms_unavailable", "sms delivery unavailable, try again").WithCause(err)
+		return httpx.NewAPIError(fiber.StatusServiceUnavailable, "sms_unavailable", "sms delivery unavailable, try again").WithCause(err)
 	case errors.Is(err, service.ErrOTPExpired):
-		return middleware.NewAPIError(fiber.StatusUnauthorized, "otp_expired", "code expired")
+		return httpx.NewAPIError(fiber.StatusUnauthorized, "otp_expired", "code expired")
 	case errors.Is(err, service.ErrOTPInvalid):
-		return middleware.NewAPIError(fiber.StatusUnauthorized, "otp_invalid", "invalid code")
+		return httpx.NewAPIError(fiber.StatusUnauthorized, "otp_invalid", "invalid code")
 	case errors.Is(err, service.ErrInvalidCredentials):
-		return middleware.NewAPIError(fiber.StatusUnauthorized, "invalid_credentials", "invalid credentials")
+		return httpx.NewAPIError(fiber.StatusUnauthorized, "invalid_credentials", "invalid credentials")
 	case errors.Is(err, service.ErrRefreshTokenReused):
-		return middleware.NewAPIError(fiber.StatusUnauthorized, "session_revoked", "session revoked, sign in again")
+		return httpx.NewAPIError(fiber.StatusUnauthorized, "session_revoked", "session revoked, sign in again")
 	case errors.Is(err, service.ErrRefreshTokenInvalid):
-		return middleware.NewAPIError(fiber.StatusUnauthorized, "refresh_token_invalid", "invalid refresh token")
+		return httpx.NewAPIError(fiber.StatusUnauthorized, "refresh_token_invalid", "invalid refresh token")
 	case errors.Is(err, service.ErrInvalidToken):
-		return middleware.NewAPIError(fiber.StatusUnauthorized, "unauthorized", "unauthorized")
+		return httpx.NewAPIError(fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	default:
 		return err
 	}

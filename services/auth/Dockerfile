@@ -1,13 +1,15 @@
 # syntax=docker/dockerfile:1
+# Build context: repository root (needs packages/shared-go).
 
 FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
-
-COPY go.mod go.sum ./
+COPY packages/shared-go /src/packages/shared-go
+COPY services/auth/go.mod services/auth/go.sum /src/services/auth/
+WORKDIR /src/services/auth
 RUN go mod download
 
-COPY . .
+COPY services/auth /src/services/auth
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/auth ./cmd/server
 
 FROM alpine:3.22
@@ -16,7 +18,7 @@ RUN apk add --no-cache ca-certificates && adduser -D -u 10001 app
 
 WORKDIR /app
 COPY --from=builder /out/auth /app/auth
-COPY migrations /app/migrations
+COPY services/auth/migrations /app/migrations
 
 ENV MIGRATIONS_PATH=/app/migrations
 

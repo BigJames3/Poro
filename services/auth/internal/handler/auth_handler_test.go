@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/poro/shared-go/httpx"
+
 	"github.com/poro/auth/internal/dto"
 	"github.com/poro/auth/internal/middleware"
 	"github.com/poro/auth/internal/service"
@@ -49,10 +51,10 @@ func TestAuthHandlerSuccess(t *testing.T) {
 	app := authApp(auth)
 
 	resp := do(t, app, http.MethodPost, "/otp/request", `{"phone":"+14155552671"}`, map[string]string{
-		middleware.HeaderRequestID: "client-req-1",
+		httpx.HeaderRequestID: "client-req-1",
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, "client-req-1", resp.Header.Get(middleware.HeaderRequestID))
+	require.Equal(t, "client-req-1", resp.Header.Get(httpx.HeaderRequestID))
 	body := decodeBody(t, resp)
 	require.Nil(t, body["error"])
 	require.Equal(t, "otp sent", body["data"].(map[string]any)["message"])
@@ -183,26 +185,6 @@ func TestLogoutAndMe(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
-func TestHealthProbes(t *testing.T) {
-	app := newTestApp()
-	h := NewHealthHandler(nil, nil, "1.1.0")
-	app.Get("/health/live", h.Live)
-	app.Get("/health/ready", h.Ready)
-
-	resp := do(t, app, http.MethodGet, "/health/live", "", nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	resp = do(t, app, http.MethodGet, "/health/ready", "", nil)
-	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
-	body := decodeBody(t, resp)
-	require.Equal(t, "degraded", body["status"])
-	require.Equal(t, "auth", body["service"])
-	require.Equal(t, "1.1.0", body["version"])
-	checks := body["checks"].(map[string]any)
-	require.Equal(t, "down", checks["postgres"])
-	require.Equal(t, "down", checks["redis"])
-}
-
 func TestJWKSHandler(t *testing.T) {
 	app := newTestApp()
 	app.Get("/jwks", NewJWKSHandler(stubTokens{}).JWKS)
@@ -215,8 +197,8 @@ func TestJWKSHandler(t *testing.T) {
 }
 
 func newTestApp() *fiber.App {
-	app := fiber.New(fiber.Config{ErrorHandler: middleware.ErrorHandler(zap.NewNop())})
-	app.Use(middleware.RequestID())
+	app := fiber.New(fiber.Config{ErrorHandler: httpx.ErrorHandler(zap.NewNop())})
+	app.Use(httpx.RequestID())
 	return app
 }
 

@@ -11,8 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/poro/shared-go/events"
+	"github.com/poro/shared-go/outbox"
+
 	"github.com/poro/auth/internal/model"
 )
+
+// EventSource identifies auth in published event envelopes.
+const EventSource = "poro-auth"
 
 var (
 	// ErrUserNotFound is returned when no active user matches the query.
@@ -79,6 +85,14 @@ func (r *userRepository) Create(ctx context.Context, user *model.User) error {
 	const insertRoles = `INSERT INTO user_roles (user_id, role, granted_at) SELECT $1, unnest($2::varchar[]), $3`
 	if _, err := tx.Exec(ctx, insertRoles, user.ID, user.RoleNames(), user.CreatedAt); err != nil {
 		return fmt.Errorf("create user: insert roles: %w", err)
+	}
+
+	created, err := userCreatedEvent(user)
+	if err != nil {
+		return fmt.Errorf("create user: %w", err)
+	}
+	if err := outbox.Enqueue(ctx, tx, created); err != nil {
+		return fmt.Errorf("create user: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -185,6 +199,34 @@ func (r *userRepository) exists(ctx context.Context, q, value, field string) (bo
 		return false, fmt.Errorf("exists by %s: %w", field, err)
 	}
 	return found, nil
+}
+
+// GrantRole adds role to an active account inside tx. It is idempotent and
+// reports whether the role was added.
+func GrantRole(ctx context.Context, tx pgx.Tx, userID uuid.UUID, role model.UserRole, at time.Time) (bool, error) {
+	const q = `
+		INSERT INTO user_roles (user_id, role, granted_at)
+		SELECT id, $2, $3 FROM users WHERE id = $1 AND deleted_at IS NULL
+		ON CONFLICT DO NOTHING`
+	tag, err := tx.Exec(ctx, q, userID, role, at)
+	if err != nil {
+		return false, fmt.Errorf("grant role %s: %w", role, err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
+func userCreatedEvent(user *model.User) (events.Envelope, error) {
+	method := "email"
+	if user.Phone != nil {
+		method = "phone"
+	}
+	return events.New(events.TypeAuthUserCreated, 1, EventSource, user.ID.String(), events.AuthUserCreatedV1{
+		UserID:       user.ID.String(),
+		SignupMethod: method,
+		CountryCode:  user.CountryCode,
+		Language:     user.Language,
+		CreatedAt:    user.CreatedAt,
+	}, user.CreatedAt)
 }
 
 func prepareNewUser(user *model.User) error {

@@ -14,10 +14,11 @@ func TestValidate(t *testing.T) {
 			SMSProvider:     "log",
 			OtpSecret:       "0123456789abcdef0123456789abcdef",
 			PostgresSSLMode: "verify-full",
+			KafkaBrokers:    []string{"redpanda:9092"},
 		}
 	}
 
-	require.NoError(t, (&Config{AppEnv: EnvDev, SMSProvider: SMSProviderLog, PostgresSSLMode: "disable"}).Validate())
+	require.NoError(t, (&Config{AppEnv: EnvDev, SMSProvider: SMSProviderLog, PostgresSSLMode: "disable", KafkaBrokers: []string{"localhost:9092"}}).Validate())
 
 	valid := prod()
 	valid.SMSProvider = SMSProviderAfricasTalking
@@ -47,6 +48,7 @@ func TestValidate(t *testing.T) {
 			c.AfricasTalkingUsername = AfricasTalkingSandboxUser
 			c.AfricasTalkingAPIKey = "k"
 		}, want: "sandbox"},
+		{name: "no kafka brokers", mutate: func(c *Config) { c.KafkaBrokers = nil }, want: "KAFKA_BROKERS"},
 		{name: "bad calling code", mutate: func(c *Config) { c.OtpAllowedCallingCodes = []string{"+225", "225"} }, want: "OTP_ALLOWED_CALLING_CODES"},
 	}
 	for _, tc := range cases {
@@ -72,6 +74,7 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	require.Equal(t, []string{"10.0.0.0/8", "172.16.0.1"}, cfg.TrustedProxies)
 	require.Equal(t, 7, cfg.OtpMaxRequestsPerHour)
 	require.Equal(t, "30s", cfg.JWTRefreshReuseGrace)
+	require.Equal(t, []string{"localhost:9092"}, cfg.KafkaBrokers)
 	require.Equal(t, []string{"+225", "+221", "+237", "+234"}, cfg.OtpAllowedCallingCodes)
 	require.Equal(t, "postgres://poro:poro_dev_password@localhost:5433/poro_auth?sslmode=disable", cfg.PostgresDSN())
 
