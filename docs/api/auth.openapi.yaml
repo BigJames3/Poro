@@ -1,0 +1,334 @@
+openapi: 3.1.0
+info:
+  title: PORO Auth API
+  version: 1.1.0
+  description: |
+    Identity, device sessions and token issuance for PORO.
+    Every JSON response uses the envelope `{data, error, meta}`; `meta.request_id`
+    echoes the `X-Request-ID` header. Clients must branch on `error.code`, never on `error.message`.
+servers:
+  - url: http://localhost:8081
+    description: Local development
+tags:
+  - name: otp
+  - name: email
+  - name: session
+  - name: platform
+paths:
+  /api/v1/auth/otp/request:
+    post:
+      tags: [otp]
+      security: []
+      summary: Send a 6-digit code by SMS
+      description: Rate limited to 5 requests/min per IP, one code per phone every 60 s and 5 per hour.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone: { type: string, description: E.164 number, example: "+2250700000000" }
+      responses:
+        "200":
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          message: { type: string, example: otp sent }
+                          expires_in: { type: integer, description: seconds, example: 300 }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "429":
+          description: "`otp_throttled` (per phone) or `rate_limited` (per IP)"
+          headers:
+            Retry-After: { schema: { type: integer }, description: "seconds, present for otp_throttled" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+  /api/v1/auth/otp/verify:
+    post:
+      tags: [otp]
+      security: []
+      summary: Verify the code and sign in, creating the account on first use
+      description: A code is single use and allows 3 attempts. 20 requests/min per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, code]
+              properties:
+                phone: { type: string, example: "+2250700000000" }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200": { $ref: "#/components/responses/Auth" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401":
+          description: "`otp_invalid` or `otp_expired`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "403": { $ref: "#/components/responses/Blocked" }
+        "429":
+          description: "`otp_too_many_attempts` (request a new code) or `rate_limited`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /api/v1/auth/email/register:
+    post:
+      tags: [email]
+      security: []
+      summary: Create an account with email and password
+      description: The email is trimmed and lowercased. 10 requests/min per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, full_name]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                password: { type: string, minLength: 8, maxLength: 128 }
+                full_name: { type: string, minLength: 2, maxLength: 100 }
+      responses:
+        "201": { $ref: "#/components/responses/Auth" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "409":
+          description: "`email_taken`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/auth/email/login:
+    post:
+      tags: [email]
+      security: []
+      summary: Sign in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                password: { type: string, maxLength: 128 }
+      responses:
+        "200": { $ref: "#/components/responses/Auth" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401":
+          description: "`invalid_credentials` (same answer for unknown email and wrong password)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "403": { $ref: "#/components/responses/Blocked" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/auth/refresh:
+    post:
+      tags: [session]
+      security: []
+      summary: Rotate the refresh token
+      description: |
+        Returns a new access token and a new refresh token; the old refresh token stops working.
+        Clients must send at most one refresh at a time. Replaying a token that was already rotated
+        revokes the whole device session (`session_revoked`), except for a retry within 30 s whose
+        response was lost.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string, maxLength: 256 }
+      responses:
+        "200":
+          description: Rotated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Tokens" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401":
+          description: "`refresh_token_invalid` or `session_revoked`: sign in again"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "403": { $ref: "#/components/responses/Blocked" }
+  /api/v1/auth/logout:
+    post:
+      tags: [session]
+      summary: End the current device session
+      security: [{ bearer: [] }]
+      responses:
+        "204": { description: "Access token blacklisted, session refresh tokens revoked" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/auth/me:
+    get:
+      tags: [session]
+      summary: Current account
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /.well-known/jwks.json:
+    get:
+      tags: [platform]
+      security: []
+      summary: Public signing keys (RFC 7517), cached 5 minutes
+      responses:
+        "200":
+          description: JWK set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kty: { type: string, example: RSA }
+                        use: { type: string, example: sig }
+                        alg: { type: string, example: RS256 }
+                        kid: { type: string, description: RFC 7638 thumbprint }
+                        n: { type: string }
+                        e: { type: string }
+  /health/live:
+    get:
+      tags: [platform]
+      security: []
+      summary: Liveness probe, no dependency check
+      responses:
+        "200": { description: Process is running }
+  /health/ready:
+    get:
+      tags: [platform]
+      security: []
+      summary: Readiness probe, checks Postgres and Redis
+      responses:
+        "200": { description: Ready }
+        "503": { description: A dependency is down }
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        RS256, header `kid`. Claims: `sub` (user UUID), `roles` (array), `sid` (device session),
+        `jti`, `iss=poro-auth`, `aud=poro-api`, `iat`, `nbf`, `exp` (15 min).
+  schemas:
+    Envelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: {}
+        error: { type: "null" }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: { type: "null" }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_json
+                - invalid_request
+                - unauthorized
+                - forbidden
+                - not_found
+                - method_not_allowed
+                - payload_too_large
+                - rate_limited
+                - unavailable
+                - email_taken
+                - account_blocked
+                - account_not_found
+                - otp_invalid
+                - otp_expired
+                - otp_too_many_attempts
+                - otp_throttled
+                - invalid_credentials
+                - refresh_token_invalid
+                - session_revoked
+                - internal_error
+            message: { type: string }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string }
+    Tokens:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in: { type: integer, description: access token lifetime in seconds }
+        token_type: { type: string, example: Bearer }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        phone: { type: string }
+        email: { type: string }
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [PERSONAL, CREATOR, BUSINESS, ENTERPRISE, ADMIN, MODERATOR, SUPPORT]
+        status: { type: string, enum: [PENDING, ACTIVE, SUSPENDED, DELETED] }
+        country_code: { type: string }
+        language: { type: string }
+        created_at: { type: string, format: date-time }
+  responses:
+    Auth:
+      description: Signed in
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Tokens"
+                      - type: object
+                        properties:
+                          user: { $ref: "#/components/schemas/User" }
+    InvalidRequest:
+      description: "`invalid_json` or `invalid_request`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Unauthorized:
+      description: "`unauthorized`: missing, expired, forged or revoked access token"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Blocked:
+      description: "`account_blocked`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    RateLimited:
+      description: "`rate_limited`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
