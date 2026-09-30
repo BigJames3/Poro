@@ -13,7 +13,7 @@ import (
 	"github.com/poro/auth/internal/model"
 )
 
-// ErrOTPNotFound is returned when no OTP code matches the query.
+// ErrOTPNotFound is returned when no usable OTP code matches the query.
 var ErrOTPNotFound = errors.New("otp code not found")
 
 const otpColumns = `id, phone, code_hash, attempts, max_attempts, expires_at, verified_at, created_at`
@@ -22,8 +22,8 @@ const otpColumns = `id, phone, code_hash, attempts, max_attempts, expires_at, ve
 type OTPRepository interface {
 	Create(ctx context.Context, otp *model.OTPCode) error
 	GetLatestByPhone(ctx context.Context, phone string) (*model.OTPCode, error)
-	IncrementAttempts(ctx context.Context, id uuid.UUID) error
-	MarkVerified(ctx context.Context, id uuid.UUID) error
+	ConsumeAttempt(ctx context.Context, id uuid.UUID, now time.Time) (int, error)
+	MarkVerified(ctx context.Context, id uuid.UUID, now time.Time) error
 	DeleteExpired(ctx context.Context) (int64, error)
 }
 
@@ -74,21 +74,28 @@ func (r *otpRepository) GetLatestByPhone(ctx context.Context, phone string) (*mo
 	return otp, nil
 }
 
-func (r *otpRepository) IncrementAttempts(ctx context.Context, id uuid.UUID) error {
-	const q = `UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1`
-	tag, err := r.pool.Exec(ctx, q, id)
+// ConsumeAttempt spends one attempt on a live code and returns the attempts used so far.
+// The check and the increment are one statement, so parallel guesses cannot exceed the budget.
+// ErrOTPNotFound means the code is unknown, verified, expired, or out of attempts.
+func (r *otpRepository) ConsumeAttempt(ctx context.Context, id uuid.UUID, now time.Time) (int, error) {
+	const q = `
+		UPDATE otp_codes SET attempts = attempts + 1
+		WHERE id = $1 AND verified_at IS NULL AND attempts < max_attempts AND expires_at > $2
+		RETURNING attempts`
+	var attempts int
+	err := r.pool.QueryRow(ctx, q, id, now).Scan(&attempts)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, fmt.Errorf("consume otp attempt: %w", ErrOTPNotFound)
+	}
 	if err != nil {
-		return fmt.Errorf("increment otp attempts: %w", err)
+		return 0, fmt.Errorf("consume otp attempt: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("increment otp attempts: %w", ErrOTPNotFound)
-	}
-	return nil
+	return attempts, nil
 }
 
-func (r *otpRepository) MarkVerified(ctx context.Context, id uuid.UUID) error {
-	now := time.Now().UTC()
-	const q = `UPDATE otp_codes SET verified_at = COALESCE(verified_at, $2) WHERE id = $1`
+// MarkVerified flags the code as used. ErrOTPNotFound means it was already used.
+func (r *otpRepository) MarkVerified(ctx context.Context, id uuid.UUID, now time.Time) error {
+	const q = `UPDATE otp_codes SET verified_at = $2 WHERE id = $1 AND verified_at IS NULL`
 	tag, err := r.pool.Exec(ctx, q, id, now)
 	if err != nil {
 		return fmt.Errorf("mark otp verified: %w", err)

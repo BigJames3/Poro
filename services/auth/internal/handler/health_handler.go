@@ -1,4 +1,3 @@
-// Package handler exposes the auth HTTP endpoints.
 package handler
 
 import (
@@ -12,8 +11,8 @@ import (
 
 const healthTimeout = 2 * time.Second
 
-// HealthHandler reports whether Postgres and Redis answer.
-// A nil pool or client counts as down. The handler always responds HTTP 200.
+// HealthHandler serves the liveness and readiness probes.
+// A nil pool or client counts as down.
 type HealthHandler struct {
 	pool    *pgxpool.Pool
 	rdb     *redis.Client
@@ -26,15 +25,21 @@ func NewHealthHandler(pool *pgxpool.Pool, rdb *redis.Client, version string) *He
 	return &HealthHandler{pool: pool, rdb: rdb, version: version}
 }
 
-// Health handles GET /health.
-func (h *HealthHandler) Health(c *fiber.Ctx) error {
+// Live handles GET /health/live. It answers 200 while the process serves HTTP.
+func (h *HealthHandler) Live(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{"status": "ok", "service": "auth", "version": h.version})
+}
+
+// Ready handles GET /health/ready. It answers 503 when Postgres or Redis is down,
+// so the orchestrator stops routing traffic to this instance.
+func (h *HealthHandler) Ready(c *fiber.Ctx) error {
 	postgres := h.postgresStatus(c.UserContext())
 	redisStatus := h.redisStatus(c.UserContext())
-	status := "ok"
+	status, code := "ok", fiber.StatusOK
 	if postgres != "up" || redisStatus != "up" {
-		status = "degraded"
+		status, code = "degraded", fiber.StatusServiceUnavailable
 	}
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+	return c.Status(code).JSON(fiber.Map{
 		"status":  status,
 		"service": "auth",
 		"version": h.version,

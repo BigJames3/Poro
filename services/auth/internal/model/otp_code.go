@@ -6,7 +6,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// OTPCode is a one-time SMS code. CodeHash is the Argon2id hash of the raw code.
+// OTPCode is a one-time SMS code. CodeHash is the hex HMAC-SHA256 of the raw code,
+// keyed with the server OTP secret.
 type OTPCode struct {
 	ID          uuid.UUID  `json:"id" db:"id"`
 	Phone       string     `json:"phone" db:"phone"`

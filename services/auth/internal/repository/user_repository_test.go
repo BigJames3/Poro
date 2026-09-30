@@ -20,7 +20,10 @@ import (
 	"github.com/poro/auth/internal/repository"
 )
 
-var testPool *pgxpool.Pool
+var (
+	testPool *pgxpool.Pool
+	testCfg  *config.Config
+)
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -51,7 +54,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	cfg := &config.Config{
+	testCfg = &config.Config{
 		PostgresHost:     host,
 		PostgresPort:     port.Port(),
 		PostgresUser:     "poro",
@@ -60,12 +63,12 @@ func TestMain(m *testing.M) {
 		PostgresSSLMode:  "disable",
 	}
 	log := zap.NewNop()
-	if err := database.RunMigrations(ctx, cfg, log); err != nil {
+	if err := database.RunMigrations(ctx, testCfg, log); err != nil {
 		fmt.Fprintf(os.Stderr, "migrate: %v\n", err)
 		_ = container.Terminate(ctx)
 		os.Exit(1)
 	}
-	testPool, err = database.NewPostgresPool(ctx, cfg, log)
+	testPool, err = database.NewPostgresPool(ctx, testCfg, log)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "pool: %v\n", err)
 		_ = container.Terminate(ctx)
@@ -88,7 +91,7 @@ func TestUserRepositoryCreateAndGet(t *testing.T) {
 
 	require.NoError(t, repo.Create(ctx, user))
 	require.NotEqual(t, uuid.Nil, user.ID)
-	require.Equal(t, model.RolePersonal, user.Role)
+	require.Equal(t, []model.UserRole{model.RolePersonal}, user.Roles)
 	require.Equal(t, model.StatusPending, user.Status)
 	require.Equal(t, "fr", user.Language)
 
@@ -97,6 +100,7 @@ func TestUserRepositoryCreateAndGet(t *testing.T) {
 	require.Equal(t, phone, *byID.Phone)
 	require.Equal(t, email, *byID.Email)
 	require.Equal(t, "CI", *byID.CountryCode)
+	require.Equal(t, []model.UserRole{model.RolePersonal}, byID.Roles)
 
 	byPhone, err := repo.GetByPhone(ctx, phone)
 	require.NoError(t, err)
@@ -112,6 +116,43 @@ func TestUserRepositoryCreateAndGet(t *testing.T) {
 	emailExists, err := repo.ExistsByEmail(ctx, email)
 	require.NoError(t, err)
 	require.True(t, emailExists)
+}
+
+func TestUserRepositoryMultipleRoles(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.NewUserRepository(testPool)
+	roles := []model.UserRole{model.RolePersonal, model.RoleCreator, model.RoleBusiness, model.RoleEnterprise}
+	user := &model.User{Phone: ptr(uniquePhone()), Roles: roles}
+	require.NoError(t, repo.Create(ctx, user))
+
+	stored, err := repo.GetByID(ctx, user.ID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, roles, stored.Roles)
+
+	stored.Language = "en"
+	require.NoError(t, repo.Update(ctx, stored))
+	again, err := repo.GetByID(ctx, user.ID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, roles, again.Roles, "Update leaves roles untouched")
+}
+
+func TestUserRepositoryRejectsUnknownRoleAtomically(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.NewUserRepository(testPool)
+	phone := uniquePhone()
+	err := repo.Create(ctx, &model.User{Phone: &phone, Roles: []model.UserRole{"SUPERUSER"}})
+	require.Error(t, err)
+
+	_, err = repo.GetByPhone(ctx, phone)
+	require.ErrorIs(t, err, repository.ErrUserNotFound, "a failed role insert rolls the user back")
+}
+
+func TestUserRepositoryRejectsDenormalizedEmail(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.NewUserRepository(testPool)
+	email := "Mixed.Case@Poro.Test"
+	err := repo.Create(ctx, &model.User{Email: &email})
+	require.Error(t, err, "the database refuses emails that are not lowercased and trimmed")
 }
 
 func TestUserRepositoryDuplicateAndSoftDelete(t *testing.T) {
@@ -143,14 +184,12 @@ func TestUserRepositoryUpdateAndLastLogin(t *testing.T) {
 	require.NoError(t, repo.Create(ctx, user))
 
 	user.Language = "en"
-	user.Role = model.RoleCreator
 	user.Status = model.StatusActive
 	require.NoError(t, repo.Update(ctx, user))
 
 	stored, err := repo.GetByID(ctx, user.ID)
 	require.NoError(t, err)
 	require.Equal(t, "en", stored.Language)
-	require.Equal(t, model.RoleCreator, stored.Role)
 	require.Equal(t, model.StatusActive, stored.Status)
 
 	require.NoError(t, repo.UpdateLastLogin(ctx, user.ID))

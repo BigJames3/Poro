@@ -2,13 +2,15 @@ package service
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
 	"time"
 
-	"github.com/alexedwards/argon2id"
 	"go.uber.org/zap"
 
 	"github.com/poro/auth/internal/config"
@@ -23,7 +25,32 @@ var (
 	ErrOTPExpired = errors.New("otp expired")
 	// ErrOTPTooManyAttempts is returned when the attempt budget is exhausted.
 	ErrOTPTooManyAttempts = errors.New("too many otp attempts")
+	// ErrOTPThrottled is returned when a phone asks for codes too often.
+	ErrOTPThrottled = errors.New("otp requests throttled")
 )
+
+// ThrottledError carries how long the client must wait. It matches ErrOTPThrottled.
+type ThrottledError struct {
+	RetryAfter time.Duration
+}
+
+func (e *ThrottledError) Error() string {
+	return fmt.Sprintf("%s: retry after %s", ErrOTPThrottled, e.RetryAfter)
+}
+
+// Is makes errors.Is(err, ErrOTPThrottled) true.
+func (e *ThrottledError) Is(target error) bool { return target == ErrOTPThrottled }
+
+// OTPThrottle limits how often one phone number can receive a code.
+// It returns a *ThrottledError when the phone must wait.
+type OTPThrottle interface {
+	Allow(ctx context.Context, phone string) error
+}
+
+// SMSSender delivers a code to a phone number.
+type SMSSender interface {
+	SendOTP(ctx context.Context, phone, code string, ttl time.Duration) error
+}
 
 // OTPService issues and checks SMS one-time codes.
 type OTPService interface {
@@ -33,15 +60,17 @@ type OTPService interface {
 
 type otpService struct {
 	repo        repository.OTPRepository
+	throttle    OTPThrottle
+	sender      SMSSender
 	log         *zap.Logger
+	secret      []byte
 	ttl         time.Duration
 	maxAttempts int
-	dev         bool
 }
 
-// NewOTPService builds an OTP service. The SMS provider is a log stub.
-// The raw code is logged only when APP_ENV is dev.
-func NewOTPService(cfg *config.Config, repo repository.OTPRepository, log *zap.Logger) (OTPService, error) {
+// NewOTPService builds an OTP service. In dev an empty OTP secret is replaced
+// by a random one, so codes do not survive a restart.
+func NewOTPService(cfg *config.Config, repo repository.OTPRepository, throttle OTPThrottle, sender SMSSender, log *zap.Logger) (OTPService, error) {
 	ttl, err := time.ParseDuration(cfg.OtpTTL)
 	if err != nil {
 		return nil, fmt.Errorf("parse otp ttl: %w", err)
@@ -49,33 +78,47 @@ func NewOTPService(cfg *config.Config, repo repository.OTPRepository, log *zap.L
 	if ttl <= 0 {
 		return nil, fmt.Errorf("parse otp ttl: must be positive")
 	}
+	if throttle == nil || sender == nil {
+		return nil, fmt.Errorf("otp service: throttle and sender are required")
+	}
+	secret := []byte(cfg.OtpSecret)
+	if len(secret) == 0 {
+		if !cfg.IsDev() {
+			return nil, fmt.Errorf("otp service: OTP_HMAC_SECRET is required outside dev")
+		}
+		secret = make([]byte, 32)
+		if _, err := rand.Read(secret); err != nil {
+			return nil, fmt.Errorf("otp service: generate dev secret: %w", err)
+		}
+	}
 	maxAttempts := cfg.OtpMaxAttempts
 	if maxAttempts <= 0 {
 		maxAttempts = 3
 	}
 	return &otpService{
 		repo:        repo,
+		throttle:    throttle,
+		sender:      sender,
 		log:         log,
+		secret:      secret,
 		ttl:         ttl,
 		maxAttempts: maxAttempts,
-		dev:         cfg.AppEnv == "dev",
 	}, nil
 }
 
 func (s *otpService) RequestOTP(ctx context.Context, phone string) (int, error) {
+	if err := s.throttle.Allow(ctx, phone); err != nil {
+		return 0, fmt.Errorf("request otp: %w", err)
+	}
 	code, err := newOTPCode()
 	if err != nil {
 		return 0, fmt.Errorf("request otp: %w", err)
-	}
-	hash, err := argon2id.CreateHash(code, argon2id.DefaultParams)
-	if err != nil {
-		return 0, fmt.Errorf("request otp: hash code: %w", err)
 	}
 
 	now := time.Now().UTC()
 	otp := &model.OTPCode{
 		Phone:       phone,
-		CodeHash:    hash,
+		CodeHash:    s.hash(phone, code),
 		MaxAttempts: s.maxAttempts,
 		ExpiresAt:   now.Add(s.ttl),
 		CreatedAt:   now,
@@ -83,16 +126,12 @@ func (s *otpService) RequestOTP(ctx context.Context, phone string) (int, error) 
 	if err := s.repo.Create(ctx, otp); err != nil {
 		return 0, fmt.Errorf("request otp: %w", err)
 	}
+	if err := s.sender.SendOTP(ctx, phone, code, s.ttl); err != nil {
+		return 0, fmt.Errorf("request otp: send sms: %w", err)
+	}
 
 	expiresIn := int(s.ttl.Seconds())
-	fields := []zap.Field{
-		zap.String("phone", phone),
-		zap.Int("expires_in", expiresIn),
-	}
-	if s.dev {
-		fields = append(fields, zap.String("code", code))
-	}
-	s.log.Info("otp issued", fields...)
+	s.log.Info("otp issued", zap.String("phone", MaskPhone(phone)), zap.Int("expires_in", expiresIn))
 	return expiresIn, nil
 }
 
@@ -104,35 +143,50 @@ func (s *otpService) VerifyOTP(ctx context.Context, phone, code string) (bool, e
 		}
 		return false, fmt.Errorf("verify otp: %w", err)
 	}
+	now := time.Now().UTC()
 	if otp.VerifiedAt != nil {
 		return false, ErrOTPInvalid
 	}
-	if time.Now().UTC().After(otp.ExpiresAt) {
+	if now.After(otp.ExpiresAt) {
 		return false, ErrOTPExpired
 	}
 	if otp.Attempts >= otp.MaxAttempts {
 		return false, ErrOTPTooManyAttempts
 	}
 
-	match, err := argon2id.ComparePasswordAndHash(code, otp.CodeHash)
+	attempts, err := s.repo.ConsumeAttempt(ctx, otp.ID, now)
 	if err != nil {
-		return false, fmt.Errorf("verify otp: compare code: %w", err)
-	}
-	if !match {
-		if err := s.repo.IncrementAttempts(ctx, otp.ID); err != nil {
-			return false, fmt.Errorf("verify otp: %w", err)
+		if errors.Is(err, repository.ErrOTPNotFound) {
+			return false, ErrOTPTooManyAttempts
 		}
-		if otp.Attempts+1 >= otp.MaxAttempts {
+		return false, fmt.Errorf("verify otp: %w", err)
+	}
+
+	if !hmac.Equal([]byte(s.hash(phone, code)), []byte(otp.CodeHash)) {
+		s.log.Info("otp mismatch", zap.String("phone", MaskPhone(phone)), zap.Int("attempts", attempts))
+		if attempts >= otp.MaxAttempts {
 			return false, ErrOTPTooManyAttempts
 		}
 		return false, ErrOTPInvalid
 	}
 
-	if err := s.repo.MarkVerified(ctx, otp.ID); err != nil {
+	if err := s.repo.MarkVerified(ctx, otp.ID, now); err != nil {
+		if errors.Is(err, repository.ErrOTPNotFound) {
+			return false, ErrOTPInvalid
+		}
 		return false, fmt.Errorf("verify otp: %w", err)
 	}
-	s.log.Info("otp verified", zap.String("phone", phone))
+	s.log.Info("otp verified", zap.String("phone", MaskPhone(phone)))
 	return true, nil
+}
+
+// hash binds the code to the phone, so a stored hash cannot be replayed for another number.
+func (s *otpService) hash(phone, code string) string {
+	mac := hmac.New(sha256.New, s.secret)
+	mac.Write([]byte(phone))
+	mac.Write([]byte{0})
+	mac.Write([]byte(code))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func newOTPCode() (string, error) {
@@ -141,4 +195,12 @@ func newOTPCode() (string, error) {
 		return "", fmt.Errorf("generate code: %w", err)
 	}
 	return fmt.Sprintf("%06d", n.Int64()), nil
+}
+
+// MaskPhone keeps the country prefix and the last two digits, for logs.
+func MaskPhone(phone string) string {
+	if len(phone) <= 6 {
+		return "***"
+	}
+	return phone[:4] + "****" + phone[len(phone)-2:]
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// UserRole is the authorization role of an account.
+// UserRole is a capability granted to an account. An account holds one or more roles.
 type UserRole string
 
 const (
@@ -36,7 +36,7 @@ type User struct {
 	Phone        *string    `json:"phone,omitempty" db:"phone"`
 	Email        *string    `json:"email,omitempty" db:"email"`
 	PasswordHash *string    `json:"-" db:"password_hash"`
-	Role         UserRole   `json:"role" db:"role"`
+	Roles        []UserRole `json:"roles" db:"-"`
 	Status       UserStatus `json:"status" db:"status"`
 	CountryCode  *string    `json:"country_code,omitempty" db:"country_code"`
 	Language     string     `json:"language" db:"language"`
@@ -44,4 +44,13 @@ type User struct {
 	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
 	DeletedAt    *time.Time `json:"-" db:"deleted_at"`
+}
+
+// RoleNames returns the roles as plain strings, in stored order.
+func (u *User) RoleNames() []string {
+	names := make([]string, len(u.Roles))
+	for i, r := range u.Roles {
+		names[i] = string(r)
+	}
+	return names
 }

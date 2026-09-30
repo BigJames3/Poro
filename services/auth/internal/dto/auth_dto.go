@@ -15,26 +15,20 @@ type VerifyOTPRequest struct {
 // RegisterEmailRequest is the body of POST /api/v1/auth/email/register.
 // FullName is validated and not stored: the profile belongs to the User service.
 type RegisterEmailRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=8,max=72"`
+	Email    string `json:"email" validate:"required,email,max=254"`
+	Password string `json:"password" validate:"required,min=8,max=128"`
 	FullName string `json:"full_name" validate:"required,min=2,max=100"`
 }
 
 // LoginEmailRequest is the body of POST /api/v1/auth/email/login.
 type LoginEmailRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Email    string `json:"email" validate:"required,email,max=254"`
+	Password string `json:"password" validate:"required,max=128"`
 }
 
 // RefreshRequest is the body of POST /api/v1/auth/refresh.
 type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
-}
-
-// LogoutRequest is the body of POST /api/v1/auth/logout.
-// The access token is taken from the Authorization header.
-type LogoutRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
+	RefreshToken string `json:"refresh_token" validate:"required,max=256"`
 }
 
 // AuthResponse is returned after a successful sign-in or sign-up.
@@ -48,14 +42,14 @@ type AuthResponse struct {
 
 // UserResponse is the public view of an auth account.
 type UserResponse struct {
-	ID          string  `json:"id"`
-	Phone       *string `json:"phone,omitempty"`
-	Email       *string `json:"email,omitempty"`
-	Role        string  `json:"role"`
-	Status      string  `json:"status"`
-	CountryCode *string `json:"country_code,omitempty"`
-	Language    string  `json:"language"`
-	CreatedAt   string  `json:"created_at"`
+	ID          string   `json:"id"`
+	Phone       *string  `json:"phone,omitempty"`
+	Email       *string  `json:"email,omitempty"`
+	Roles       []string `json:"roles"`
+	Status      string   `json:"status"`
+	CountryCode *string  `json:"country_code,omitempty"`
+	Language    string   `json:"language"`
+	CreatedAt   string   `json:"created_at"`
 }
 
 // RequestOTPResponse is returned after an OTP is issued.
@@ -69,4 +63,5 @@ type RefreshResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int    `json:"expires_in"`
+	TokenType    string `json:"token_type"`
 }
