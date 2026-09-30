@@ -61,6 +61,8 @@ En `dev`, les codes OTP sont écrits dans les logs (`dev sms otp`).
 | `AFRICASTALKING_API_KEY` | *(vide)* | Clé API, à fournir par le gestionnaire de secrets |
 | `AFRICASTALKING_SENDER_ID` | *(vide)* | Sender ID enregistré (ex. `PORO`) ; vide = expéditeur par défaut du compte |
 | `MIGRATIONS_PATH` | recherche de `migrations/` | Défini à `/app/migrations` dans l'image |
+| `KAFKA_BROKERS` | `localhost:9092` | Courtier pour le consommateur `poro.user.creator.activated` (hors ready) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | *(vide)* | URL OTLP HTTP ; vide = pas d'export |
 
 La configuration est validée au démarrage ; hors `dev`, `SMS_PROVIDER=log`, un secret OTP absent
 ou Postgres sans TLS empêchent le lancement.
@@ -82,8 +84,13 @@ simulateur Africa's Talking.
 | `GET` | `/api/v1/auth/me` | Bearer | 100/min |
 | `GET` | `/.well-known/jwks.json` | — | — |
 | `GET` | `/health/live`, `/health/ready` (`/health` = ready) | — | — |
+| `GET` | `/metrics` | — | — (ne pas exposer sur l'ingress public) |
 
 Toutes les réponses JSON suivent `{data, error, meta}` avec `meta.request_id`.
+
+À la création d'un compte, `poro.auth.user.created` est écrit dans l'outbox (même transaction).
+Le consommateur `poro-auth-creator-roles` accorde CREATOR à la réception de
+`poro.user.creator.activated`. Kafka n'entre pas dans `/health/ready`.
 
 ## Tests
 
@@ -100,8 +107,9 @@ déclenche la limite de 5 OTP/min : attendre une minute entre deux exécutions.
 ## Image Docker
 
 ```powershell
-docker build -t poro-auth .
+docker build -f services/auth/Dockerfile -t poro-auth .
 ```
 
+Le contexte est la **racine du dépôt** (le module `packages/shared-go` est copié).
 Multi-stage `golang:1.26-alpine` → `alpine:3.22`, utilisateur non-root, migrations embarquées,
 `HEALTHCHECK` sur `/health/ready`. Les clés sont montées à l'exécution, jamais copiées dans l'image.

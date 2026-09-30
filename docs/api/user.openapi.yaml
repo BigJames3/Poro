@@ -1,0 +1,365 @@
+openapi: 3.1.0
+info:
+  title: PORO User API
+  version: 1.0.0
+  description: |
+    Public profiles, unique usernames, avatars and creator activation.
+    Auth owns identity (JWT `sub`); this service owns the profile.
+    Every JSON response uses the envelope `{data, error, meta}`; `meta.request_id`
+    echoes the `X-Request-ID` header. Clients must branch on `error.code`, never on `error.message`.
+    Access tokens are verified offline against `GET http://auth:8081/.well-known/jwks.json`.
+    A token revoked by logout stays accepted here until it expires (15 minutes at most).
+servers:
+  - url: http://localhost:8082
+    description: Local development
+tags:
+  - name: me
+  - name: profiles
+  - name: avatars
+  - name: platform
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/users/me:
+    get:
+      tags: [me]
+      summary: Own profile
+      description: Creates an empty profile if `poro.auth.user.created` has not arrived yet.
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/MyProfile" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: "`profile_not_found` (soft-deleted)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "503": { $ref: "#/components/responses/Unavailable" }
+    patch:
+      tags: [me]
+      summary: Update username, display name or bio
+      description: |
+        Omitted fields are left unchanged. `null` clears `display_name` or `bio`.
+        Usernames are stored lowercase; 3–30 of `a-z`, `0-9`, `.` and `_`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                username: { type: string, maxLength: 64, example: "awa.kone" }
+                display_name: { type: ["string", "null"], maxLength: 200, example: "Awa Koné" }
+                bio: { type: ["string", "null"], maxLength: 1000 }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/MyProfile" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: "`username_taken`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: "`username_invalid`, `username_reserved`, `display_name_invalid` or `bio_invalid`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /api/v1/users/username-availability:
+    get:
+      tags: [me]
+      summary: Check whether a username can be claimed
+      parameters:
+        - in: query
+          name: username
+          required: true
+          schema: { type: string, maxLength: 64 }
+      responses:
+        "200":
+          description: Availability
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [username, available, reason]
+                        properties:
+                          username: { type: string }
+                          available: { type: boolean }
+                          reason:
+                            type: ["string", "null"]
+                            enum: [invalid, reserved, taken, null]
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/users/by-username/{username}:
+    get:
+      tags: [profiles]
+      security: []
+      summary: Public profile
+      parameters:
+        - in: path
+          name: username
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Public fields only (no country)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/PublicProfile" }
+        "404":
+          description: "`profile_not_found`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /api/v1/users/me/avatar/upload-url:
+    post:
+      tags: [avatars]
+      summary: Presigned POST to upload an avatar
+      description: |
+        The client POSTs the file to `upload_url` with `fields` plus `file`.
+        The form is valid for 300 seconds and rejects bodies over 5 MiB or a
+        Content-Type other than the one requested. Call PUT `/me/avatar` after the upload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type]
+              additionalProperties: false
+              properties:
+                content_type:
+                  type: string
+                  enum: [image/jpeg, image/png, image/webp]
+      responses:
+        "201":
+          description: Form fields
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [upload_url, fields, upload_key, max_bytes, expires_in]
+                        properties:
+                          upload_url: { type: string, format: uri }
+                          fields:
+                            type: object
+                            additionalProperties: { type: string }
+                          upload_key: { type: string }
+                          max_bytes: { type: integer, example: 5242880 }
+                          expires_in: { type: integer, example: 300 }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/users/me/avatar:
+    put:
+      tags: [avatars]
+      summary: Confirm an uploaded avatar
+      description: |
+        The service re-encodes the file to a 512×512 WebP (strips EXIF, including GPS)
+        and publishes it. SVG and HTML are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [upload_key]
+              additionalProperties: false
+              properties:
+                upload_key: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: Profile with `avatar_url`
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/MyProfile" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422":
+          description: "`avatar_upload_invalid`, `avatar_not_uploaded`, `avatar_too_large` or `avatar_invalid`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "503": { $ref: "#/components/responses/Unavailable" }
+    delete:
+      tags: [avatars]
+      summary: Remove the current avatar
+      responses:
+        "200":
+          description: Profile with `avatar_url` null
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/MyProfile" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/users/me/creator:
+    post:
+      tags: [me]
+      summary: Become a creator
+      description: |
+        Requires a username. Idempotent. Writes `poro.user.creator.activated` in the
+        same transaction; auth grants the CREATOR role. The new role appears on the
+        next access token (refresh).
+      responses:
+        "200":
+          description: Profile with `is_creator` true
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/MyProfile" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422":
+          description: "`username_required`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /health/live:
+    get:
+      tags: [platform]
+      security: []
+      summary: Liveness (no dependency check)
+      responses:
+        "200":
+          description: Process is up
+  /health/ready:
+    get:
+      tags: [platform]
+      security: []
+      summary: Readiness (Postgres and Redis; Kafka is not required)
+      responses:
+        "200":
+          description: Ready
+        "503":
+          description: "`degraded`"
+  /metrics:
+    get:
+      tags: [platform]
+      security: []
+      summary: Prometheus scrape (must not be exposed by the public gateway)
+      responses:
+        "200":
+          description: Text exposition format
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Envelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: {}
+        error: { type: "null" }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: { type: "null" }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_json
+                - invalid_request
+                - unauthorized
+                - forbidden
+                - not_found
+                - method_not_allowed
+                - conflict
+                - payload_too_large
+                - unsupported_media_type
+                - rate_limited
+                - unavailable
+                - username_taken
+                - username_invalid
+                - username_reserved
+                - username_required
+                - display_name_invalid
+                - bio_invalid
+                - profile_not_found
+                - avatar_upload_invalid
+                - avatar_not_uploaded
+                - avatar_too_large
+                - avatar_invalid
+                - internal_error
+            message: { type: string }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string }
+    PublicProfile:
+      type: object
+      required: [user_id, username, display_name, bio, avatar_url, is_creator, creator_since]
+      properties:
+        user_id: { type: string, format: uuid }
+        username: { type: ["string", "null"] }
+        display_name: { type: ["string", "null"] }
+        bio: { type: ["string", "null"] }
+        avatar_url: { type: ["string", "null"], format: uri }
+        is_creator: { type: boolean }
+        creator_since: { type: ["string", "null"], format: date-time }
+    MyProfile:
+      allOf:
+        - $ref: "#/components/schemas/PublicProfile"
+        - type: object
+          required: [country_code, created_at, updated_at]
+          properties:
+            country_code: { type: ["string", "null"] }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+  responses:
+    InvalidRequest:
+      description: "`invalid_json` or `invalid_request`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Unauthorized:
+      description: "`unauthorized`: missing, expired or forged access token"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    RateLimited:
+      description: "`rate_limited`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Unavailable:
+      description: "`unavailable`: JWKS or object storage unreachable"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
