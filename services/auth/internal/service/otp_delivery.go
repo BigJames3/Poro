@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -64,6 +65,13 @@ func (t *redisOTPThrottle) Allow(ctx context.Context, phone string) error {
 	return nil
 }
 
+func (t *redisOTPThrottle) Release(ctx context.Context, phone string) error {
+	if err := t.rdb.Del(ctx, otpCooldownKeyPrefix+phone).Err(); err != nil {
+		return fmt.Errorf("otp throttle release: %w", err)
+	}
+	return nil
+}
+
 func (t *redisOTPThrottle) ttl(ctx context.Context, key string, fallback time.Duration) time.Duration {
 	ttl, err := t.rdb.TTL(ctx, key).Result()
 	if err != nil || ttl <= 0 {
@@ -84,6 +92,11 @@ func NewSMSSender(cfg *config.Config, log *zap.Logger) (SMSSender, error) {
 			return nil, errors.New("sms provider log is only allowed in dev")
 		}
 		return &logSMSSender{log: log}, nil
+	case config.SMSProviderAfricasTalking:
+		if cfg.AfricasTalkingUsername == "" || cfg.AfricasTalkingAPIKey == "" {
+			return nil, errors.New("sms provider africastalking: username and api key are required")
+		}
+		return newAfricasTalkingSender(cfg, &http.Client{Timeout: africasTalkingTimeout}, log), nil
 	default:
 		return nil, fmt.Errorf("sms provider %q is not supported", cfg.SMSProvider)
 	}

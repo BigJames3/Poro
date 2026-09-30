@@ -103,7 +103,7 @@ func NewAuthService(cfg *config.Config, users repository.UserRepository, refresh
 func (s *authService) RequestOTP(ctx context.Context, req dto.RequestOTPRequest) (*dto.RequestOTPResponse, error) {
 	expiresIn, err := s.otp.RequestOTP(ctx, req.Phone)
 	if err != nil {
-		return nil, fmt.Errorf("request otp: %w", err)
+		return nil, err
 	}
 	return &dto.RequestOTPResponse{
 		Message:   "otp sent",

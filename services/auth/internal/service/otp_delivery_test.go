@@ -43,6 +43,25 @@ func TestRedisOTPThrottleCooldownAndHourlyCap(t *testing.T) {
 	require.NoError(t, throttle.Allow(ctx, testPhone), "the hourly window expires")
 }
 
+func TestRedisOTPThrottleReleaseLiftsOnlyTheCooldown(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	throttle, err := NewRedisOTPThrottle(&config.Config{OtpRequestCooldown: "60s", OtpMaxRequestsPerHour: 2}, rdb)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	require.NoError(t, throttle.Allow(ctx, testPhone))
+	require.NoError(t, throttle.Release(ctx, testPhone))
+	require.NoError(t, throttle.Allow(ctx, testPhone), "a failed delivery can be retried at once")
+	require.NoError(t, throttle.Release(ctx, testPhone))
+
+	var throttled *ThrottledError
+	require.ErrorAs(t, throttle.Allow(ctx, testPhone), &throttled, "released attempts still count toward the hourly cap")
+
+	mr.Close()
+	require.Error(t, throttle.Release(ctx, testPhone))
+}
+
 func TestRedisOTPThrottleErrors(t *testing.T) {
 	_, err := NewRedisOTPThrottle(&config.Config{OtpRequestCooldown: "60s", OtpMaxRequestsPerHour: 5}, nil)
 	require.Error(t, err)

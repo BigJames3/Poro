@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -27,6 +28,12 @@ var (
 	ErrOTPTooManyAttempts = errors.New("too many otp attempts")
 	// ErrOTPThrottled is returned when a phone asks for codes too often.
 	ErrOTPThrottled = errors.New("otp requests throttled")
+	// ErrPhoneCountryNotSupported is returned for numbers outside the allowed calling codes.
+	ErrPhoneCountryNotSupported = errors.New("phone country not supported")
+	// ErrPhoneUnreachable is returned when the SMS provider permanently refuses the number.
+	ErrPhoneUnreachable = errors.New("phone number cannot receive sms")
+	// ErrSMSUnavailable is returned when the SMS provider fails or cannot be reached.
+	ErrSMSUnavailable = errors.New("sms provider unavailable")
 )
 
 // ThrottledError carries how long the client must wait. It matches ErrOTPThrottled.
@@ -42,9 +49,11 @@ func (e *ThrottledError) Error() string {
 func (e *ThrottledError) Is(target error) bool { return target == ErrOTPThrottled }
 
 // OTPThrottle limits how often one phone number can receive a code.
-// It returns a *ThrottledError when the phone must wait.
+// Allow returns a *ThrottledError when the phone must wait. Release lifts the
+// cooldown after a failed delivery; the hourly cap still counts the attempt.
 type OTPThrottle interface {
 	Allow(ctx context.Context, phone string) error
+	Release(ctx context.Context, phone string) error
 }
 
 // SMSSender delivers a code to a phone number.
@@ -59,13 +68,14 @@ type OTPService interface {
 }
 
 type otpService struct {
-	repo        repository.OTPRepository
-	throttle    OTPThrottle
-	sender      SMSSender
-	log         *zap.Logger
-	secret      []byte
-	ttl         time.Duration
-	maxAttempts int
+	repo         repository.OTPRepository
+	throttle     OTPThrottle
+	sender       SMSSender
+	log          *zap.Logger
+	secret       []byte
+	ttl          time.Duration
+	maxAttempts  int
+	callingCodes []string
 }
 
 // NewOTPService builds an OTP service. In dev an empty OTP secret is replaced
@@ -96,17 +106,21 @@ func NewOTPService(cfg *config.Config, repo repository.OTPRepository, throttle O
 		maxAttempts = 3
 	}
 	return &otpService{
-		repo:        repo,
-		throttle:    throttle,
-		sender:      sender,
-		log:         log,
-		secret:      secret,
-		ttl:         ttl,
-		maxAttempts: maxAttempts,
+		repo:         repo,
+		throttle:     throttle,
+		sender:       sender,
+		log:          log,
+		secret:       secret,
+		ttl:          ttl,
+		maxAttempts:  maxAttempts,
+		callingCodes: cfg.OtpAllowedCallingCodes,
 	}, nil
 }
 
 func (s *otpService) RequestOTP(ctx context.Context, phone string) (int, error) {
+	if !s.countryAllowed(phone) {
+		return 0, ErrPhoneCountryNotSupported
+	}
 	if err := s.throttle.Allow(ctx, phone); err != nil {
 		return 0, fmt.Errorf("request otp: %w", err)
 	}
@@ -127,6 +141,9 @@ func (s *otpService) RequestOTP(ctx context.Context, phone string) (int, error) 
 		return 0, fmt.Errorf("request otp: %w", err)
 	}
 	if err := s.sender.SendOTP(ctx, phone, code, s.ttl); err != nil {
+		if relErr := s.throttle.Release(ctx, phone); relErr != nil {
+			s.log.Warn("otp cooldown release failed", zap.String("phone", MaskPhone(phone)), zap.Error(relErr))
+		}
 		return 0, fmt.Errorf("request otp: send sms: %w", err)
 	}
 
@@ -178,6 +195,20 @@ func (s *otpService) VerifyOTP(ctx context.Context, phone, code string) (bool, e
 	}
 	s.log.Info("otp verified", zap.String("phone", MaskPhone(phone)))
 	return true, nil
+}
+
+// countryAllowed matches E.164 calling codes by prefix, which is unambiguous
+// because calling codes are prefix-free. No configured code allows every country.
+func (s *otpService) countryAllowed(phone string) bool {
+	if len(s.callingCodes) == 0 {
+		return true
+	}
+	for _, code := range s.callingCodes {
+		if strings.HasPrefix(phone, code) {
+			return true
+		}
+	}
+	return false
 }
 
 // hash binds the code to the phone, so a stored hash cannot be replayed for another number.

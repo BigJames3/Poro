@@ -20,17 +20,34 @@ const (
 )
 
 // APIError is an error with a stable machine-readable code for clients.
+// Cause is logged for server errors and never sent to the client.
 type APIError struct {
 	Status  int
 	Code    string
 	Message string
+	Cause   error
 }
 
-func (e *APIError) Error() string { return e.Code + ": " + e.Message }
+func (e *APIError) Error() string {
+	if e.Cause != nil {
+		return e.Code + ": " + e.Message + ": " + e.Cause.Error()
+	}
+	return e.Code + ": " + e.Message
+}
+
+// Unwrap exposes the cause to errors.Is and errors.As.
+func (e *APIError) Unwrap() error { return e.Cause }
 
 // NewAPIError builds an APIError.
 func NewAPIError(status int, code, message string) *APIError {
 	return &APIError{Status: status, Code: code, Message: message}
+}
+
+// WithCause returns a copy of the error that carries the internal cause.
+func (e *APIError) WithCause(err error) *APIError {
+	cp := *e
+	cp.Cause = err
+	return &cp
 }
 
 // RequestID reuses a well-formed incoming X-Request-ID or generates a UUIDv7,

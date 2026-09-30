@@ -73,11 +73,40 @@ func TestOTPServiceRequestFailures(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("sms error", func(t *testing.T) {
-		svc := newOTP(t, devOTPConfig(), &memOTP{}, allowAll{}, &captureSender{err: errors.New("gateway")}, zap.NewNop())
+	t.Run("sms error releases the cooldown", func(t *testing.T) {
+		throttle := &recordingThrottle{}
+		svc := newOTP(t, devOTPConfig(), &memOTP{}, throttle, &captureSender{err: ErrSMSUnavailable}, zap.NewNop())
 		_, err := svc.RequestOTP(context.Background(), testPhone)
-		require.Error(t, err)
+		require.ErrorIs(t, err, ErrSMSUnavailable)
+		require.Equal(t, []string{testPhone}, throttle.released)
 	})
+
+	t.Run("release failure keeps the send error", func(t *testing.T) {
+		throttle := &recordingThrottle{releaseErr: errors.New("redis down")}
+		svc := newOTP(t, devOTPConfig(), &memOTP{}, throttle, &captureSender{err: ErrPhoneUnreachable}, zap.NewNop())
+		_, err := svc.RequestOTP(context.Background(), testPhone)
+		require.ErrorIs(t, err, ErrPhoneUnreachable)
+	})
+}
+
+func TestOTPServiceCountryAllowlist(t *testing.T) {
+	cfg := devOTPConfig()
+	cfg.OtpAllowedCallingCodes = []string{"+225", "+221", "+237", "+234"}
+	repo := &memOTP{}
+	sender := &captureSender{}
+	svc := newOTP(t, cfg, repo, denyAll{}, sender, zap.NewNop())
+
+	for _, phone := range []string{"+33612345678", "+2547000000", "+1234567890"} {
+		_, err := svc.RequestOTP(context.Background(), phone)
+		require.ErrorIs(t, err, ErrPhoneCountryNotSupported, phone)
+	}
+	require.Nil(t, repo.latest, "a refused country stores nothing")
+	require.Empty(t, sender.code, "a refused country sends nothing")
+
+	for _, phone := range []string{"+2250707070707", "+221771234567", "+237650000000", "+2348012345678"} {
+		_, err := svc.RequestOTP(context.Background(), phone)
+		require.ErrorIs(t, err, ErrOTPThrottled, "%s passes the allowlist and reaches the throttle", phone)
+	}
 }
 
 func TestOTPServiceVerifyFailures(t *testing.T) {
@@ -206,11 +235,24 @@ func otherCode(code string) string {
 
 type allowAll struct{}
 
-func (allowAll) Allow(context.Context, string) error { return nil }
+func (allowAll) Allow(context.Context, string) error   { return nil }
+func (allowAll) Release(context.Context, string) error { return nil }
 
 type denyAll struct{}
 
-func (denyAll) Allow(context.Context, string) error { return &ThrottledError{RetryAfter: time.Minute} }
+func (denyAll) Allow(context.Context, string) error   { return &ThrottledError{RetryAfter: time.Minute} }
+func (denyAll) Release(context.Context, string) error { return nil }
+
+type recordingThrottle struct {
+	released   []string
+	releaseErr error
+}
+
+func (*recordingThrottle) Allow(context.Context, string) error { return nil }
+func (r *recordingThrottle) Release(_ context.Context, phone string) error {
+	r.released = append(r.released, phone)
+	return r.releaseErr
+}
 
 type captureSender struct {
 	code string

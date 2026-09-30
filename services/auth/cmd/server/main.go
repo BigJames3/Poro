@@ -161,6 +161,8 @@ func newLogger(cfg *config.Config) (*zap.Logger, error) {
 	if cfg.IsDev() {
 		zc = zap.NewDevelopmentConfig()
 	}
+	// Request errors carry request_id and the wrapped cause; a stack trace per 5xx only adds volume.
+	zc.DisableStacktrace = true
 	if err := zc.Level.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
 		return nil, fmt.Errorf("parse log level %q: %w", cfg.LogLevel, err)
 	}

@@ -19,6 +19,18 @@ func TestValidate(t *testing.T) {
 
 	require.NoError(t, (&Config{AppEnv: EnvDev, SMSProvider: SMSProviderLog, PostgresSSLMode: "disable"}).Validate())
 
+	valid := prod()
+	valid.SMSProvider = SMSProviderAfricasTalking
+	valid.AfricasTalkingUsername = "poro"
+	valid.AfricasTalkingAPIKey = "k"
+	valid.OtpAllowedCallingCodes = []string{"+225", "+221", "+237", "+234"}
+	require.NoError(t, valid.Validate(), "prod with Africa's Talking starts")
+
+	staging := *valid
+	staging.AppEnv = EnvStaging
+	staging.AfricasTalkingUsername = AfricasTalkingSandboxUser
+	require.NoError(t, staging.Validate(), "staging may use the sandbox")
+
 	cases := []struct {
 		name   string
 		mutate func(*Config)
@@ -29,6 +41,13 @@ func TestValidate(t *testing.T) {
 		{name: "unsupported sms", mutate: func(c *Config) { c.SMSProvider = "twilio" }, want: "not supported"},
 		{name: "short otp secret", mutate: func(c *Config) { c.OtpSecret = "short" }, want: "OTP_HMAC_SECRET"},
 		{name: "plaintext postgres", mutate: func(c *Config) { c.PostgresSSLMode = "disable" }, want: "POSTGRES_SSLMODE"},
+		{name: "africastalking without credentials", mutate: func(c *Config) { c.SMSProvider = SMSProviderAfricasTalking }, want: "AFRICASTALKING_API_KEY"},
+		{name: "africastalking sandbox in prod", mutate: func(c *Config) {
+			c.SMSProvider = SMSProviderAfricasTalking
+			c.AfricasTalkingUsername = AfricasTalkingSandboxUser
+			c.AfricasTalkingAPIKey = "k"
+		}, want: "sandbox"},
+		{name: "bad calling code", mutate: func(c *Config) { c.OtpAllowedCallingCodes = []string{"+225", "225"} }, want: "OTP_ALLOWED_CALLING_CODES"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -53,6 +72,7 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	require.Equal(t, []string{"10.0.0.0/8", "172.16.0.1"}, cfg.TrustedProxies)
 	require.Equal(t, 7, cfg.OtpMaxRequestsPerHour)
 	require.Equal(t, "30s", cfg.JWTRefreshReuseGrace)
+	require.Equal(t, []string{"+225", "+221", "+237", "+234"}, cfg.OtpAllowedCallingCodes)
 	require.Equal(t, "postgres://poro:poro_dev_password@localhost:5433/poro_auth?sslmode=disable", cfg.PostgresDSN())
 
 	t.Setenv("APP_ENV", EnvProd)

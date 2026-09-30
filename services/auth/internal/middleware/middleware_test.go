@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -118,6 +119,29 @@ func TestAccessLogRecordsResolvedStatus(t *testing.T) {
 	}
 	require.Equal(t, []int64{409, 500}, statuses)
 	require.Equal(t, 1, logs.FilterMessage("request failed").Len(), "only 5xx errors are logged with detail")
+}
+
+func TestAPIErrorCauseIsLoggedNotRendered(t *testing.T) {
+	core, logs := observer.New(zap.DebugLevel)
+	log := zap.New(core)
+	cause := errors.New("africastalking: 405 InsufficientBalance")
+	base := NewAPIError(fiber.StatusServiceUnavailable, "sms_unavailable", "try again")
+	app := fiber.New(fiber.Config{ErrorHandler: ErrorHandler(log)})
+	app.Get("/sms", func(*fiber.Ctx) error { return base.WithCause(cause) })
+
+	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/sms", nil), -1)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), `"code":"sms_unavailable"`)
+	require.NotContains(t, string(body), "InsufficientBalance")
+
+	entries := logs.FilterMessage("request failed").All()
+	require.Len(t, entries, 1)
+	require.Contains(t, entries[0].ContextMap()["error"], "InsufficientBalance")
+	require.Nil(t, base.Cause, "WithCause does not mutate the shared error")
+	require.ErrorIs(t, base.WithCause(cause), cause)
 }
 
 type stubTokens struct {

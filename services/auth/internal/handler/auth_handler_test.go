@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -107,6 +108,9 @@ func TestAuthHandlerMapsErrors(t *testing.T) {
 		{err: service.ErrOTPInvalid, status: http.StatusUnauthorized, code: "otp_invalid"},
 		{err: service.ErrOTPExpired, status: http.StatusUnauthorized, code: "otp_expired"},
 		{err: service.ErrInvalidToken, status: http.StatusUnauthorized, code: "unauthorized"},
+		{err: service.ErrPhoneCountryNotSupported, status: http.StatusUnprocessableEntity, code: "phone_country_not_supported"},
+		{err: fmt.Errorf("%w: africastalking: 403 InvalidPhoneNumber", service.ErrPhoneUnreachable), status: http.StatusUnprocessableEntity, code: "phone_unreachable"},
+		{err: fmt.Errorf("%w: africastalking: 405 InsufficientBalance secret", service.ErrSMSUnavailable), status: http.StatusServiceUnavailable, code: "sms_unavailable"},
 		{err: errors.New("db password=secret down"), status: http.StatusInternalServerError, code: "internal_error"},
 	}
 	for _, tc := range cases {

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -19,9 +20,15 @@ const (
 
 	// SMSProviderLog writes codes to the log instead of sending them. Dev only.
 	SMSProviderLog = "log"
+	// SMSProviderAfricasTalking sends codes through the Africa's Talking SMS API.
+	SMSProviderAfricasTalking = "africastalking"
+	// AfricasTalkingSandboxUser selects the Africa's Talking sandbox, which never reaches real phones.
+	AfricasTalkingSandboxUser = "sandbox"
 
 	minOTPSecretLen = 32
 )
+
+var callingCodePattern = regexp.MustCompile(`^\+[1-9][0-9]{0,3}$`)
 
 // Config holds every environment setting for the auth service.
 type Config struct {
@@ -53,12 +60,18 @@ type Config struct {
 	JWTRefreshReuseGrace string // 30s
 
 	// OTP
-	OtpTTL                string // 5m
-	OtpMaxAttempts        int    // 3
-	OtpSecret             string // HMAC key for stored codes
-	OtpRequestCooldown    string // 60s
-	OtpMaxRequestsPerHour int    // 5
-	SMSProvider           string // log
+	OtpTTL                 string   // 5m
+	OtpMaxAttempts         int      // 3
+	OtpSecret              string   // HMAC key for stored codes
+	OtpRequestCooldown     string   // 60s
+	OtpMaxRequestsPerHour  int      // 5
+	OtpAllowedCallingCodes []string // +225,+221,+237,+234; empty allows every country
+	SMSProvider            string   // log, africastalking
+
+	// Africa's Talking
+	AfricasTalkingUsername string // "sandbox" selects the sandbox
+	AfricasTalkingAPIKey   string
+	AfricasTalkingSenderID string // optional registered alphanumeric sender
 }
 
 // PostgresDSN returns a URL-encoded connection string. The password is escaped.
@@ -94,8 +107,22 @@ func (c *Config) Validate() error {
 	default:
 		errs = append(errs, fmt.Errorf("APP_ENV must be dev, staging or prod, got %q", c.AppEnv))
 	}
-	if c.SMSProvider != SMSProviderLog {
+	switch c.SMSProvider {
+	case SMSProviderLog:
+	case SMSProviderAfricasTalking:
+		if c.AfricasTalkingUsername == "" || c.AfricasTalkingAPIKey == "" {
+			errs = append(errs, errors.New("AFRICASTALKING_USERNAME and AFRICASTALKING_API_KEY are required"))
+		}
+		if c.AppEnv == EnvProd && c.AfricasTalkingUsername == AfricasTalkingSandboxUser {
+			errs = append(errs, errors.New("the Africa's Talking sandbox is not allowed in prod"))
+		}
+	default:
 		errs = append(errs, fmt.Errorf("SMS_PROVIDER %q is not supported", c.SMSProvider))
+	}
+	for _, code := range c.OtpAllowedCallingCodes {
+		if !callingCodePattern.MatchString(code) {
+			errs = append(errs, fmt.Errorf("OTP_ALLOWED_CALLING_CODES: %q is not a calling code like +225", code))
+		}
 	}
 	if !c.IsDev() {
 		if len(c.OtpSecret) < minOTPSecretLen {
@@ -158,12 +185,17 @@ func Load() (*Config, error) {
 		JWTRefreshTTL:        v.GetString("JWT_REFRESH_TTL"),
 		JWTRefreshReuseGrace: v.GetString("JWT_REFRESH_REUSE_GRACE"),
 
-		OtpTTL:                v.GetString("OTP_TTL"),
-		OtpMaxAttempts:        v.GetInt("OTP_MAX_ATTEMPTS"),
-		OtpSecret:             v.GetString("OTP_HMAC_SECRET"),
-		OtpRequestCooldown:    v.GetString("OTP_REQUEST_COOLDOWN"),
-		OtpMaxRequestsPerHour: v.GetInt("OTP_MAX_REQUESTS_PER_HOUR"),
-		SMSProvider:           v.GetString("SMS_PROVIDER"),
+		OtpTTL:                 v.GetString("OTP_TTL"),
+		OtpMaxAttempts:         v.GetInt("OTP_MAX_ATTEMPTS"),
+		OtpSecret:              v.GetString("OTP_HMAC_SECRET"),
+		OtpRequestCooldown:     v.GetString("OTP_REQUEST_COOLDOWN"),
+		OtpMaxRequestsPerHour:  v.GetInt("OTP_MAX_REQUESTS_PER_HOUR"),
+		OtpAllowedCallingCodes: splitList(v.GetString("OTP_ALLOWED_CALLING_CODES")),
+		SMSProvider:            v.GetString("SMS_PROVIDER"),
+
+		AfricasTalkingUsername: v.GetString("AFRICASTALKING_USERNAME"),
+		AfricasTalkingAPIKey:   v.GetString("AFRICASTALKING_API_KEY"),
+		AfricasTalkingSenderID: v.GetString("AFRICASTALKING_SENDER_ID"),
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -201,7 +233,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("OTP_HMAC_SECRET", "")
 	v.SetDefault("OTP_REQUEST_COOLDOWN", "60s")
 	v.SetDefault("OTP_MAX_REQUESTS_PER_HOUR", 5)
+	v.SetDefault("OTP_ALLOWED_CALLING_CODES", "+225,+221,+237,+234")
 	v.SetDefault("SMS_PROVIDER", SMSProviderLog)
+
+	v.SetDefault("AFRICASTALKING_USERNAME", "")
+	v.SetDefault("AFRICASTALKING_API_KEY", "")
+	v.SetDefault("AFRICASTALKING_SENDER_ID", "")
 }
 
 func splitList(raw string) []string {

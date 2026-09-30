@@ -149,6 +149,12 @@ func mapAuthError(err error) error {
 		return middleware.NewAPIError(fiber.StatusTooManyRequests, "otp_too_many_attempts", "too many attempts, request a new code")
 	case errors.Is(err, service.ErrOTPThrottled):
 		return middleware.NewAPIError(fiber.StatusTooManyRequests, "otp_throttled", "too many code requests")
+	case errors.Is(err, service.ErrPhoneCountryNotSupported):
+		return middleware.NewAPIError(fiber.StatusUnprocessableEntity, "phone_country_not_supported", "phone country not supported")
+	case errors.Is(err, service.ErrPhoneUnreachable):
+		return middleware.NewAPIError(fiber.StatusUnprocessableEntity, "phone_unreachable", "this number cannot receive sms")
+	case errors.Is(err, service.ErrSMSUnavailable):
+		return middleware.NewAPIError(fiber.StatusServiceUnavailable, "sms_unavailable", "sms delivery unavailable, try again").WithCause(err)
 	case errors.Is(err, service.ErrOTPExpired):
 		return middleware.NewAPIError(fiber.StatusUnauthorized, "otp_expired", "code expired")
 	case errors.Is(err, service.ErrOTPInvalid):
