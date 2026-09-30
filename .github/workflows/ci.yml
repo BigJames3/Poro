@@ -6,11 +6,18 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
+      auth: ${{ steps.filter.outputs.auth }}
       mobile: ${{ steps.filter.outputs.mobile }}
     steps:
       - uses: actions/checkout@v4
@@ -18,22 +25,43 @@ jobs:
         id: filter
         with:
           filters: |
-            backend:
-              - 'services/**'
+            auth:
+              - 'services/auth/**'
               - 'packages/shared-go/**'
-              - 'packages/shared-ts/**'
+              - '.github/workflows/ci.yml'
             mobile:
               - 'apps/mobile-android/**'
 
-  backend-test:
+  auth:
     needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.backend == 'true' }}
+    if: ${{ needs.detect-changes.outputs.auth == 'true' }}
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/auth
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
-        with: { go-version: '1.22' }
-      - run: echo "Tests backend à configurer"
+        with:
+          go-version-file: services/auth/go.mod
+          cache-dependency-path: services/auth/go.sum
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Unit and integration tests
+        run: go test ./... -count=1 -race -coverprofile=coverage.out
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      - name: Docker build
+        run: docker build -t poro-auth:${{ github.sha }} .
 
   mobile-build:
     needs: detect-changes
