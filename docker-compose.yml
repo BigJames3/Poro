@@ -16,6 +16,14 @@
 # - Auth        : 8081 : 8081
 # - User        : 8082 : 8082
 # - Video       : 8083 : 8083
+#
+# Images épinglées (Docker Hub, tags stables + digest, oct. 2026) :
+# - postgres:16.15-alpine                 2026-09-21
+# - redis:7.4.11-alpine                   2026-09-21
+# - chrislusf/seaweedfs:4.45              2026-09-01
+# - redpandadata/redpanda:v24.2.7         2024-10-11
+# - clickhouse/clickhouse-server:26.8.18.2-alpine  2026-10-05
+# - qdrant/qdrant:v1.19.2                 2026-10-05
 # =============================================================
 
 services:
@@ -24,7 +32,7 @@ services:
   # ─────────────────────────────────────────────
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     container_name: poro-postgres
     environment:
       POSTGRES_USER: poro
@@ -46,7 +54,7 @@ services:
 
   # Une base par service. Idempotent : fonctionne aussi sur un volume existant.
   postgres-init:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     container_name: poro-postgres-init
     environment:
       PGHOST: postgres
@@ -70,7 +78,7 @@ services:
     restart: "no"
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.11-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     container_name: poro-redis
     command: redis-server --appendonly yes
     ports:
@@ -91,7 +99,7 @@ services:
   # ─────────────────────────────────────────────
 
   seaweedfs:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:4.45@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5
     container_name: poro-seaweedfs
     command: server -s3 -dir=/data -master.volumeSizeLimitMB=1024
     ports:
@@ -105,7 +113,7 @@ services:
     restart: unless-stopped
 
   seaweedfs-init:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:4.45@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5
     container_name: poro-seaweedfs-init
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -130,7 +138,7 @@ services:
   # Deux listeners : "internal" (redpanda:29092) pour les conteneurs,
   # "external" (localhost:9092) pour les processus lancés sur le poste.
   redpanda:
-    image: redpandadata/redpanda:v24.2.7
+    image: redpandadata/redpanda:v24.2.7@sha256:82a69763bef8d8b55ea5a520fa1b38f993908ef68946819ca1aed43541824c48
     container_name: poro-redpanda
     command:
       - redpanda
@@ -161,7 +169,7 @@ services:
 
   # Crée les topics (et leurs DLQ) : les services n'auto-créent jamais de topic.
   redpanda-init:
-    image: redpandadata/redpanda:v24.2.7
+    image: redpandadata/redpanda:v24.2.7@sha256:82a69763bef8d8b55ea5a520fa1b38f993908ef68946819ca1aed43541824c48
     container_name: poro-redpanda-init
     entrypoint: ["/bin/bash", "-c"]
     command:
@@ -186,7 +194,7 @@ services:
   # ─────────────────────────────────────────────
 
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:26.8.18.2-alpine@sha256:652d6997949183f3493f8ff601149e3df4d476be829f0d02b9861454d040c410
     container_name: poro-clickhouse
     profiles: ["analytics"]
     environment:
@@ -212,7 +220,7 @@ services:
   # ─────────────────────────────────────────────
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.19.2@sha256:b7b0444c4c351c970b98e90a6f89c2ee4287c65b44e52b4cb503fa5b2aa927ad
     container_name: poro-qdrant
     profiles: ["analytics"]
     ports:
