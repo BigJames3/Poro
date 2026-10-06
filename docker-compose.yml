@@ -108,6 +108,12 @@ services:
       - "127.0.0.1:9002:8888"   # Filer UI
     volumes:
       - poro_seaweedfs_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9333/cluster/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
     networks:
       - poro-network
     restart: unless-stopped
@@ -211,6 +217,12 @@ services:
       nofile:
         soft: 262144
         hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
     networks:
       - poro-network
     restart: unless-stopped
