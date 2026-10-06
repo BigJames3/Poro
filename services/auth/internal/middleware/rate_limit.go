@@ -14,6 +14,7 @@ import (
 
 const (
 	otpRequestLimit = 5
+	otpVerifyLimit  = 20
 	loginLimit      = 10
 	generalLimit    = 100
 )
@@ -37,6 +38,11 @@ func NewRedisStorage(cfg *config.Config) (fiber.Storage, error) {
 // OTPRequestLimit allows 5 requests per minute per IP on OTP issuance.
 func OTPRequestLimit(store fiber.Storage) fiber.Handler {
 	return newLimit(otpRequestLimit, "auth:rl:otp:", store)
+}
+
+// OTPVerifyLimit allows 20 requests per minute per IP on OTP verification.
+func OTPVerifyLimit(store fiber.Storage) fiber.Handler {
+	return newLimit(otpVerifyLimit, "auth:rl:verify:", store)
 }
 
 // LoginLimit allows 10 requests per minute per IP on email login.

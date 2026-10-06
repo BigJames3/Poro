@@ -1,5 +1,7 @@
 # Generates the RSA key pair used by the auth service.
 # Writes keys/private.pem and keys/public.pem next to this service.
+# Refuses to overwrite an existing pair (that would sign out every user) unless -Force is given.
+param([switch]$Force)
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -8,6 +10,10 @@ New-Item -ItemType Directory -Force -Path $keyDir | Out-Null
 
 $private = Join-Path $keyDir "private.pem"
 $public = Join-Path $keyDir "public.pem"
+
+if ((Test-Path $private) -and -not $Force) {
+    throw "$private already exists. Re-run with -Force to replace it and invalidate every issued token."
+}
 
 & openssl genrsa -out $private 4096
 if ($LASTEXITCODE -ne 0) { throw "openssl genrsa failed" }

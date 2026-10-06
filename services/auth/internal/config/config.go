@@ -6,17 +6,37 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
+const (
+	EnvDev     = "dev"
+	EnvStaging = "staging"
+	EnvProd    = "prod"
+
+	// SMSProviderLog writes codes to the log instead of sending them. Dev only.
+	SMSProviderLog = "log"
+	// SMSProviderAfricasTalking sends codes through the Africa's Talking SMS API.
+	SMSProviderAfricasTalking = "africastalking"
+	// AfricasTalkingSandboxUser selects the Africa's Talking sandbox, which never reaches real phones.
+	AfricasTalkingSandboxUser = "sandbox"
+
+	minOTPSecretLen = 32
+)
+
+var callingCodePattern = regexp.MustCompile(`^\+[1-9][0-9]{0,3}$`)
+
 // Config holds every environment setting for the auth service.
 type Config struct {
 	// App
-	AppEnv   string // dev, staging, prod
-	AppPort  string // 8081
-	LogLevel string // debug, info, warn, error
+	AppEnv         string   // dev, staging, prod
+	AppPort        string   // 8081
+	LogLevel       string   // debug, info, warn, error
+	TrustedProxies []string // CIDRs or IPs allowed to set X-Forwarded-For
 
 	// Postgres
 	PostgresHost     string // localhost
@@ -33,16 +53,25 @@ type Config struct {
 	RedisDB       int // 0
 
 	// JWT
-	JWTPrivateKeyPath string // ./keys/private.pem
-	JWTPublicKeyPath  string // ./keys/public.pem
-	JWTAccessTTL      string // 15m
-	JWTRefreshTTL     string // 720h
+	JWTPrivateKeyPath    string // ./keys/private.pem
+	JWTPublicKeyPath     string // ./keys/public.pem
+	JWTAccessTTL         string // 15m
+	JWTRefreshTTL        string // 720h
+	JWTRefreshReuseGrace string // 30s
 
 	// OTP
-	OtpTTL         string // 5m
-	OtpMaxAttempts int    // 3
-	OtpProviderURL string
-	OtpProviderKey string
+	OtpTTL                 string   // 5m
+	OtpMaxAttempts         int      // 3
+	OtpSecret              string   // HMAC key for stored codes
+	OtpRequestCooldown     string   // 60s
+	OtpMaxRequestsPerHour  int      // 5
+	OtpAllowedCallingCodes []string // +225,+221,+237,+234; empty allows every country
+	SMSProvider            string   // log, africastalking
+
+	// Africa's Talking
+	AfricasTalkingUsername string // "sandbox" selects the sandbox
+	AfricasTalkingAPIKey   string
+	AfricasTalkingSenderID string // optional registered alphanumeric sender
 }
 
 // PostgresDSN returns a URL-encoded connection string. The password is escaped.
@@ -64,8 +93,55 @@ func (c *Config) RedisAddr() string {
 	return net.JoinHostPort(c.RedisHost, c.RedisPort)
 }
 
-// Load reads configuration from the environment and an optional .env file.
-// Environment variables override the file. Missing .env is not an error.
+// IsDev reports whether the service runs in the local development environment.
+func (c *Config) IsDev() bool {
+	return c.AppEnv == EnvDev
+}
+
+// Validate rejects settings that are unsafe or unusable. Staging and prod
+// must not rely on dev shortcuts such as the log SMS provider.
+func (c *Config) Validate() error {
+	var errs []error
+	switch c.AppEnv {
+	case EnvDev, EnvStaging, EnvProd:
+	default:
+		errs = append(errs, fmt.Errorf("APP_ENV must be dev, staging or prod, got %q", c.AppEnv))
+	}
+	switch c.SMSProvider {
+	case SMSProviderLog:
+	case SMSProviderAfricasTalking:
+		if c.AfricasTalkingUsername == "" || c.AfricasTalkingAPIKey == "" {
+			errs = append(errs, errors.New("AFRICASTALKING_USERNAME and AFRICASTALKING_API_KEY are required"))
+		}
+		if c.AppEnv == EnvProd && c.AfricasTalkingUsername == AfricasTalkingSandboxUser {
+			errs = append(errs, errors.New("the Africa's Talking sandbox is not allowed in prod"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("SMS_PROVIDER %q is not supported", c.SMSProvider))
+	}
+	for _, code := range c.OtpAllowedCallingCodes {
+		if !callingCodePattern.MatchString(code) {
+			errs = append(errs, fmt.Errorf("OTP_ALLOWED_CALLING_CODES: %q is not a calling code like +225", code))
+		}
+	}
+	if !c.IsDev() {
+		if len(c.OtpSecret) < minOTPSecretLen {
+			errs = append(errs, fmt.Errorf("OTP_HMAC_SECRET must be at least %d bytes outside dev", minOTPSecretLen))
+		}
+		if c.SMSProvider == SMSProviderLog {
+			errs = append(errs, errors.New("SMS_PROVIDER=log is only allowed in dev"))
+		}
+		switch c.PostgresSSLMode {
+		case "require", "verify-ca", "verify-full":
+		default:
+			errs = append(errs, errors.New("POSTGRES_SSLMODE must be require, verify-ca or verify-full outside dev"))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// Load reads configuration from the environment and an optional .env file,
+// then validates it. Environment variables override the file. Missing .env is not an error.
 func Load() (*Config, error) {
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("load dotenv: %w", err)
@@ -86,9 +162,10 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		AppEnv:   v.GetString("APP_ENV"),
-		AppPort:  v.GetString("APP_PORT"),
-		LogLevel: v.GetString("LOG_LEVEL"),
+		AppEnv:         v.GetString("APP_ENV"),
+		AppPort:        v.GetString("APP_PORT"),
+		LogLevel:       v.GetString("LOG_LEVEL"),
+		TrustedProxies: splitList(v.GetString("TRUSTED_PROXIES")),
 
 		PostgresHost:     v.GetString("POSTGRES_HOST"),
 		PostgresPort:     v.GetString("POSTGRES_PORT"),
@@ -102,24 +179,36 @@ func Load() (*Config, error) {
 		RedisPassword: v.GetString("REDIS_PASSWORD"),
 		RedisDB:       v.GetInt("REDIS_DB"),
 
-		JWTPrivateKeyPath: v.GetString("JWT_PRIVATE_KEY_PATH"),
-		JWTPublicKeyPath:  v.GetString("JWT_PUBLIC_KEY_PATH"),
-		JWTAccessTTL:      v.GetString("JWT_ACCESS_TTL"),
-		JWTRefreshTTL:     v.GetString("JWT_REFRESH_TTL"),
+		JWTPrivateKeyPath:    v.GetString("JWT_PRIVATE_KEY_PATH"),
+		JWTPublicKeyPath:     v.GetString("JWT_PUBLIC_KEY_PATH"),
+		JWTAccessTTL:         v.GetString("JWT_ACCESS_TTL"),
+		JWTRefreshTTL:        v.GetString("JWT_REFRESH_TTL"),
+		JWTRefreshReuseGrace: v.GetString("JWT_REFRESH_REUSE_GRACE"),
 
-		OtpTTL:         v.GetString("OTP_TTL"),
-		OtpMaxAttempts: v.GetInt("OTP_MAX_ATTEMPTS"),
-		OtpProviderURL: v.GetString("OTP_PROVIDER_URL"),
-		OtpProviderKey: v.GetString("OTP_PROVIDER_KEY"),
+		OtpTTL:                 v.GetString("OTP_TTL"),
+		OtpMaxAttempts:         v.GetInt("OTP_MAX_ATTEMPTS"),
+		OtpSecret:              v.GetString("OTP_HMAC_SECRET"),
+		OtpRequestCooldown:     v.GetString("OTP_REQUEST_COOLDOWN"),
+		OtpMaxRequestsPerHour:  v.GetInt("OTP_MAX_REQUESTS_PER_HOUR"),
+		OtpAllowedCallingCodes: splitList(v.GetString("OTP_ALLOWED_CALLING_CODES")),
+		SMSProvider:            v.GetString("SMS_PROVIDER"),
+
+		AfricasTalkingUsername: v.GetString("AFRICASTALKING_USERNAME"),
+		AfricasTalkingAPIKey:   v.GetString("AFRICASTALKING_API_KEY"),
+		AfricasTalkingSenderID: v.GetString("AFRICASTALKING_SENDER_ID"),
 	}
 
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
 	return cfg, nil
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("APP_ENV", "dev")
+	v.SetDefault("APP_ENV", EnvDev)
 	v.SetDefault("APP_PORT", "8081")
 	v.SetDefault("LOG_LEVEL", "debug")
+	v.SetDefault("TRUSTED_PROXIES", "")
 
 	v.SetDefault("POSTGRES_HOST", "localhost")
 	v.SetDefault("POSTGRES_PORT", "5433")
@@ -137,9 +226,27 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("JWT_PUBLIC_KEY_PATH", "./keys/public.pem")
 	v.SetDefault("JWT_ACCESS_TTL", "15m")
 	v.SetDefault("JWT_REFRESH_TTL", "720h")
+	v.SetDefault("JWT_REFRESH_REUSE_GRACE", "30s")
 
 	v.SetDefault("OTP_TTL", "5m")
 	v.SetDefault("OTP_MAX_ATTEMPTS", 3)
-	v.SetDefault("OTP_PROVIDER_URL", "")
-	v.SetDefault("OTP_PROVIDER_KEY", "")
+	v.SetDefault("OTP_HMAC_SECRET", "")
+	v.SetDefault("OTP_REQUEST_COOLDOWN", "60s")
+	v.SetDefault("OTP_MAX_REQUESTS_PER_HOUR", 5)
+	v.SetDefault("OTP_ALLOWED_CALLING_CODES", "+225,+221,+237,+234")
+	v.SetDefault("SMS_PROVIDER", SMSProviderLog)
+
+	v.SetDefault("AFRICASTALKING_USERNAME", "")
+	v.SetDefault("AFRICASTALKING_API_KEY", "")
+	v.SetDefault("AFRICASTALKING_SENDER_ID", "")
+}
+
+func splitList(raw string) []string {
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }

@@ -21,9 +21,16 @@ var (
 	ErrUserAlreadyExists = errors.New("user already exists")
 )
 
-const userColumns = `id, phone, email, password_hash, role, status, country_code, language, last_login_at, created_at, updated_at, deleted_at`
+const (
+	userColumns = `id, phone, email, password_hash, status, country_code, language, last_login_at, created_at, updated_at, deleted_at`
+	userSelect  = `
+		SELECT u.id, u.phone, u.email, u.password_hash, u.status, u.country_code, u.language,
+			u.last_login_at, u.created_at, u.updated_at, u.deleted_at,
+			COALESCE((SELECT array_agg(r.role ORDER BY r.granted_at, r.role) FROM user_roles r WHERE r.user_id = u.id), '{}')
+		FROM users u`
+)
 
-// UserRepository persists auth accounts.
+// UserRepository persists auth accounts and their roles.
 type UserRepository interface {
 	Create(ctx context.Context, user *model.User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*model.User, error)
@@ -45,6 +52,8 @@ func NewUserRepository(pool *pgxpool.Pool) UserRepository {
 	return &userRepository{pool: pool}
 }
 
+// Create inserts the account and its roles in one transaction.
+// An account without roles gets PERSONAL.
 func (r *userRepository) Create(ctx context.Context, user *model.User) error {
 	if user == nil {
 		return fmt.Errorf("create user: user is nil")
@@ -53,19 +62,33 @@ func (r *userRepository) Create(ctx context.Context, user *model.User) error {
 		return fmt.Errorf("create user: %w", err)
 	}
 
-	const q = `INSERT INTO users (` + userColumns + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
-	_, err := r.pool.Exec(ctx, q,
-		user.ID, user.Phone, user.Email, user.PasswordHash, user.Role, user.Status,
-		user.CountryCode, user.Language, user.LastLoginAt, user.CreatedAt, user.UpdatedAt, user.DeletedAt,
-	)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
+		return fmt.Errorf("create user: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	const insertUser = `INSERT INTO users (` + userColumns + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+	if _, err := tx.Exec(ctx, insertUser,
+		user.ID, user.Phone, user.Email, user.PasswordHash, user.Status,
+		user.CountryCode, user.Language, user.LastLoginAt, user.CreatedAt, user.UpdatedAt, user.DeletedAt,
+	); err != nil {
+		return mapUserWriteErr("create user", err)
+	}
+
+	const insertRoles = `INSERT INTO user_roles (user_id, role, granted_at) SELECT $1, unnest($2::varchar[]), $3`
+	if _, err := tx.Exec(ctx, insertRoles, user.ID, user.RoleNames(), user.CreatedAt); err != nil {
+		return fmt.Errorf("create user: insert roles: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
 		return mapUserWriteErr("create user", err)
 	}
 	return nil
 }
 
 func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.User, error) {
-	const q = `SELECT ` + userColumns + ` FROM users WHERE id = $1 AND deleted_at IS NULL`
+	const q = userSelect + ` WHERE u.id = $1 AND u.deleted_at IS NULL`
 	user, err := scanUser(r.pool.QueryRow(ctx, q, id))
 	if err != nil {
 		return nil, fmt.Errorf("get user by id: %w", err)
@@ -74,7 +97,7 @@ func (r *userRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.User
 }
 
 func (r *userRepository) GetByPhone(ctx context.Context, phone string) (*model.User, error) {
-	const q = `SELECT ` + userColumns + ` FROM users WHERE phone = $1 AND deleted_at IS NULL`
+	const q = userSelect + ` WHERE u.phone = $1 AND u.deleted_at IS NULL`
 	user, err := scanUser(r.pool.QueryRow(ctx, q, phone))
 	if err != nil {
 		return nil, fmt.Errorf("get user by phone: %w", err)
@@ -83,7 +106,7 @@ func (r *userRepository) GetByPhone(ctx context.Context, phone string) (*model.U
 }
 
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
-	const q = `SELECT ` + userColumns + ` FROM users WHERE email = $1 AND deleted_at IS NULL`
+	const q = userSelect + ` WHERE u.email = $1 AND u.deleted_at IS NULL`
 	user, err := scanUser(r.pool.QueryRow(ctx, q, email))
 	if err != nil {
 		return nil, fmt.Errorf("get user by email: %w", err)
@@ -91,6 +114,7 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*model.U
 	return user, nil
 }
 
+// Update writes the account columns. Roles are not changed.
 func (r *userRepository) Update(ctx context.Context, user *model.User) error {
 	if user == nil {
 		return fmt.Errorf("update user: user is nil")
@@ -101,14 +125,13 @@ func (r *userRepository) Update(ctx context.Context, user *model.User) error {
 			phone = $2,
 			email = $3,
 			password_hash = $4,
-			role = $5,
-			status = $6,
-			country_code = $7,
-			language = $8,
-			updated_at = $9
+			status = $5,
+			country_code = $6,
+			language = $7,
+			updated_at = $8
 		WHERE id = $1 AND deleted_at IS NULL`
 	tag, err := r.pool.Exec(ctx, q,
-		user.ID, user.Phone, user.Email, user.PasswordHash, user.Role, user.Status,
+		user.ID, user.Phone, user.Email, user.PasswordHash, user.Status,
 		user.CountryCode, user.Language, user.UpdatedAt,
 	)
 	if err != nil {
@@ -179,8 +202,8 @@ func prepareNewUser(user *model.User) error {
 	if user.UpdatedAt.IsZero() {
 		user.UpdatedAt = user.CreatedAt
 	}
-	if user.Role == "" {
-		user.Role = model.RolePersonal
+	if len(user.Roles) == 0 {
+		user.Roles = []model.UserRole{model.RolePersonal}
 	}
 	if user.Status == "" {
 		user.Status = model.StatusPending
@@ -193,15 +216,21 @@ func prepareNewUser(user *model.User) error {
 
 func scanUser(row pgx.Row) (*model.User, error) {
 	var user model.User
+	var roles []string
 	err := row.Scan(
-		&user.ID, &user.Phone, &user.Email, &user.PasswordHash, &user.Role, &user.Status,
+		&user.ID, &user.Phone, &user.Email, &user.PasswordHash, &user.Status,
 		&user.CountryCode, &user.Language, &user.LastLoginAt, &user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
+		&roles,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("scan user: %w", err)
+	}
+	user.Roles = make([]model.UserRole, len(roles))
+	for i, role := range roles {
+		user.Roles[i] = model.UserRole(role)
 	}
 	return &user, nil
 }
