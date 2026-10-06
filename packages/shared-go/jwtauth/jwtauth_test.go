@@ -295,16 +295,36 @@ func TestMiddleware(t *testing.T) {
 		return resp.StatusCode
 	}
 	require.Equal(t, http.StatusOK, call(app, "/me", "Bearer "+valid))
+	require.Equal(t, http.StatusOK, call(app, "/me", "bearer "+valid))
 	require.Equal(t, http.StatusUnauthorized, call(app, "/me", ""))
 	require.Equal(t, http.StatusUnauthorized, call(app, "/me", "Basic abc"))
 	require.Equal(t, http.StatusUnauthorized, call(app, "/me", "Bearer nope"))
+
+	opt := fiber.New(fiber.Config{ErrorHandler: httpx.ErrorHandler(zap.NewNop())})
+	opt.Use(OptionalMiddleware(newVerifier(t, srv.URL)))
+	opt.Get("/pub", func(c *fiber.Ctx) error {
+		_, ok := ClaimsFrom(c)
+		if ok {
+			return c.SendString("auth")
+		}
+		return c.SendString("anon")
+	})
+	req := httptest.NewRequest(http.MethodGet, "/pub", nil)
+	resp, err := opt.Test(req, -1)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	req = httptest.NewRequest(http.MethodGet, "/pub", nil)
+	req.Header.Set("Authorization", "Bearer "+valid)
+	resp, err = opt.Test(req, -1)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, http.StatusForbidden, call(app, "/admin", "Bearer "+valid))
 	require.Equal(t, http.StatusOK, call(app, "/studio", "Bearer "+valid))
 	require.Equal(t, http.StatusServiceUnavailable, call(build(newVerifier(t, down.URL)), "/me", "Bearer "+valid))
 
 	bare := fiber.New(fiber.Config{ErrorHandler: httpx.ErrorHandler(zap.NewNop())})
 	bare.Get("/", RequireRole("ADMIN"), func(c *fiber.Ctx) error { return nil })
-	resp, err := bare.Test(httptest.NewRequest(http.MethodGet, "/", nil), -1)
+	resp, err = bare.Test(httptest.NewRequest(http.MethodGet, "/", nil), -1)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusForbidden, resp.StatusCode, "RequireRole without claims refuses")
 }

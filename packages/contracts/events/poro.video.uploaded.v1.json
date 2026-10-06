@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.video.uploaded.v1.json",
+  "title": "poro.video.uploaded v1",
+  "description": "Published by the video API after multipart complete. The media-worker transcodes SourceKey.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "version", "source", "subject", "occurred_at", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "const": "poro.video.uploaded" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "format": "uuid", "description": "video id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["video_id", "user_id", "source_key", "content_type", "size_bytes", "uploaded_at"],
+      "properties": {
+        "video_id": { "type": "string", "format": "uuid" },
+        "user_id": { "type": "string", "format": "uuid" },
+        "source_key": { "type": "string", "minLength": 1 },
+        "content_type": { "type": "string", "enum": ["video/mp4", "video/quicktime", "video/webm"] },
+        "size_bytes": { "type": "integer", "minimum": 1 },
+        "uploaded_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

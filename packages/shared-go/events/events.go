@@ -1,7 +1,8 @@
 // Package events defines the envelope of every Poro domain event.
 //
-// One topic per event type, named poro.{domain}.{entity}.{action}. The message
-// key is the subject (the aggregate ID), so events of one aggregate stay ordered.
+// One topic per event type, named poro.{domain}.{entity}.{action}, or
+// poro.{domain}.{action} when the entity is the domain (e.g. poro.video.ready).
+// The message key is the subject (the aggregate ID), so events of one aggregate stay ordered.
 package events
 
 import (
@@ -14,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-var typePattern = regexp.MustCompile(`^poro\.[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`)
+var typePattern = regexp.MustCompile(`^poro(\.[a-z][a-z0-9_]*){2,3}$`)
 
 // ErrInvalidEnvelope is returned for a message that is not a valid envelope.
 var ErrInvalidEnvelope = errors.New("invalid event envelope")

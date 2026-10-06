@@ -9,12 +9,13 @@ il est mis à jour à chaque jalon P0.
 |---|---|
 | `services/auth` (Go 1.26, Fiber v2, pgx v5, Redis) | Identité, JWT RS256, OTP, outbox `poro.auth.user.created`, consommateur CREATOR. |
 | `services/user` (NestJS 11, Prisma 7, port 8082) | Profils, username, avatars présignés, activation créateur. |
+| `services/video` (Go 1.26, Fiber, port 8083) + `media-worker` | Upload multipart, HLS 360p/720p, `poro.video.ready`. |
 | `packages/shared-go` | HTTP envelope, JWKS, health, Prometheus, OTel, outbox/inbox, Kafka. |
 | `services/outbox-relay` | Relais SQL → Redpanda (un processus par base). |
-| Autres services (`video`, `feed`, `social`, `shop`, …) | Aucun code. Seulement listés dans `.cursor/rules/project.md`. |
+| Autres services (`feed`, `social`, `shop`, …) | Aucun code. Seulement listés dans `.cursor/rules/project.md`. |
 | `packages/`, `infra/`, `data/`, `docs/` | Vides avant ce jalon. |
 | `apps/mobile-android` | Projet Android Studio (36 fichiers suivis), ne consomme encore aucune API. Non modifié. |
-| `docker-compose.yml` | Postgres 16 (`poro_auth`, `poro_user`), Redis 7, SeaweedFS (S3 + bucket avatars), Redpanda (listeners interne/externe, topics + DLQ), auth, user, relais outbox. |
+| `docker-compose.yml` | Postgres 16 (`poro_auth`, `poro_user`, `poro_video`), Redis 7, SeaweedFS (avatars + videos), Redpanda, auth, user, video, media-worker, relais outbox. |
 | CI (`.github/workflows/ci.yml`) | Avant ce jalon : jobs `echo` uniquement, aucun test exécuté. |
 | iOS, Terraform, Helm, k8s, observabilité | Inexistants. |
 
@@ -72,8 +73,9 @@ Ingress k3s (Traefik) ── /api/v1/{domaine}
  ┌──────┴──────────────────────────────────────────────┐
  │ auth (Go)        identité, rôles, sessions, JWKS    │
  │ user (NestJS)    profils, onboarding créateur/vendeur│
- │ content (Go)     vidéos, social, feed               │
- │ media-worker (Go+FFmpeg) transcodage HLS            │
+ │ video (Go)        upload multipart, métadonnées HLS     │
+ │ media-worker (Go+FFmpeg) transcodage HLS                │
+ │ content (Go)     social, feed — P0-6/7                  │
  │ commerce (NestJS) boutiques, produits, commandes,   │
  │                   paiements, livraisons (modules)   │
  │ notification     FCM / APNs                         │
@@ -98,7 +100,7 @@ reste acceptable hors auth jusqu'à 15 min ([ADR-0005](adr/0005-evenements-json-
 | P0-2 | Package `packages/shared-go` : logger, request ID, enveloppe d'erreur, vérification JWT via JWKS, health, métriques Prometheus, OpenTelemetry | **Fait** |
 | P0-3 | Backbone d'événements : table outbox + relais vers Redpanda, schémas versionnés, table d'idempotence consommateur, DLQ ; premier événement `poro.auth.user.created` | **Fait** — [ADR-0005](adr/0005-evenements-json-outbox.md) |
 | P0-4 | Service user : profil, username unique, avatar (upload présigné), attribution du rôle CREATOR | **Fait** — [ADR-0006](adr/0006-service-user.md) |
-| P0-5 | Pipeline vidéo : init upload → multipart présigné → complete → événement → FFmpeg HLS multi-résolutions → miniatures → `poro.video.ready` | À faire |
+| P0-5 | Pipeline vidéo : init upload → multipart présigné → complete → événement → FFmpeg HLS multi-résolutions → miniatures → `poro.video.ready` | **Fait** — [ADR-0007](adr/0007-pipeline-video.md) |
 | P0-6 | Social : follow, like, commentaire, partage, compteurs | À faire |
 | P0-7 | Feed : following, chronologique, trending, For You à règles ; pagination par curseur ; cache Redis | À faire |
 | P0-8 | Notifications push FCM | À faire |

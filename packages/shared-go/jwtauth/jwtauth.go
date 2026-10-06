@@ -133,21 +133,51 @@ func Middleware(v *Verifier) fiber.Handler {
 	unauthorized := httpx.NewAPIError(fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	unavailable := httpx.NewAPIError(fiber.StatusServiceUnavailable, "unavailable", "authentication temporarily unavailable")
 	return func(c *fiber.Ctx) error {
-		header := c.Get(fiber.HeaderAuthorization)
-		token, ok := strings.CutPrefix(header, "Bearer ")
-		if !ok || token == "" {
+		token, ok := bearerToken(c.Get(fiber.HeaderAuthorization))
+		if !ok {
 			return unauthorized
 		}
-		claims, err := v.Verify(c.UserContext(), token)
-		if errors.Is(err, ErrKeysUnavailable) {
-			return unavailable.WithCause(err)
-		}
-		if err != nil {
-			return unauthorized
-		}
-		c.Locals(localClaims, claims)
-		return c.Next()
+		return attachClaims(c, v, token, unauthorized, unavailable)
 	}
+}
+
+// OptionalMiddleware verifies a Bearer token when present and lets anonymous
+// callers through. A malformed or invalid token is still 401.
+func OptionalMiddleware(v *Verifier) fiber.Handler {
+	unauthorized := httpx.NewAPIError(fiber.StatusUnauthorized, "unauthorized", "unauthorized")
+	unavailable := httpx.NewAPIError(fiber.StatusServiceUnavailable, "unavailable", "authentication temporarily unavailable")
+	return func(c *fiber.Ctx) error {
+		header := c.Get(fiber.HeaderAuthorization)
+		if strings.TrimSpace(header) == "" {
+			return c.Next()
+		}
+		token, ok := bearerToken(header)
+		if !ok {
+			return unauthorized
+		}
+		return attachClaims(c, v, token, unauthorized, unavailable)
+	}
+}
+
+func attachClaims(c *fiber.Ctx, v *Verifier, token string, unauthorized, unavailable *httpx.APIError) error {
+	claims, err := v.Verify(c.UserContext(), token)
+	if errors.Is(err, ErrKeysUnavailable) {
+		return unavailable.WithCause(err)
+	}
+	if err != nil {
+		return unauthorized
+	}
+	c.Locals(localClaims, claims)
+	return c.Next()
+}
+
+func bearerToken(header string) (string, bool) {
+	scheme, token, ok := strings.Cut(header, " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return "", false
+	}
+	token = strings.TrimSpace(token)
+	return token, token != ""
 }
 
 // RequireRole refuses callers without role with 403. Mount after Middleware.

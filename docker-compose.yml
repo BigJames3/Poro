@@ -15,6 +15,7 @@
 #                 6334 : 6334   (gRPC)
 # - Auth        : 8081 : 8081
 # - User        : 8082 : 8082
+# - Video       : 8083 : 8083
 # =============================================================
 
 services:
@@ -56,7 +57,7 @@ services:
     command:
       - |
         set -eu
-        for db in poro_auth poro_user; do
+        for db in poro_auth poro_user poro_video; do
           if [ "$$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$$db'")" != "1" ]; then
             psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE $$db OWNER poro"
           fi
@@ -111,9 +112,11 @@ services:
       - |
         set -eu
         until echo "cluster.check" | weed shell -master=seaweedfs:9333 >/dev/null 2>&1; do sleep 2; done
-        if ! echo "s3.bucket.list" | weed shell -master=seaweedfs:9333 2>/dev/null | grep -q "poro-avatars"; then
-          echo "s3.bucket.create -name poro-avatars" | weed shell -master=seaweedfs:9333
-        fi
+        for b in poro-avatars poro-videos; do
+          if ! echo "s3.bucket.list" | weed shell -master=seaweedfs:9333 2>/dev/null | grep -q "$$b"; then
+            echo "s3.bucket.create -name $$b" | weed shell -master=seaweedfs:9333
+          fi
+        done
     depends_on:
       - seaweedfs
     networks:
@@ -165,7 +168,7 @@ services:
       - |
         set -euo pipefail
         export RPK_BROKERS=redpanda:29092
-        for t in poro.auth.user.created poro.user.creator.activated; do
+        for t in poro.auth.user.created poro.user.creator.activated poro.video.uploaded poro.video.ready poro.video.failed; do
           rpk topic describe "$$t" >/dev/null 2>&1 || rpk topic create "$$t" -p 3 -r 1 -c retention.ms=604800000
           rpk topic describe "$$t.dlq" >/dev/null 2>&1 || rpk topic create "$$t.dlq" -p 1 -r 1 -c retention.ms=2592000000
         done
@@ -378,6 +381,109 @@ services:
       auth:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+      seaweedfs-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  outbox-relay-video:
+    build:
+      context: .
+      dockerfile: services/outbox-relay/Dockerfile
+    container_name: poro-outbox-relay-video
+    environment:
+      <<: *relay-env
+      RELAY_SOURCE: video
+      POSTGRES_DB: poro_video
+    depends_on:
+      video:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # SERVICE VIDEO (upload multipart, métadonnées)
+  # ─────────────────────────────────────────────
+
+  video:
+    build:
+      context: .
+      dockerfile: services/video/Dockerfile
+    container_name: poro-video
+    environment:
+      APP_ENV: dev
+      APP_PORT: "8083"
+      LOG_LEVEL: debug
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: poro
+      POSTGRES_PASSWORD: poro_dev_password
+      POSTGRES_DB: poro_video
+      POSTGRES_SSLMODE: disable
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "2"
+      JWKS_URL: http://auth:8081/.well-known/jwks.json
+      KAFKA_BROKERS: redpanda:29092
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_REGION: us-east-1
+      S3_BUCKET: poro-videos
+      S3_ACCESS_KEY_ID: poro_dev
+      S3_SECRET_ACCESS_KEY: poro_dev_secret
+      S3_FORCE_PATH_STYLE: "true"
+    ports:
+      - "127.0.0.1:8083:8083"
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+      auth:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+      seaweedfs-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  media-worker:
+    build:
+      context: .
+      dockerfile: services/video/Dockerfile.worker
+    container_name: poro-media-worker
+    environment:
+      APP_ENV: dev
+      LOG_LEVEL: debug
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: poro
+      POSTGRES_PASSWORD: poro_dev_password
+      POSTGRES_DB: poro_video
+      POSTGRES_SSLMODE: disable
+      JWKS_URL: http://auth:8081/.well-known/jwks.json
+      KAFKA_BROKERS: redpanda:29092
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_REGION: us-east-1
+      S3_BUCKET: poro-videos
+      S3_ACCESS_KEY_ID: poro_dev
+      S3_SECRET_ACCESS_KEY: poro_dev_secret
+      S3_FORCE_PATH_STYLE: "true"
+      FFMPEG_BIN: ffmpeg
+      FFPROBE_BIN: ffprobe
+    depends_on:
+      video:
         condition: service_healthy
       redpanda-init:
         condition: service_completed_successfully

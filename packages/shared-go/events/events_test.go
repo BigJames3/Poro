@@ -31,6 +31,21 @@ func TestNewAndDecodeRoundTrip(t *testing.T) {
 	require.Equal(t, "poro.auth.user.created.dlq", DLQTopic(env.Topic()))
 }
 
+func TestVideoUploadedRoundTrip(t *testing.T) {
+	now := time.Now()
+	videoID := uuid.Must(uuid.NewV7()).String()
+	userID := uuid.Must(uuid.NewV7()).String()
+	env, err := New(TypeVideoUploaded, 1, "video", videoID, VideoUploadedV1{
+		VideoID: videoID, UserID: userID, SourceKey: "videos/" + videoID + "/source.mp4",
+		ContentType: "video/mp4", SizeBytes: 1024, UploadedAt: now,
+	}, now)
+	require.NoError(t, err)
+	var data VideoUploadedV1
+	require.NoError(t, env.DecodeData(&data))
+	require.Equal(t, int64(1024), data.SizeBytes)
+	require.Equal(t, TypeVideoUploaded, env.Topic())
+}
+
 func TestValidation(t *testing.T) {
 	now := time.Now()
 	_, err := New("user.created", 1, "auth", "s", map[string]any{}, now)

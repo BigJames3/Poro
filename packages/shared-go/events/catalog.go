@@ -6,6 +6,9 @@ import "time"
 const (
 	TypeAuthUserCreated      = "poro.auth.user.created"
 	TypeUserCreatorActivated = "poro.user.creator.activated"
+	TypeVideoUploaded        = "poro.video.uploaded"
+	TypeVideoReady           = "poro.video.ready"
+	TypeVideoFailed          = "poro.video.failed"
 )
 
 // AuthUserCreatedV1 is published by auth when an account is created.
@@ -23,4 +26,52 @@ type UserCreatorActivatedV1 struct {
 	UserID      string    `json:"user_id"`
 	Username    string    `json:"username"`
 	ActivatedAt time.Time `json:"activated_at"`
+}
+
+// VideoUploadedV1 is published by the video API after a multipart upload completes.
+// The media-worker transcodes the object at SourceKey.
+type VideoUploadedV1 struct {
+	VideoID     string    `json:"video_id"`
+	UserID      string    `json:"user_id"`
+	SourceKey   string    `json:"source_key"`
+	ContentType string    `json:"content_type"`
+	SizeBytes   int64     `json:"size_bytes"`
+	UploadedAt  time.Time `json:"uploaded_at"`
+}
+
+// VideoRenditionV1 is one HLS ladder rung published when a video is ready.
+type VideoRenditionV1 struct {
+	Name        string `json:"name"`
+	Bandwidth   int    `json:"bandwidth"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	PlaylistKey string `json:"playlist_key"`
+}
+
+// VideoReadyV1 is published by the media-worker after HLS and a thumbnail exist.
+type VideoReadyV1 struct {
+	VideoID      string             `json:"video_id"`
+	UserID       string             `json:"user_id"`
+	DurationMs   int                `json:"duration_ms"`
+	Width        int                `json:"width"`
+	Height       int                `json:"height"`
+	HLSKey       string             `json:"hls_key"`
+	ThumbnailKey string             `json:"thumbnail_key"`
+	Renditions   []VideoRenditionV1 `json:"renditions"`
+	ReadyAt      time.Time          `json:"ready_at"`
+}
+
+// Failure codes on VideoFailedV1. Never include FFmpeg stderr or file paths.
+const (
+	VideoFailTooLong   = "too_long"
+	VideoFailInvalid   = "invalid_media"
+	VideoFailTranscode = "transcode_failed"
+)
+
+// VideoFailedV1 is published when transcode cannot produce playable HLS.
+type VideoFailedV1 struct {
+	VideoID  string    `json:"video_id"`
+	UserID   string    `json:"user_id"`
+	Code     string    `json:"code"`
+	FailedAt time.Time `json:"failed_at"`
 }

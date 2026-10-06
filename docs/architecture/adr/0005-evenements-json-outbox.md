@@ -16,7 +16,8 @@ Les règles du projet citent Avro ; aucun registre de schémas n'est en place.
 
    `{id, type, version, source, subject, occurred_at, data}`
 
-   `id` est un UUIDv7. `type` = nom du topic Kafka = `poro.{domaine}.{entité}.{action}`.
+   `id` est un UUIDv7. `type` = nom du topic Kafka = `poro.{domaine}.{entité}.{action}`
+   (forme courte `poro.{domaine}.{action}` autorisée, ex. `poro.video.ready`).
    Clé Kafka = `subject` (id d'agrégat) pour garder l'ordre par compte.
    Un changement additif de `data` conserve `version` ; un changement cassant
    l'incrémente. Les schémas vivent dans `packages/contracts/events`.

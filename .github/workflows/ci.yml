@@ -21,6 +21,7 @@ jobs:
       auth: ${{ steps.filter.outputs.auth }}
       relay: ${{ steps.filter.outputs.relay }}
       user: ${{ steps.filter.outputs.user }}
+      video: ${{ steps.filter.outputs.video }}
       mobile: ${{ steps.filter.outputs.mobile }}
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +42,11 @@ jobs:
               - '.github/workflows/ci.yml'
             user:
               - 'services/user/**'
+              - 'packages/contracts/events/**'
+              - '.github/workflows/ci.yml'
+            video:
+              - 'services/video/**'
+              - 'packages/shared-go/**'
               - 'packages/contracts/events/**'
               - '.github/workflows/ci.yml'
             mobile:
@@ -156,6 +162,37 @@ jobs:
       - name: Docker build
         run: docker build -t poro-user:${{ github.sha }} .
 
+  video:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.video == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/video
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/video/go.mod
+          cache-dependency-path: |
+            services/video/go.sum
+            packages/shared-go/go.sum
+      - name: ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: Tests
+        run: go test ./... -count=1 -coverprofile=coverage.out
+      - name: Docker build
+        working-directory: .
+        run: |
+          docker build -f services/video/Dockerfile -t poro-video:${{ github.sha }} .
+          docker build -f services/video/Dockerfile.worker -t poro-media-worker:${{ github.sha }} .
+
   mobile-build:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.mobile == 'true' }}
@@ -164,4 +201,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: "temurin", java-version: "17" }
-      - run: echo "Build Android à configurer"
+      - run: echo "Build Android ï¿½ configurer"
