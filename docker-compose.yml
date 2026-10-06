@@ -1,6 +1,7 @@
 # =============================================================
 # Poro — Docker Compose (développement local)
 # =============================================================
+# Bind hôte : 127.0.0.1 uniquement (aucun port exposé sur le LAN).
 # Ports Windows : Interne Docker
 # - Postgres    : 5433 : 5432   (évite cvstudio sur 5432)
 # - Redis       : 6380 : 6379   (évite cvstudio sur 6379)
@@ -29,7 +30,7 @@ services:
       POSTGRES_PASSWORD: poro_dev_password
       POSTGRES_DB: poro_auth
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - poro_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -72,7 +73,7 @@ services:
     container_name: poro-redis
     command: redis-server --appendonly yes
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - poro_redis_data:/data
     healthcheck:
@@ -93,9 +94,9 @@ services:
     container_name: poro-seaweedfs
     command: server -s3 -dir=/data -master.volumeSizeLimitMB=1024
     ports:
-      - "9000:8333"   # S3 API
-      - "9001:9333"   # Master UI
-      - "9002:8888"   # Filer UI
+      - "127.0.0.1:9000:8333"   # S3 API
+      - "127.0.0.1:9001:9333"   # Master UI
+      - "127.0.0.1:9002:8888"   # Filer UI
     volumes:
       - poro_seaweedfs_data:/data
     networks:
@@ -140,9 +141,9 @@ services:
       - --kafka-addr=internal://0.0.0.0:29092,external://0.0.0.0:9092
       - --advertise-kafka-addr=internal://redpanda:29092,external://localhost:9092
     ports:
-      - "9092:9092"   # Kafka API
-      - "9644:9644"   # Admin API
-      - "8080:8080"   # HTTP Proxy
+      - "127.0.0.1:9092:9092"   # Kafka API
+      - "127.0.0.1:9644:9644"   # Admin API
+      - "127.0.0.1:8080:8080"   # HTTP Proxy
     volumes:
       - poro_redpanda_data:/var/lib/redpanda/data
     healthcheck:
@@ -191,8 +192,8 @@ services:
       CLICKHOUSE_PASSWORD: poro_dev_password
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - "8123:8123"   # HTTP
-      - "9440:9000"   # TCP (native)
+      - "127.0.0.1:8123:8123"   # HTTP
+      - "127.0.0.1:9440:9000"   # TCP (native)
     volumes:
       - poro_clickhouse_data:/var/lib/clickhouse
     ulimits:
@@ -212,8 +213,8 @@ services:
     container_name: poro-qdrant
     profiles: ["analytics"]
     ports:
-      - "6333:6333"   # HTTP
-      - "6334:6334"   # gRPC
+      - "127.0.0.1:6333:6333"   # HTTP
+      - "127.0.0.1:6334:6334"   # gRPC
     volumes:
       - poro_qdrant_data:/qdrant/storage
     networks:
@@ -269,7 +270,7 @@ services:
 
       KAFKA_BROKERS: redpanda:29092
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     volumes:
       - ./services/auth/keys:/app/keys:ro
     depends_on:
@@ -370,7 +371,7 @@ services:
       S3_SECRET_ACCESS_KEY: poro_dev_secret
       CORS_ORIGINS: ${USER_CORS_ORIGINS:-}
     ports:
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
     depends_on:
       user-migrate:
         condition: service_completed_successfully
