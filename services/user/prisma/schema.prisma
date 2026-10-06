@@ -1,0 +1,60 @@
+// PORO user service database (poro_user).
+// Migrations are written by hand and checked with `prisma migrate diff`.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+  runtime      = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// One profile per auth account. user_id is the auth account ID (JWT sub):
+// auth owns identity, this service owns the public profile.
+model Profile {
+  userId       String    @id @map("user_id") @db.Uuid
+  // Lowercase; unique even across deleted profiles so a handle is never reused.
+  username     String?   @unique @db.VarChar(30)
+  displayName  String?   @map("display_name") @db.VarChar(50)
+  bio          String?   @db.VarChar(160)
+  avatarKey    String?   @map("avatar_key") @db.VarChar(200)
+  countryCode  String?   @map("country_code") @db.Char(2)
+  isCreator    Boolean   @default(false) @map("is_creator")
+  creatorSince DateTime? @map("creator_since") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([isCreator, creatorSince])
+  @@map("profiles")
+}
+
+// Transactional outbox relayed by services/outbox-relay. The relay owns the
+// column set (github.com/poro/shared-go/outbox.Schema), so there is no updated_at.
+model OutboxEvent {
+  id          String    @id @db.Uuid
+  topic       String    @db.VarChar(200)
+  eventKey    String    @map("event_key") @db.VarChar(200)
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error")
+
+  @@index([publishedAt, createdAt, id])
+  @@map("outbox_events")
+}
+
+// Consumer idempotency: one row per (consumer group, event) already applied.
+model ProcessedEvent {
+  consumer    String   @db.VarChar(100)
+  eventId     String   @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([consumer, eventId])
+  @@index([processedAt])
+  @@map("processed_events")
+}

@@ -1,17 +1,21 @@
 # =============================================================
 # Poro — Docker Compose (développement local)
 # =============================================================
+# Bind hôte : 127.0.0.1 uniquement (aucun port exposé sur le LAN).
 # Ports Windows : Interne Docker
 # - Postgres    : 5433 : 5432   (évite cvstudio sur 5432)
 # - Redis       : 6380 : 6379   (évite cvstudio sur 6379)
 # - SeaweedFS   : 9000 : 8333   (S3 API)
 #                 9001 : 9333   (Master UI)
-# - Redpanda    : 9092 : 9092   (Kafka)
+# - Redpanda    : 9092 : 9092   (Kafka, listener "external" ; les
+#                               conteneurs utilisent redpanda:29092)
 # - ClickHouse  : 8123 : 8123   (HTTP)
 #                 9440 : 9000   (TCP, évite conflit avec SeaweedFS)
 # - Qdrant      : 6333 : 6333   (HTTP)
 #                 6334 : 6334   (gRPC)
 # - Auth        : 8081 : 8081
+# - User        : 8082 : 8082
+# - Video       : 8083 : 8083
 # =============================================================
 
 services:
@@ -27,7 +31,7 @@ services:
       POSTGRES_PASSWORD: poro_dev_password
       POSTGRES_DB: poro_auth
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - poro_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -40,12 +44,37 @@ services:
       - poro-network
     restart: unless-stopped
 
+  # Une base par service. Idempotent : fonctionne aussi sur un volume existant.
+  postgres-init:
+    image: postgres:16-alpine
+    container_name: poro-postgres-init
+    environment:
+      PGHOST: postgres
+      PGUSER: poro
+      PGPASSWORD: poro_dev_password
+      PGDATABASE: postgres
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        for db in poro_auth poro_user poro_video; do
+          if [ "$$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$$db'")" != "1" ]; then
+            psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE $$db OWNER poro"
+          fi
+        done
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - poro-network
+    restart: "no"
+
   redis:
     image: redis:7-alpine
     container_name: poro-redis
     command: redis-server --appendonly yes
     ports:
-      - "6380:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - poro_redis_data:/data
     healthcheck:
@@ -66,42 +95,90 @@ services:
     container_name: poro-seaweedfs
     command: server -s3 -dir=/data -master.volumeSizeLimitMB=1024
     ports:
-      - "9000:8333"   # S3 API
-      - "9001:9333"   # Master UI
-      - "9002:8888"   # Filer UI
+      - "127.0.0.1:9000:8333"   # S3 API
+      - "127.0.0.1:9001:9333"   # Master UI
+      - "127.0.0.1:9002:8888"   # Filer UI
     volumes:
       - poro_seaweedfs_data:/data
     networks:
       - poro-network
     restart: unless-stopped
 
+  seaweedfs-init:
+    image: chrislusf/seaweedfs:latest
+    container_name: poro-seaweedfs-init
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        until echo "cluster.check" | weed shell -master=seaweedfs:9333 >/dev/null 2>&1; do sleep 2; done
+        for b in poro-avatars poro-videos; do
+          if ! echo "s3.bucket.list" | weed shell -master=seaweedfs:9333 2>/dev/null | grep -q "$$b"; then
+            echo "s3.bucket.create -name $$b" | weed shell -master=seaweedfs:9333
+          fi
+        done
+    depends_on:
+      - seaweedfs
+    networks:
+      - poro-network
+    restart: "no"
+
   # ─────────────────────────────────────────────
   # EVENT STREAMING (Kafka-compatible)
   # ─────────────────────────────────────────────
 
+  # Deux listeners : "internal" (redpanda:29092) pour les conteneurs,
+  # "external" (localhost:9092) pour les processus lancés sur le poste.
   redpanda:
-    image: redpandadata/redpanda:latest
+    image: redpandadata/redpanda:v24.2.7
     container_name: poro-redpanda
     command:
       - redpanda
       - start
-      - --overprovisioned
+      - --mode=dev-container
       - --smp=1
       - --memory=1G
       - --reserve-memory=0M
-      - --node-id=0
+      - --overprovisioned
       - --check=false
-      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+      - --kafka-addr=internal://0.0.0.0:29092,external://0.0.0.0:9092
+      - --advertise-kafka-addr=internal://redpanda:29092,external://localhost:9092
     ports:
-      - "9092:9092"   # Kafka API
-      - "9644:9644"   # Admin API
-      - "8080:8080"   # HTTP Proxy
+      - "127.0.0.1:9092:9092"   # Kafka API
+      - "127.0.0.1:9644:9644"   # Admin API
+      - "127.0.0.1:8080:8080"   # HTTP Proxy
     volumes:
       - poro_redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk topic list >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
     networks:
       - poro-network
     restart: unless-stopped
+
+  # Crée les topics (et leurs DLQ) : les services n'auto-créent jamais de topic.
+  redpanda-init:
+    image: redpandadata/redpanda:v24.2.7
+    container_name: poro-redpanda-init
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        export RPK_BROKERS=redpanda:29092
+        for t in poro.auth.user.created poro.user.creator.activated poro.video.uploaded poro.video.ready poro.video.failed; do
+          rpk topic describe "$$t" >/dev/null 2>&1 || rpk topic create "$$t" -p 3 -r 1 -c retention.ms=604800000
+          rpk topic describe "$$t.dlq" >/dev/null 2>&1 || rpk topic create "$$t.dlq" -p 1 -r 1 -c retention.ms=2592000000
+        done
+        rpk topic list
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    networks:
+      - poro-network
+    restart: "no"
 
   # ─────────────────────────────────────────────
   # ANALYTICS (prêt, utilisé plus tard)
@@ -118,8 +195,8 @@ services:
       CLICKHOUSE_PASSWORD: poro_dev_password
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
-      - "8123:8123"   # HTTP
-      - "9440:9000"   # TCP (native)
+      - "127.0.0.1:8123:8123"   # HTTP
+      - "127.0.0.1:9440:9000"   # TCP (native)
     volumes:
       - poro_clickhouse_data:/var/lib/clickhouse
     ulimits:
@@ -139,8 +216,8 @@ services:
     container_name: poro-qdrant
     profiles: ["analytics"]
     ports:
-      - "6333:6333"   # HTTP
-      - "6334:6334"   # gRPC
+      - "127.0.0.1:6333:6333"   # HTTP
+      - "127.0.0.1:6334:6334"   # gRPC
     volumes:
       - poro_qdrant_data:/qdrant/storage
     networks:
@@ -153,8 +230,8 @@ services:
 
   auth:
     build:
-      context: ./services/auth
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/auth/Dockerfile
     container_name: poro-auth
     environment:
       APP_ENV: dev
@@ -193,15 +270,225 @@ services:
       AFRICASTALKING_USERNAME: ${AFRICASTALKING_USERNAME:-}
       AFRICASTALKING_API_KEY: ${AFRICASTALKING_API_KEY:-}
       AFRICASTALKING_SENDER_ID: ${AFRICASTALKING_SENDER_ID:-}
+
+      KAFKA_BROKERS: redpanda:29092
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     volumes:
       - ./services/auth/keys:/app/keys:ro
     depends_on:
-      postgres:
+      postgres-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # RELAIS OUTBOX → KAFKA (un par base de service)
+  # ─────────────────────────────────────────────
+
+  outbox-relay-auth:
+    build:
+      context: .
+      dockerfile: services/outbox-relay/Dockerfile
+    container_name: poro-outbox-relay-auth
+    environment: &relay-env
+      APP_ENV: dev
+      LOG_LEVEL: info
+      RELAY_SOURCE: auth
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: poro
+      POSTGRES_PASSWORD: poro_dev_password
+      POSTGRES_DB: poro_auth
+      POSTGRES_SSLMODE: disable
+      KAFKA_BROKERS: redpanda:29092
+    depends_on:
+      auth:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  outbox-relay-user:
+    build:
+      context: .
+      dockerfile: services/outbox-relay/Dockerfile
+    container_name: poro-outbox-relay-user
+    environment:
+      <<: *relay-env
+      RELAY_SOURCE: user
+      POSTGRES_DB: poro_user
+    depends_on:
+      user-migrate:
+        condition: service_completed_successfully
+      redpanda-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # SERVICE USER (profils, usernames, avatars, créateurs)
+  # ─────────────────────────────────────────────
+
+  user-migrate:
+    build:
+      context: ./services/user
+      target: migrate
+    container_name: poro-user-migrate
+    environment:
+      DATABASE_URL: postgresql://poro:poro_dev_password@postgres:5432/poro_user?sslmode=disable
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: "no"
+
+  user:
+    build:
+      context: ./services/user
+      target: runtime
+    container_name: poro-user
+    environment:
+      APP_ENV: dev
+      PORT: "8082"
+      LOG_LEVEL: debug
+      DATABASE_URL: postgresql://poro:poro_dev_password@postgres:5432/poro_user?sslmode=disable
+      REDIS_URL: redis://redis:6379/1
+      JWKS_URL: http://auth:8081/.well-known/jwks.json
+      KAFKA_BROKERS: redpanda:29092
+      # Le service parle à SeaweedFS en interne ; les URLs signées pointent
+      # vers l'adresse joignable par le client (poste de dev).
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_BUCKET: poro-avatars
+      S3_ACCESS_KEY_ID: poro_dev
+      S3_SECRET_ACCESS_KEY: poro_dev_secret
+      CORS_ORIGINS: ${USER_CORS_ORIGINS:-}
+    ports:
+      - "127.0.0.1:8082:8082"
+    depends_on:
+      user-migrate:
+        condition: service_completed_successfully
+      auth:
         condition: service_healthy
       redis:
         condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+      seaweedfs-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  outbox-relay-video:
+    build:
+      context: .
+      dockerfile: services/outbox-relay/Dockerfile
+    container_name: poro-outbox-relay-video
+    environment:
+      <<: *relay-env
+      RELAY_SOURCE: video
+      POSTGRES_DB: poro_video
+    depends_on:
+      video:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # SERVICE VIDEO (upload multipart, métadonnées)
+  # ─────────────────────────────────────────────
+
+  video:
+    build:
+      context: .
+      dockerfile: services/video/Dockerfile
+    container_name: poro-video
+    environment:
+      APP_ENV: dev
+      APP_PORT: "8083"
+      LOG_LEVEL: debug
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: poro
+      POSTGRES_PASSWORD: poro_dev_password
+      POSTGRES_DB: poro_video
+      POSTGRES_SSLMODE: disable
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "2"
+      JWKS_URL: http://auth:8081/.well-known/jwks.json
+      KAFKA_BROKERS: redpanda:29092
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_REGION: us-east-1
+      S3_BUCKET: poro-videos
+      S3_ACCESS_KEY_ID: poro_dev
+      S3_SECRET_ACCESS_KEY: poro_dev_secret
+      S3_FORCE_PATH_STYLE: "true"
+    ports:
+      - "127.0.0.1:8083:8083"
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+      auth:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+      seaweedfs-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  media-worker:
+    build:
+      context: .
+      dockerfile: services/video/Dockerfile.worker
+    container_name: poro-media-worker
+    environment:
+      APP_ENV: dev
+      LOG_LEVEL: debug
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: poro
+      POSTGRES_PASSWORD: poro_dev_password
+      POSTGRES_DB: poro_video
+      POSTGRES_SSLMODE: disable
+      JWKS_URL: http://auth:8081/.well-known/jwks.json
+      KAFKA_BROKERS: redpanda:29092
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_REGION: us-east-1
+      S3_BUCKET: poro-videos
+      S3_ACCESS_KEY_ID: poro_dev
+      S3_SECRET_ACCESS_KEY: poro_dev_secret
+      S3_FORCE_PATH_STYLE: "true"
+      FFMPEG_BIN: ffmpeg
+      FFPROBE_BIN: ffprobe
+    depends_on:
+      video:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+      seaweedfs-init:
+        condition: service_completed_successfully
     networks:
       - poro-network
     restart: unless-stopped

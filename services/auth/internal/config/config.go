@@ -72,6 +72,10 @@ type Config struct {
 	AfricasTalkingUsername string // "sandbox" selects the sandbox
 	AfricasTalkingAPIKey   string
 	AfricasTalkingSenderID string // optional registered alphanumeric sender
+
+	// Events and telemetry
+	KafkaBrokers []string // localhost:9092
+	OtelEndpoint string   // OTLP HTTP endpoint; empty disables trace export
 }
 
 // PostgresDSN returns a URL-encoded connection string. The password is escaped.
@@ -118,6 +122,9 @@ func (c *Config) Validate() error {
 		}
 	default:
 		errs = append(errs, fmt.Errorf("SMS_PROVIDER %q is not supported", c.SMSProvider))
+	}
+	if len(c.KafkaBrokers) == 0 {
+		errs = append(errs, errors.New("KAFKA_BROKERS is required"))
 	}
 	for _, code := range c.OtpAllowedCallingCodes {
 		if !callingCodePattern.MatchString(code) {
@@ -196,6 +203,9 @@ func Load() (*Config, error) {
 		AfricasTalkingUsername: v.GetString("AFRICASTALKING_USERNAME"),
 		AfricasTalkingAPIKey:   v.GetString("AFRICASTALKING_API_KEY"),
 		AfricasTalkingSenderID: v.GetString("AFRICASTALKING_SENDER_ID"),
+
+		KafkaBrokers: splitList(v.GetString("KAFKA_BROKERS")),
+		OtelEndpoint: v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -239,6 +249,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("AFRICASTALKING_USERNAME", "")
 	v.SetDefault("AFRICASTALKING_API_KEY", "")
 	v.SetDefault("AFRICASTALKING_SENDER_ID", "")
+
+	v.SetDefault("KAFKA_BROKERS", "localhost:9092")
+	v.SetDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 }
 
 func splitList(raw string) []string {

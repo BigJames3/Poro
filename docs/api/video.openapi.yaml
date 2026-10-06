@@ -1,0 +1,298 @@
+openapi: 3.1.0
+info:
+  title: PORO Video API
+  version: 1.0.0
+  description: |
+    Short-video upload (S3 multipart), metadata and HLS playback URLs.
+    Transcoding is asynchronous: complete returns `processing`; the media-worker
+    publishes `poro.video.ready` (or `poro.video.failed`) via the outbox.
+    Every JSON response uses `{data, error, meta}`; clients branch on `error.code`.
+    Access tokens are verified offline against auth JWKS. A token revoked by
+    logout stays accepted here until it expires (15 minutes at most).
+    Any authenticated PERSONAL account may upload; CREATOR is not required.
+servers:
+  - url: http://localhost:8083
+    description: Local development
+tags:
+  - name: videos
+  - name: platform
+security:
+  - bearerAuth: []
+paths:
+  /health/live:
+    get:
+      tags: [platform]
+      security: []
+      summary: Liveness
+      responses:
+        "200":
+          description: Process up
+  /health/ready:
+    get:
+      tags: [platform]
+      security: []
+      summary: Readiness (Postgres)
+      responses:
+        "200": { description: Ready }
+        "503": { description: Postgres down }
+  /api/v1/videos/uploads:
+    post:
+      tags: [videos]
+      summary: Init multipart upload
+      description: |
+        Creates a video in `uploading` and returns presigned PUT URLs for each
+        part (8 MiB). Max declared size 256 MiB. Title 1–100 runes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title, content_type, size_bytes]
+              properties:
+                title: { type: string, maxLength: 200, example: "Match du dimanche" }
+                description: { type: string, maxLength: 1000 }
+                filename: { type: string }
+                content_type:
+                  type: string
+                  enum: [video/mp4, video/quicktime, video/webm]
+                size_bytes: { type: integer, minimum: 1, maximum: 268435456 }
+      responses:
+        "201":
+          description: Upload session
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/InitUpload" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413":
+          description: "`payload_too_large`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: "`title_invalid`, `description_invalid`, `content_type_invalid` or `size_invalid`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/videos/uploads/{id}/complete:
+    post:
+      tags: [videos]
+      summary: Complete multipart upload
+      description: |
+        Assembles parts, checks magic bytes, sets `processing` and enqueues
+        `poro.video.uploaded` in the same transaction.
+      parameters:
+        - $ref: "#/components/parameters/VideoID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [parts]
+              properties:
+                parts:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [part_number, etag]
+                    properties:
+                      part_number: { type: integer, minimum: 1 }
+                      etag: { type: string }
+      responses:
+        "200":
+          description: Video is processing
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Video" }
+        "400":
+          description: "`upload_incomplete` or `invalid_request`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`conflict` (not uploading)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "413":
+          description: "`payload_too_large`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: "`invalid_media`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /api/v1/videos/uploads/{id}:
+    delete:
+      tags: [videos]
+      summary: Abort an in-progress upload
+      parameters:
+        - $ref: "#/components/parameters/VideoID"
+      responses:
+        "204": { description: Aborted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "`conflict`" }
+  /api/v1/videos:
+    get:
+      tags: [videos]
+      summary: List own videos
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: Page
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/VideoList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/videos/{id}:
+    get:
+      tags: [videos]
+      security: []
+      summary: Get a video
+      description: Ready videos are public. Other statuses are owner-only (404 otherwise).
+      parameters:
+        - $ref: "#/components/parameters/VideoID"
+      responses:
+        "200":
+          description: Video
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Video" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [videos]
+      summary: Soft-delete own video
+      parameters:
+        - $ref: "#/components/parameters/VideoID"
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    VideoID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    Envelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: {}
+        error:
+          type: ["object", "null"]
+        meta:
+          type: object
+          properties:
+            request_id: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: { type: "null" }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string }
+    InitUpload:
+      type: object
+      required: [video_id, upload_id, key, part_size, parts]
+      properties:
+        video_id: { type: string, format: uuid }
+        upload_id: { type: string }
+        key: { type: string }
+        part_size: { type: integer, example: 8388608 }
+        parts:
+          type: array
+          items:
+            type: object
+            required: [part_number, url]
+            properties:
+              part_number: { type: integer }
+              url: { type: string, format: uri }
+    Video:
+      type: object
+      required: [id, user_id, title, description, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        status:
+          type: string
+          enum: [uploading, processing, ready, failed]
+        duration_ms: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+        hls_url: { type: string, format: uri }
+        thumbnail_url: { type: string, format: uri }
+        renditions:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string, example: "360p" }
+              bandwidth: { type: integer }
+              width: { type: integer }
+              height: { type: integer }
+        created_at: { type: string, format: date-time }
+    VideoList:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Video" }
+        next_cursor: { type: ["string", "null"] }
+  responses:
+    InvalidRequest:
+      description: "`invalid_request`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Unauthorized:
+      description: "`unauthorized`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    NotFound:
+      description: "`not_found`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    RateLimited:
+      description: "`rate_limited`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }

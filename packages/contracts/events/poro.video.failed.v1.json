@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.video.failed.v1.json",
+  "title": "poro.video.failed v1",
+  "description": "Published by the media-worker when transcode cannot produce playable HLS. Code is public; stderr is never included.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "version", "source", "subject", "occurred_at", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "const": "poro.video.failed" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "format": "uuid", "description": "video id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["video_id", "user_id", "code", "failed_at"],
+      "properties": {
+        "video_id": { "type": "string", "format": "uuid" },
+        "user_id": { "type": "string", "format": "uuid" },
+        "code": { "type": "string", "enum": ["too_long", "invalid_media", "transcode_failed"] },
+        "failed_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

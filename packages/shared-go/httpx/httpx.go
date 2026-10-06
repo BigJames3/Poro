@@ -1,4 +1,6 @@
-package middleware
+// Package httpx holds the HTTP conventions shared by every Poro Go service:
+// the {data, error, meta} envelope, stable error codes, request IDs and access logs.
+package httpx
 
 import (
 	"errors"
@@ -7,6 +9,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -50,6 +53,15 @@ func (e *APIError) WithCause(err error) *APIError {
 	return &cp
 }
 
+// WriteData renders a success envelope.
+func WriteData(c *fiber.Ctx, status int, data any) error {
+	return c.Status(status).JSON(fiber.Map{
+		"data":  data,
+		"error": nil,
+		"meta":  fiber.Map{"request_id": RequestIDFrom(c)},
+	})
+}
+
 // RequestID reuses a well-formed incoming X-Request-ID or generates a UUIDv7,
 // and echoes it on the response.
 func RequestID() fiber.Handler {
@@ -89,10 +101,13 @@ func AccessLog(log *zap.Logger) fiber.Handler {
 			zap.Duration("latency", time.Since(start)),
 			zap.String("ip", c.IP()),
 		}
+		if sc := trace.SpanContextFromContext(c.UserContext()); sc.IsValid() {
+			fields = append(fields, zap.String("trace_id", sc.TraceID().String()))
+		}
 		switch {
 		case status >= fiber.StatusInternalServerError:
 			log.Error("http request", fields...)
-		case strings.HasPrefix(c.Path(), "/health"):
+		case isProbe(c.Path()):
 			log.Debug("http request", fields...)
 		default:
 			log.Info("http request", fields...)
@@ -156,6 +171,10 @@ func codeForStatus(status int) string {
 		}
 		return "error"
 	}
+}
+
+func isProbe(path string) bool {
+	return strings.HasPrefix(path, "/health") || path == "/metrics"
 }
 
 func validRequestID(id string) bool {

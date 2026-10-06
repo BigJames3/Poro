@@ -1,0 +1,14 @@
+.git
+.github
+.cursor
+apps
+docs
+**/node_modules
+**/dist
+**/coverage
+**/bin
+**/*.out
+**/.env
+**/.env.*
+!**/.env.example
+**/keys/*.pem
