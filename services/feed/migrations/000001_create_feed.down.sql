@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS processed_events;
+DROP TABLE IF EXISTS authors;
+DROP TABLE IF EXISTS video_stats;
+DROP TABLE IF EXISTS author_followers;
+DROP TABLE IF EXISTS follows;
+DROP TABLE IF EXISTS videos;
