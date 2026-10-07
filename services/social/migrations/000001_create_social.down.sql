@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS processed_events;
+DROP TABLE IF EXISTS outbox_events;
+DROP TABLE IF EXISTS user_counters;
+DROP TABLE IF EXISTS video_counters;
+DROP TABLE IF EXISTS shares;
+DROP TABLE IF EXISTS follows;
+DROP TABLE IF EXISTS comment_likes;
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS likes;
+DROP TABLE IF EXISTS users_projection;
+DROP TABLE IF EXISTS videos_projection;

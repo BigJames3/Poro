@@ -10,6 +10,7 @@ il est mis à jour à chaque jalon P0.
 | `services/auth` (Go 1.26, Fiber v2, pgx v5, Redis) | Identité, JWT RS256, OTP, outbox `poro.auth.user.created`, consommateur CREATOR. |
 | `services/user` (NestJS 11, Prisma 7, port 8082) | Profils, username, avatars présignés, activation créateur. |
 | `services/video` (Go 1.26, Fiber, port 8083) + `media-worker` | Upload multipart, HLS 360p/720p, `poro.video.ready`. |
+| `services/social` (Go 1.26, Fiber, port 8085) | Likes, commentaires (1 niveau de réponse), abonnements, partages ; compteurs transactionnels ; outbox `poro.social.*` ; projections vidéos/comptes. |
 | `packages/shared-go` | HTTP envelope, JWKS, health, Prometheus, OTel, outbox/inbox, Kafka. |
 | `services/outbox-relay` | Relais SQL → Redpanda (un processus par base). |
 | Autres services (`feed`, `social`, `shop`, …) | Aucun code. Seulement listés dans `.cursor/rules/project.md`. |

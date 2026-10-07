@@ -11,6 +11,14 @@ const (
 	TypeVideoReady           = "poro.video.ready"
 	TypeVideoFailed          = "poro.video.failed"
 	TypeVideoDeleted         = "poro.video.deleted"
+
+	TypeSocialLikeCreated    = "poro.social.like.created"
+	TypeSocialLikeDeleted    = "poro.social.like.deleted"
+	TypeSocialCommentCreated = "poro.social.comment.created"
+	TypeSocialCommentDeleted = "poro.social.comment.deleted"
+	TypeSocialFollowCreated  = "poro.social.follow.created"
+	TypeSocialFollowDeleted  = "poro.social.follow.deleted"
+	TypeSocialShareCreated   = "poro.social.share.created"
 )
 
 // AuthUserCreatedV1 is published by auth when an account is created.
@@ -101,4 +109,74 @@ type VideoDeletedV1 struct {
 	VideoID   string    `json:"video_id"`
 	UserID    string    `json:"user_id"`
 	DeletedAt time.Time `json:"deleted_at"`
+}
+
+// Share channels accepted on SocialShareCreatedV1.
+const (
+	ShareChannelWhatsApp = "whatsapp"
+	ShareChannelCopyLink = "copy_link"
+	ShareChannelOther    = "other"
+)
+
+// SocialLikeCreatedV1 is published by social when a user starts liking a video.
+type SocialLikeCreatedV1 struct {
+	LikeID       string    `json:"like_id"`
+	UserID       string    `json:"user_id"`
+	VideoID      string    `json:"video_id"`
+	VideoOwnerID string    `json:"video_owner_id"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// SocialLikeDeletedV1 is published by social when a user removes a like.
+type SocialLikeDeletedV1 struct {
+	UserID       string    `json:"user_id"`
+	VideoID      string    `json:"video_id"`
+	VideoOwnerID string    `json:"video_owner_id"`
+	DeletedAt    time.Time `json:"deleted_at"`
+}
+
+// SocialCommentCreatedV1 is published by social for a comment or a reply.
+// ParentID and ParentAuthorID are nil for a top-level comment.
+type SocialCommentCreatedV1 struct {
+	CommentID      string    `json:"comment_id"`
+	UserID         string    `json:"user_id"`
+	VideoID        string    `json:"video_id"`
+	VideoOwnerID   string    `json:"video_owner_id"`
+	ParentID       *string   `json:"parent_id"`
+	ParentAuthorID *string   `json:"parent_author_id"`
+	Excerpt        string    `json:"excerpt"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// SocialCommentDeletedV1 is published by social when a comment is soft-deleted.
+// UserID is the comment author, whoever deleted it.
+type SocialCommentDeletedV1 struct {
+	CommentID string    `json:"comment_id"`
+	VideoID   string    `json:"video_id"`
+	UserID    string    `json:"user_id"`
+	DeletedAt time.Time `json:"deleted_at"`
+}
+
+// SocialFollowCreatedV1 is published by social when a user follows another.
+type SocialFollowCreatedV1 struct {
+	FollowerID  string    `json:"follower_id"`
+	FollowingID string    `json:"following_id"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// SocialFollowDeletedV1 is published by social when a user unfollows another.
+type SocialFollowDeletedV1 struct {
+	FollowerID  string    `json:"follower_id"`
+	FollowingID string    `json:"following_id"`
+	DeletedAt   time.Time `json:"deleted_at"`
+}
+
+// SocialShareCreatedV1 is published by social each time a video is shared.
+type SocialShareCreatedV1 struct {
+	ShareID      string    `json:"share_id"`
+	UserID       string    `json:"user_id"`
+	VideoID      string    `json:"video_id"`
+	VideoOwnerID string    `json:"video_owner_id"`
+	Channel      string    `json:"channel"`
+	CreatedAt    time.Time `json:"created_at"`
 }
