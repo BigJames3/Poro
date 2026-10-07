@@ -1,6 +1,6 @@
 # ADR-0003 — Frontières des services déployables
 
-- Statut : accepté (révisable quand la charge ou l'équipe l'exigeront)
+- Statut : **remplacé** par [ADR-0008](0008-services-separes.md) le 2026-10-07
 - Date : 2026-09-29
 
 ## Contexte
