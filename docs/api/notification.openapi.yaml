@@ -1,0 +1,378 @@
+openapi: 3.1.0
+info:
+  title: PORO Notification API
+  version: 1.0.0
+  description: |
+    In-app notifications, FCM device registration and notification preferences.
+    Notifications are written from social, video and user events; this API only
+    reads them, marks them read and manages devices and preferences.
+    Every JSON response uses the envelope `{data, error, meta}`; `meta.request_id`
+    echoes the `X-Request-ID` header. Clients must branch on `error.code`, never on `error.message`.
+    Access tokens are verified offline against `GET http://auth:8081/.well-known/jwks.json`.
+    Rate limits are per account: 120 requests per minute, 10 per minute on `PUT /devices`.
+servers:
+  - url: http://localhost:8086
+    description: Local development
+tags:
+  - name: notifications
+  - name: devices
+  - name: preferences
+  - name: platform
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/notifications:
+    get:
+      tags: [notifications]
+      summary: Own notifications, newest activity first
+      description: |
+        A like group that gains an actor moves to the top. Marking read never reorders.
+        A notification that moves while a client pages may be repeated or skipped once.
+      parameters:
+        - name: cursor
+          in: query
+          description: Opaque `next_cursor` of the previous page; omit for page 1.
+          schema: { type: string, maxLength: 200 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: One page
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items, next_cursor]
+                        properties:
+                          items: { type: array, items: { $ref: "#/components/schemas/Notification" } }
+                          next_cursor: { type: ["string", "null"] }
+        "400":
+          description: "`invalid_cursor` or `invalid_request`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/v1/notifications/unread-count:
+    get:
+      tags: [notifications]
+      summary: Number of unread notifications
+      responses:
+        "200":
+          description: Count
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [count]
+                        properties:
+                          count: { type: integer, minimum: 0 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/v1/notifications/{id}/read:
+    patch:
+      tags: [notifications]
+      summary: Mark one notification read
+      description: Idempotent; reading twice keeps the first `read_at`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Read
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [id, read_at]
+                        properties:
+                          id: { type: string, format: uuid }
+                          read_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: "`notification_not_found`: unknown, malformed, or another account's id"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/v1/notifications/read-all:
+    post:
+      tags: [notifications]
+      summary: Mark every notification read
+      responses:
+        "200":
+          description: Number of notifications marked read
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [updated]
+                        properties:
+                          updated: { type: integer, minimum: 0 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/v1/notifications/devices:
+    put:
+      tags: [devices]
+      summary: Register or refresh an FCM token
+      description: |
+        A token registered by another account moves to this one (the device changed hands).
+        An account keeps its 10 most recently registered devices.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, platform]
+              properties:
+                token: { type: string, pattern: "^[A-Za-z0-9:_-]{20,512}$" }
+                platform: { type: string, enum: [android, ios, web] }
+      responses:
+        "200":
+          description: Registered device
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Device" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/v1/notifications/devices/{token}:
+    delete:
+      tags: [devices]
+      summary: Unregister an FCM token (on logout)
+      description: Idempotent; answers 204 for unknown tokens and tokens of other accounts.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Removed or absent }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/v1/notifications/preferences:
+    get:
+      tags: [preferences]
+      summary: Own preferences (all true by default)
+      responses:
+        "200":
+          description: Preferences
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Preferences" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+    patch:
+      tags: [preferences]
+      summary: Change preferences
+      description: |
+        Omitted fields are unchanged. A disabled type creates neither the in-app notification
+        nor the push; `push_enabled: false` keeps in-app notifications. Replies follow `comments`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                push_enabled: { type: boolean }
+                likes: { type: boolean }
+                comments: { type: boolean }
+                follows: { type: boolean }
+                video_ready: { type: boolean }
+      responses:
+        "200":
+          description: Preferences after the change
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Preferences" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/v1/health:
+    get:
+      tags: [platform]
+      summary: Readiness (Postgres, Redis); same as /health/ready
+      security: []
+      responses:
+        "200": { description: Ready }
+        "503": { description: Degraded }
+  /health/live:
+    get:
+      tags: [platform]
+      summary: Liveness; checks nothing
+      security: []
+      responses:
+        "200": { description: Alive }
+  /health/ready:
+    get:
+      tags: [platform]
+      summary: Readiness (Postgres, Redis)
+      security: []
+      responses:
+        "200": { description: Ready }
+        "503": { description: Degraded }
+  /metrics:
+    get:
+      tags: [platform]
+      summary: Prometheus metrics; never exposed by the public gateway
+      security: []
+      responses:
+        "200": { description: Prometheus text format }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Envelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: {}
+        error: { type: "null" }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: { type: "null" }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_json
+                - invalid_request
+                - invalid_cursor
+                - unauthorized
+                - not_found
+                - notification_not_found
+                - method_not_allowed
+                - payload_too_large
+                - unsupported_media_type
+                - rate_limited
+                - unavailable
+                - internal_error
+            message: { type: string }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string }
+    Notification:
+      type: object
+      required:
+        [id, type, title, body, data, actor, actor_count, entity_type, entity_id, read, read_at, created_at, last_activity_at]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [like, comment, reply, follow, video_ready] }
+        title: { type: string, example: "Nouveaux j’aime" }
+        body: { type: string, example: "Awa et 12 autres personnes ont aimé ta vidéo" }
+        data:
+          type: object
+          description: Navigation target; also sent as the FCM data payload with `notification_id` and `type`.
+          properties:
+            video_id: { type: string, format: uuid }
+            comment_id: { type: string, format: uuid }
+            parent_id: { type: string, format: uuid }
+            user_id: { type: string, format: uuid }
+          additionalProperties: { type: string }
+        actor:
+          description: Newest actor, with current profile fields; null for video_ready.
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [id, username, display_name, avatar_url]
+              properties:
+                id: { type: string, format: uuid }
+                username: { type: ["string", "null"] }
+                display_name: { type: ["string", "null"] }
+                avatar_url: { type: ["string", "null"], format: uri }
+        actor_count: { type: integer, minimum: 1, description: Distinct actors of a like group; 1 otherwise. }
+        entity_type: { type: string, enum: [video, comment, user] }
+        entity_id: { type: string, format: uuid }
+        read: { type: boolean }
+        read_at: { type: ["string", "null"], format: date-time }
+        created_at: { type: string, format: date-time }
+        last_activity_at: { type: string, format: date-time }
+    Device:
+      type: object
+      required: [token, platform, created_at, updated_at]
+      properties:
+        token: { type: string }
+        platform: { type: string, enum: [android, ios, web] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Preferences:
+      type: object
+      required: [push_enabled, likes, comments, follows, video_ready]
+      properties:
+        push_enabled: { type: boolean }
+        likes: { type: boolean }
+        comments: { type: boolean }
+        follows: { type: boolean }
+        video_ready: { type: boolean }
+  responses:
+    InvalidRequest:
+      description: "`invalid_json` or `invalid_request`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Unauthorized:
+      description: "`unauthorized`: missing, expired or forged access token"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    RateLimited:
+      description: "`rate_limited`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Unavailable:
+      description: "`unavailable`: JWKS unreachable"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }

@@ -69,7 +69,7 @@ services:
     command:
       - |
         set -eu
-        for db in poro_auth poro_user poro_video poro_social poro_feed; do
+        for db in poro_auth poro_user poro_video poro_social poro_feed poro_notification; do
           if [ "$$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$$db'")" != "1" ]; then
             psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE $$db OWNER poro"
           fi
@@ -589,6 +589,55 @@ services:
         condition: service_completed_successfully
       auth:
         condition: service_healthy
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # SERVICE NOTIFICATION (in-app, push FCM, préférences)
+  # ─────────────────────────────────────────────
+
+  notification-migrate:
+    build:
+      context: ./services/notification
+      target: migrate
+    container_name: poro-notification-migrate
+    environment:
+      DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_notification?sslmode=disable
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: "no"
+
+  notification:
+    build:
+      context: ./services/notification
+      target: runtime
+    container_name: poro-notification
+    environment:
+      APP_ENV: dev
+      PORT: "8086"
+      LOG_LEVEL: debug
+      DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_notification?sslmode=disable
+      REDIS_URL: redis://redis:6379/5
+      JWKS_URL: http://auth:8081/.well-known/jwks.json
+      KAFKA_BROKERS: redpanda:29092
+      # Compte de service Firebase en base64 ; vide = push désactivé, in-app seul.
+      FCM_CREDENTIALS_B64: ${FCM_CREDENTIALS_B64:-}
+      CORS_ORIGINS: ${NOTIFICATION_CORS_ORIGINS:-}
+    ports:
+      - "127.0.0.1:8086:8086"
+    depends_on:
+      notification-migrate:
+        condition: service_completed_successfully
+      auth:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
     networks:
       - poro-network
     restart: unless-stopped

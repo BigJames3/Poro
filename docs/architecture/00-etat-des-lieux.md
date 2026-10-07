@@ -12,9 +12,10 @@ il est mis à jour à chaque jalon P0.
 | `services/video` (Go 1.26, Fiber, port 8083) + `media-worker` | Upload multipart, HLS 360p/720p, `poro.video.ready`. |
 | `services/feed` (Go 1.26, Fiber, port 8084) | Flux abonnements (fan-out à la lecture), tendances (72 h, ticker 5 min), For You (sessions Redis de 200 vidéos) ; projections vidéos, abonnements, compteurs, profils. |
 | `services/social` (Go 1.26, Fiber, port 8085) | Likes, commentaires (1 niveau de réponse), abonnements, partages ; compteurs transactionnels ; outbox `poro.social.*` ; projections vidéos/comptes. |
+| `services/notification` (NestJS 11, Prisma 7, port 8086) | Notifications in-app (likes regroupés par vidéo et par heure, commentaires, réponses, abonnements, vidéo en ligne), push FCM après commit, préférences par type, purge à 90 jours. |
 | `packages/shared-go` | HTTP envelope, JWKS, health, Prometheus, OTel, outbox/inbox, Kafka. |
 | `services/outbox-relay` | Relais SQL → Redpanda (un processus par base). |
-| Autres services (`feed`, `social`, `shop`, …) | Aucun code. Seulement listés dans `.cursor/rules/project.md`. |
+| Autres services (`moderation`, `search`, `chat`, `shop`, …) | Aucun code. Seulement listés dans `.cursor/rules/project.md`. |
 | `packages/`, `infra/`, `data/`, `docs/` | Vides avant ce jalon. |
 | `apps/mobile-android` | Projet Android Studio (36 fichiers suivis), ne consomme encore aucune API. Non modifié. |
 | `docker-compose.yml` | Postgres 16 (`poro_auth`, `poro_user`, `poro_video`), Redis 7, SeaweedFS (avatars + videos), Redpanda, auth, user, video, media-worker, relais outbox. |
@@ -103,9 +104,9 @@ reste acceptable hors auth jusqu'à 15 min ([ADR-0005](adr/0005-evenements-json-
 | P0-3 | Backbone d'événements : table outbox + relais vers Redpanda, schémas versionnés, table d'idempotence consommateur, DLQ ; premier événement `poro.auth.user.created` | **Fait** — [ADR-0005](adr/0005-evenements-json-outbox.md) |
 | P0-4 | Service user : profil, username unique, avatar (upload présigné), attribution du rôle CREATOR | **Fait** — [ADR-0006](adr/0006-service-user.md) |
 | P0-5 | Pipeline vidéo : init upload → multipart présigné → complete → événement → FFmpeg HLS multi-résolutions → miniatures → `poro.video.ready` | **Fait** — [ADR-0007](adr/0007-pipeline-video.md) |
-| P0-6 | Social : follow, like, commentaire, partage, compteurs | À faire |
-| P0-7 | Feed : following, chronologique, trending, For You à règles ; pagination par curseur ; cache Redis | À faire |
-| P0-8 | Notifications push FCM | À faire |
+| P0-6 | Social : follow, like, commentaire, partage, compteurs | **Fait** — [ADR-0008](adr/0008-services-separes.md) |
+| P0-7 | Feed : following, chronologique, trending, For You à règles ; pagination par curseur ; cache Redis | **Fait** — [ADR-0009](adr/0009-feed-v1.md) |
+| P0-8 | Notifications push FCM | **Fait** — in-app + FCM ; [runbook](../runbooks/notification.md) |
 | P0-9 | Modération de base : signalement, filtre texte, actions ADMIN/MODERATOR | À faire |
 | P0-10 | Fournisseur SMS réel (Africa's Talking), liste des pays autorisés, anti-SMS pumping | **Fait** — [ADR-0004](adr/0004-decisions-produit-lancement.md) ; reste : compte, Sender ID, tarifs |
 | P0-11 | CI : golangci-lint, gosec, Trivy (actions épinglées par SHA), Dependabot | À faire |
