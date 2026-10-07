@@ -9,6 +9,8 @@
 #                 9001 : 9333   (Master UI)
 # - Redpanda    : 9092 : 9092   (Kafka, listener "external" ; les
 #                               conteneurs utilisent redpanda:29092)
+#                 19644 : 9644  (Admin API ; 9644 tombe dans une plage
+#                               de ports réservée par Windows/Hyper-V)
 # - ClickHouse  : 8123 : 8123   (HTTP)
 #                 9440 : 9000   (TCP, évite conflit avec SeaweedFS)
 # - Qdrant      : 6333 : 6333   (HTTP)
@@ -159,7 +161,7 @@ services:
       - --advertise-kafka-addr=internal://redpanda:29092,external://localhost:9092
     ports:
       - "127.0.0.1:9092:9092"   # Kafka API
-      - "127.0.0.1:9644:9644"   # Admin API
+      - "127.0.0.1:19644:9644"  # Admin API (9644 réservé par Windows)
       - "127.0.0.1:8080:8080"   # HTTP Proxy
     volumes:
       - poro_redpanda_data:/var/lib/redpanda/data
