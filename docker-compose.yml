@@ -240,6 +240,18 @@ services:
       - "127.0.0.1:6334:6334"   # gRPC
     volumes:
       - poro_qdrant_data:/qdrant/storage
+    # L'image n'a ni curl, ni wget, ni bash : perl (Debian) interroge /readyz.
+    healthcheck:
+      test:
+        - CMD
+        - perl
+        - -MIO::Socket::INET
+        - -e
+        - '$$s = IO::Socket::INET->new(PeerAddr => "127.0.0.1:6333", Timeout => 3) or exit 1; print $$s "GET /readyz HTTP/1.0\r\n\r\n"; exit((<$$s> // "") =~ m{^HTTP/\S+ 200} ? 0 : 1)'
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
     networks:
       - poro-network
     restart: unless-stopped
