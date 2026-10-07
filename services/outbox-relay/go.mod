@@ -2,6 +2,8 @@ module github.com/poro/outbox-relay
 
 go 1.26.0
 
+toolchain go1.26.8
+
 require (
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/jackc/pgx/v5 v5.11.0

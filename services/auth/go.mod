@@ -2,6 +2,8 @@ module github.com/poro/auth
 
 go 1.26.0
 
+toolchain go1.26.8
+
 require (
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/alicebob/miniredis/v2 v2.35.0
