@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.social.like.created.v1.json",
+  "title": "poro.social.like.created v1",
+  "description": "Published by social when a user starts liking a ready video. Never published twice for the same like.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "version",
+    "source",
+    "subject",
+    "occurred_at",
+    "data"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "const": "poro.social.like.created"
+    },
+    "version": {
+      "const": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subject": {
+      "type": "string",
+      "format": "uuid",
+      "description": "video id"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "like_id",
+        "user_id",
+        "video_id",
+        "video_owner_id",
+        "created_at"
+      ],
+      "properties": {
+        "like_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "video_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "video_owner_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

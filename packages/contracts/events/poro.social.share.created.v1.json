@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.social.share.created.v1.json",
+  "title": "poro.social.share.created v1",
+  "description": "Published by social each time a user shares a ready video.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "version",
+    "source",
+    "subject",
+    "occurred_at",
+    "data"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "const": "poro.social.share.created"
+    },
+    "version": {
+      "const": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subject": {
+      "type": "string",
+      "format": "uuid",
+      "description": "video id"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "share_id",
+        "user_id",
+        "video_id",
+        "video_owner_id",
+        "channel",
+        "created_at"
+      ],
+      "properties": {
+        "share_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "video_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "video_owner_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "channel": {
+          "enum": [
+            "whatsapp",
+            "copy_link",
+            "other"
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

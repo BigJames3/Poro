@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.social.comment.created.v1.json",
+  "title": "poro.social.comment.created v1",
+  "description": "Published by social when a comment or a reply is posted. parent_id and parent_author_id are null for a top-level comment.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "version",
+    "source",
+    "subject",
+    "occurred_at",
+    "data"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "const": "poro.social.comment.created"
+    },
+    "version": {
+      "const": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subject": {
+      "type": "string",
+      "format": "uuid",
+      "description": "video id"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comment_id",
+        "user_id",
+        "video_id",
+        "video_owner_id",
+        "parent_id",
+        "parent_author_id",
+        "excerpt",
+        "created_at"
+      ],
+      "properties": {
+        "comment_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "user_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "video_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "video_owner_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "parent_author_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "excerpt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140,
+          "description": "First 140 characters of the comment."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

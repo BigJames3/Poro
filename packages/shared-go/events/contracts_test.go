@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ func contractSamples() map[string]any {
 	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
 	ci := "CI"
 	username, display, avatar := "awa.kone", "Awa Koné", "https://cdn.poro.test/avatars/a.webp"
+	owner, other, parent := uuid.Must(uuid.NewV7()).String(), uuid.Must(uuid.NewV7()).String(), uuid.Must(uuid.NewV7()).String()
 	return map[string]any{
 		events.TypeAuthUserCreated: events.AuthUserCreatedV1{
 			UserID: user, SignupMethod: "phone", CountryCode: &ci, Language: "fr", CreatedAt: now,
@@ -49,6 +51,28 @@ func contractSamples() map[string]any {
 		},
 		events.TypeVideoDeleted: events.VideoDeletedV1{
 			VideoID: id, UserID: user, DeletedAt: now,
+		},
+		events.TypeSocialLikeCreated: events.SocialLikeCreatedV1{
+			LikeID: other, UserID: user, VideoID: id, VideoOwnerID: owner, CreatedAt: now,
+		},
+		events.TypeSocialLikeDeleted: events.SocialLikeDeletedV1{
+			UserID: user, VideoID: id, VideoOwnerID: owner, DeletedAt: now,
+		},
+		events.TypeSocialCommentCreated: events.SocialCommentCreatedV1{
+			CommentID: other, UserID: user, VideoID: id, VideoOwnerID: owner,
+			ParentID: &parent, ParentAuthorID: &owner, Excerpt: "Trop beau 🔥", CreatedAt: now,
+		},
+		events.TypeSocialCommentDeleted: events.SocialCommentDeletedV1{
+			CommentID: other, VideoID: id, UserID: user, DeletedAt: now,
+		},
+		events.TypeSocialFollowCreated: events.SocialFollowCreatedV1{
+			FollowerID: user, FollowingID: owner, CreatedAt: now,
+		},
+		events.TypeSocialFollowDeleted: events.SocialFollowDeletedV1{
+			FollowerID: user, FollowingID: owner, DeletedAt: now,
+		},
+		events.TypeSocialShareCreated: events.SocialShareCreatedV1{
+			ShareID: other, UserID: user, VideoID: id, VideoOwnerID: owner, Channel: events.ShareChannelWhatsApp, CreatedAt: now,
 		},
 	}
 }
@@ -132,4 +156,44 @@ func TestUserProfileUpdatedAllowsEmptyProfile(t *testing.T) {
 		events.UserProfileUpdatedV1{UserID: user, UpdatedAt: time.Now()}, time.Now())
 	require.NoError(t, err)
 	require.NoError(t, validate(t, schema, env))
+}
+
+func TestSocialContractsRejectBadPayloads(t *testing.T) {
+	samples := contractSamples()
+	topLevel := samples[events.TypeSocialCommentCreated].(events.SocialCommentCreatedV1)
+	topLevel.ParentID, topLevel.ParentAuthorID = nil, nil
+
+	longExcerpt := samples[events.TypeSocialCommentCreated].(events.SocialCommentCreatedV1)
+	longExcerpt.Excerpt = strings.Repeat("a", 141)
+
+	badChannel := samples[events.TypeSocialShareCreated].(events.SocialShareCreatedV1)
+	badChannel.Channel = "telegram"
+
+	notUUID := samples[events.TypeSocialFollowCreated].(events.SocialFollowCreatedV1)
+	notUUID.FollowingID = "awa"
+
+	cases := []struct {
+		name  string
+		typ   string
+		data  any
+		valid bool
+	}{
+		{"top-level comment has null parent", events.TypeSocialCommentCreated, topLevel, true},
+		{"excerpt longer than 140", events.TypeSocialCommentCreated, longExcerpt, false},
+		{"unknown share channel", events.TypeSocialShareCreated, badChannel, false},
+		{"following_id must be a uuid", events.TypeSocialFollowCreated, notUUID, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			schema := compileContract(t, tc.typ)
+			env, err := events.New(tc.typ, 1, "social", uuid.Must(uuid.NewV7()).String(), tc.data, time.Now())
+			require.NoError(t, err)
+			err = validate(t, schema, env)
+			if tc.valid {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
 }
