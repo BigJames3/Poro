@@ -8,6 +8,9 @@ rôles, sessions) reste dans auth.
 - Exploitation : [`docs/runbooks/user.md`](../../docs/runbooks/user.md)
 - Décision : [ADR-0006](../../docs/architecture/adr/0006-service-user.md)
 - Événements : [ADR-0005](../../docs/architecture/adr/0005-evenements-json-outbox.md)
+  - consommé : `poro.auth.user.created` (groupe `poro-user-profiles`)
+  - produits : `poro.user.creator.activated`, `poro.user.profile.updated`
+    (contrats dans [`packages/contracts/events`](../../packages/contracts/events))
 
 ## Prérequis
 

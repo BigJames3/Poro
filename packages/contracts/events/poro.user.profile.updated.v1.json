@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.user.profile.updated.v1.json",
+  "title": "poro.user.profile.updated v1",
+  "description": "Published by the user service, in the transaction of the change, when a public profile field changes. Full snapshot: consumers keep the one with the latest updated_at.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "version", "source", "subject", "occurred_at", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "const": "poro.user.profile.updated" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "format": "uuid", "description": "user id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["user_id", "username", "display_name", "avatar_url", "is_creator", "updated_at"],
+      "properties": {
+        "user_id": { "type": "string", "format": "uuid" },
+        "username": { "type": ["string", "null"], "pattern": "^[a-z0-9._]{3,30}$" },
+        "display_name": { "type": ["string", "null"], "minLength": 1, "maxLength": 50 },
+        "avatar_url": { "type": ["string", "null"], "format": "uri" },
+        "is_creator": { "type": "boolean" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

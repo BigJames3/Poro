@@ -24,12 +24,16 @@ func contractSamples() map[string]any {
 	user := uuid.Must(uuid.NewV7()).String()
 	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
 	ci := "CI"
+	username, display, avatar := "awa.kone", "Awa Koné", "https://cdn.poro.test/avatars/a.webp"
 	return map[string]any{
 		events.TypeAuthUserCreated: events.AuthUserCreatedV1{
 			UserID: user, SignupMethod: "phone", CountryCode: &ci, Language: "fr", CreatedAt: now,
 		},
 		events.TypeUserCreatorActivated: events.UserCreatorActivatedV1{
 			UserID: user, Username: "awa_k", ActivatedAt: now,
+		},
+		events.TypeUserProfileUpdated: events.UserProfileUpdatedV1{
+			UserID: user, Username: &username, DisplayName: &display, AvatarURL: &avatar, IsCreator: true, UpdatedAt: now,
 		},
 		events.TypeVideoUploaded: events.VideoUploadedV1{
 			VideoID: id, UserID: user, SourceKey: "videos/src.mp4", ContentType: "video/mp4", SizeBytes: 1024, UploadedAt: now,
@@ -118,4 +122,14 @@ func TestVideoReadyRejectsBadHashtag(t *testing.T) {
 	env, err := events.New(events.TypeVideoReady, 1, "media-worker", data.VideoID, data, time.Now())
 	require.NoError(t, err)
 	require.Error(t, validate(t, schema, env))
+}
+
+// A profile without a username yet still publishes a valid snapshot.
+func TestUserProfileUpdatedAllowsEmptyProfile(t *testing.T) {
+	schema := compileContract(t, events.TypeUserProfileUpdated)
+	user := uuid.Must(uuid.NewV7()).String()
+	env, err := events.New(events.TypeUserProfileUpdated, 1, "poro-user", user,
+		events.UserProfileUpdatedV1{UserID: user, UpdatedAt: time.Now()}, time.Now())
+	require.NoError(t, err)
+	require.NoError(t, validate(t, schema, env))
 }

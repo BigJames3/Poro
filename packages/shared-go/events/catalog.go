@@ -6,6 +6,7 @@ import "time"
 const (
 	TypeAuthUserCreated      = "poro.auth.user.created"
 	TypeUserCreatorActivated = "poro.user.creator.activated"
+	TypeUserProfileUpdated   = "poro.user.profile.updated"
 	TypeVideoUploaded        = "poro.video.uploaded"
 	TypeVideoReady           = "poro.video.ready"
 	TypeVideoFailed          = "poro.video.failed"
@@ -27,6 +28,17 @@ type UserCreatorActivatedV1 struct {
 	UserID      string    `json:"user_id"`
 	Username    string    `json:"username"`
 	ActivatedAt time.Time `json:"activated_at"`
+}
+
+// UserProfileUpdatedV1 is published by the user service whenever a public
+// profile field changes. It is a full snapshot: keep the latest UpdatedAt.
+type UserProfileUpdatedV1 struct {
+	UserID      string    `json:"user_id"`
+	Username    *string   `json:"username"`
+	DisplayName *string   `json:"display_name"`
+	AvatarURL   *string   `json:"avatar_url"`
+	IsCreator   bool      `json:"is_creator"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // VideoUploadedV1 is published by the video API after a multipart upload completes.

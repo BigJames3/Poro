@@ -35,7 +35,17 @@ second service n'écrive dans la table `user_roles`.
    `INSERT … ON CONFLICT DO NOTHING`. Idempotent. Le rôle arrive au prochain
    refresh, pas sur l'access token déjà émis.
 
-6. **Paiement** : hors de ce service. Rien ici n'est source de vérité financière.
+6. **Profil public diffusé** (ajout du 2026-10-07) : chaque changement d'un
+   champ public (`username`, `display_name`, avatar, `is_creator`) écrit
+   `poro.user.profile.updated` v1 dans l'outbox **de la même transaction**,
+   sous verrou de ligne. L'événement est un instantané complet (`user_id`,
+   `username`, `display_name`, `avatar_url`, `is_creator`, `updated_at`) :
+   les consommateurs (notification) gardent celui au `updated_at` le plus
+   récent. Une bio, ou une requête qui ne change rien, n'émet rien. Un profil
+   créé par `poro.auth.user.created` n'a encore aucun champ public : pas
+   d'événement avant le premier changement.
+
+7. **Paiement** : hors de ce service. Rien ici n'est source de vérité financière.
 
 ## Conséquences
 
