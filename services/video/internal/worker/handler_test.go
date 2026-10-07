@@ -3,6 +3,7 @@ package worker_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -66,7 +67,7 @@ func seedProcessing(t *testing.T, user, id uuid.UUID) {
 	testdb.Available(t)
 	now := time.Now().UTC()
 	v := &model.Video{
-		ID: id.String(), UserID: user.String(), Title: "c", Status: model.StatusProcessing,
+		ID: id.String(), UserID: user.String(), Title: "c", Description: "Danse #Abidjan #wax", Status: model.StatusProcessing,
 		ContentType: "video/mp4", SizeBytes: 32, SourceKey: model.SourceKey(user.String(), id.String(), "mp4"),
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -105,6 +106,19 @@ func TestHandlerMarksReady(t *testing.T) {
 	require.NoError(t, testdb.Pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events WHERE topic = $1 AND event_key = $2`,
 		events.TypeVideoReady, id.String()).Scan(&n))
 	require.Equal(t, 1, n)
+
+	var payload []byte
+	require.NoError(t, testdb.Pool.QueryRow(ctx, `SELECT payload FROM outbox_events WHERE topic = $1 AND event_key = $2`,
+		events.TypeVideoReady, id.String()).Scan(&payload))
+	var ready events.Envelope
+	require.NoError(t, json.Unmarshal(payload, &ready))
+	var data events.VideoReadyV1
+	require.NoError(t, ready.DecodeData(&data))
+	require.Equal(t, "c", data.Title)
+	require.Equal(t, "Danse #Abidjan #wax", data.Description)
+	require.Equal(t, []string{"abidjan", "wax"}, data.Hashtags)
+	require.False(t, data.PublishedAt.IsZero())
+	require.Equal(t, data.ReadyAt, data.PublishedAt)
 
 	require.NoError(t, h.Handle(ctx, env), "duplicate event is a no-op")
 }

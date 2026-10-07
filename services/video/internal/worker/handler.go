@@ -22,6 +22,7 @@ import (
 	"github.com/poro/video/internal/model"
 	"github.com/poro/video/internal/repository"
 	"github.com/poro/video/internal/storage"
+	"github.com/poro/video/internal/text"
 	"github.com/poro/video/internal/transcode"
 )
 
@@ -114,6 +115,8 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		VideoID: videoID.String(), UserID: userID.String(), DurationMs: out.DurationMs,
 		Width: out.Width, Height: out.Height, HLSKey: hlsKey, ThumbnailKey: thumbKey,
 		Renditions: toEventRenditions(out.Renditions), ReadyAt: now,
+		Title: row.Title, Description: row.Description, Hashtags: text.Hashtags(row.Description),
+		PublishedAt: now,
 	}
 	ev, err := events.New(events.TypeVideoReady, 1, "media-worker", videoID.String(), ready, now)
 	if err != nil {

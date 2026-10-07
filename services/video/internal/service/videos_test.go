@@ -75,6 +75,15 @@ func TestInitCompleteAndGet(t *testing.T) {
 	require.NoError(t, svc.Delete(ctx, user, vid))
 	_, err = svc.Get(ctx, vid, &user)
 	require.Error(t, err)
+
+	require.NoError(t, testdb.Pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events WHERE event_key = $1 AND topic = $2`,
+		init.VideoID, events.TypeVideoDeleted).Scan(&n))
+	require.Equal(t, 1, n, "delete publishes poro.video.deleted")
+
+	require.Error(t, svc.Delete(ctx, user, vid), "second delete is not found")
+	require.NoError(t, testdb.Pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events WHERE event_key = $1 AND topic = $2`,
+		init.VideoID, events.TypeVideoDeleted).Scan(&n))
+	require.Equal(t, 1, n, "no event when nothing changed")
 }
 
 func TestInitValidation(t *testing.T) {
@@ -109,6 +118,11 @@ func TestAbort(t *testing.T) {
 	require.NoError(t, svc.Abort(ctx, user, uuid.MustParse(init.VideoID)))
 	_, err = svc.Get(ctx, uuid.MustParse(init.VideoID), &user)
 	require.Error(t, err)
+
+	var n int
+	require.NoError(t, testdb.Pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events WHERE event_key = $1 AND topic = $2`,
+		init.VideoID, events.TypeVideoDeleted).Scan(&n))
+	require.Zero(t, n, "an aborted upload was never visible: no poro.video.deleted")
 }
 
 func TestCompleteWrongPartCount(t *testing.T) {

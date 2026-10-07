@@ -41,7 +41,17 @@
             }
           }
         },
-        "ready_at": { "type": "string", "format": "date-time" }
+        "ready_at": { "type": "string", "format": "date-time" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 100, "description": "Added after release: absent on older events." },
+        "description": { "type": "string", "maxLength": 500, "description": "Added after release: absent on older events." },
+        "hashtags": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[\\p{L}\\p{N}_]{1,50}$" },
+          "description": "Lower-cased tags parsed from the description, without '#'. Added after release."
+        },
+        "published_at": { "type": "string", "format": "date-time", "description": "When the video became visible. Added after release." }
       }
     }
   }

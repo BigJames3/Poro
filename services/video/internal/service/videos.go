@@ -296,10 +296,24 @@ func (s *Videos) Delete(ctx context.Context, userID, videoID uuid.UUID) error {
 		return errInternal.WithCause(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err := s.repo.SoftDelete(ctx, tx, videoID, userID); err != nil {
+	deleted, err := s.repo.SoftDelete(ctx, tx, videoID, userID)
+	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return errNotFound
 		}
+		return errInternal.WithCause(err)
+	}
+	deletedAt := s.now().UTC()
+	if deleted.DeletedAt != nil {
+		deletedAt = deleted.DeletedAt.UTC()
+	}
+	env, err := events.New(events.TypeVideoDeleted, 1, "video", videoID.String(), events.VideoDeletedV1{
+		VideoID: videoID.String(), UserID: userID.String(), DeletedAt: deletedAt,
+	}, deletedAt)
+	if err != nil {
+		return errInternal.WithCause(err)
+	}
+	if err := outbox.Enqueue(ctx, tx, env); err != nil {
 		return errInternal.WithCause(err)
 	}
 	return tx.Commit(ctx)
