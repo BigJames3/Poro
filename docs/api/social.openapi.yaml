@@ -1,0 +1,487 @@
+openapi: 3.1.0
+info:
+  title: PORO Social API
+  version: 1.0.0
+  description: |
+    Likes, comments, follows and shares on ready videos.
+    Every JSON response uses `{data, error, meta}`; clients branch on `error.code`.
+    Access tokens are verified offline against auth JWKS. Writes need a token;
+    reads accept an optional one, used only for `liked_by_me` / `followed_by_me`.
+
+    Rules:
+    - Actions apply only to videos the service saw as `ready` (projection of
+      `poro.video.ready` / `poro.video.deleted`), otherwise `404 video_not_found`.
+    - Writes are idempotent: repeating a like, unlike, follow or unfollow
+      returns 200, changes nothing and publishes no event.
+    - Counters change in the same transaction as the action.
+    - Rate limits per user and per minute: likes 60, comments 10, follows 30,
+      shares 30, every route 120. Over the limit: `429 rate_limited` with
+      `Retry-After`.
+servers:
+  - url: http://localhost:8085
+    description: Local development
+tags:
+  - name: likes
+  - name: comments
+  - name: follows
+  - name: shares
+  - name: platform
+security:
+  - bearerAuth: []
+paths:
+  /health/live:
+    get:
+      tags: [platform]
+      security: []
+      summary: Liveness (also at /api/v1/health/live)
+      responses:
+        "200": { description: Process up }
+  /health/ready:
+    get:
+      tags: [platform]
+      security: []
+      summary: Readiness, Postgres and Redis (also at /health and /api/v1/health)
+      responses:
+        "200": { description: Ready }
+        "503": { description: A dependency is down }
+
+  /api/v1/videos/{videoId}/like:
+    parameters: [{ $ref: "#/components/parameters/VideoID" }]
+    put:
+      tags: [likes]
+      summary: Like a video (idempotent)
+      responses:
+        "200": { $ref: "#/components/responses/VideoStats" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [likes]
+      summary: Remove a like (idempotent)
+      responses:
+        "200": { $ref: "#/components/responses/VideoStats" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/videos/{videoId}/likes:
+    parameters: [{ $ref: "#/components/parameters/VideoID" }]
+    get:
+      tags: [likes]
+      security: [{}, { bearerAuth: [] }]
+      summary: Who likes a video, newest first
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200":
+          description: Page of likes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VideoLikePage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/videos/{videoId}/stats:
+    parameters: [{ $ref: "#/components/parameters/VideoID" }]
+    get:
+      tags: [likes]
+      security: [{}, { bearerAuth: [] }]
+      summary: Counters of a video
+      responses:
+        "200": { $ref: "#/components/responses/VideoStats" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/users/{userId}/likes:
+    parameters: [{ $ref: "#/components/parameters/UserID" }]
+    get:
+      tags: [likes]
+      security: [{}, { bearerAuth: [] }]
+      summary: Ready videos a user likes, newest like first
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200":
+          description: Page of liked videos
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LikedVideoPage" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/v1/videos/{videoId}/comments:
+    parameters: [{ $ref: "#/components/parameters/VideoID" }]
+    post:
+      tags: [comments]
+      summary: Comment, or reply to a top-level comment
+      description: |
+        1 to 1000 characters after trimming, at most 20 line breaks, no control
+        or invisible formatting characters. Only one level of replies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, minLength: 1, maxLength: 1000, example: "Trop beau 🔥" }
+                parent_id: { type: ["string", "null"], format: uuid }
+      responses:
+        "201": { $ref: "#/components/responses/Comment" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404":
+          description: "`video_not_found` or `comment_not_found` (parent)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: "`comment_invalid`, `comment_reply_depth` or `parent_invalid`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    get:
+      tags: [comments]
+      security: [{}, { bearerAuth: [] }]
+      summary: Top-level comments, newest first
+      description: A deleted comment stays, without author or text, while it has visible replies.
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200": { $ref: "#/components/responses/CommentPage" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/comments/{commentId}/replies:
+    parameters: [{ $ref: "#/components/parameters/CommentID" }]
+    get:
+      tags: [comments]
+      security: [{}, { bearerAuth: [] }]
+      summary: Visible replies of a top-level comment, oldest first
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200": { $ref: "#/components/responses/CommentPage" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/comments/{commentId}:
+    parameters: [{ $ref: "#/components/parameters/CommentID" }]
+    patch:
+      tags: [comments]
+      summary: Edit your comment within 15 minutes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        "200": { $ref: "#/components/responses/Comment" }
+        "403":
+          description: "`forbidden` (not the author) or `comment_edit_window_closed`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [comments]
+      summary: Soft-delete a comment (author or video owner, idempotent)
+      responses:
+        "204": { description: Deleted }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/comments/{commentId}/like:
+    parameters: [{ $ref: "#/components/parameters/CommentID" }]
+    put:
+      tags: [comments]
+      summary: Like a comment (idempotent)
+      responses:
+        "200": { $ref: "#/components/responses/CommentLike" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [comments]
+      summary: Remove a comment like (idempotent)
+      responses:
+        "200": { $ref: "#/components/responses/CommentLike" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /api/v1/users/{userId}/follow:
+    parameters: [{ $ref: "#/components/parameters/UserID" }]
+    put:
+      tags: [follows]
+      summary: Follow an account (idempotent)
+      responses:
+        "200": { $ref: "#/components/responses/UserStats" }
+        "400":
+          description: "`cannot_follow_self` or `invalid_id`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      tags: [follows]
+      summary: Stop following (idempotent)
+      responses:
+        "200": { $ref: "#/components/responses/UserStats" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/users/{userId}/followers:
+    parameters: [{ $ref: "#/components/parameters/UserID" }]
+    get:
+      tags: [follows]
+      security: [{}, { bearerAuth: [] }]
+      summary: Followers, newest first
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200": { $ref: "#/components/responses/FollowPage" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/users/{userId}/following:
+    parameters: [{ $ref: "#/components/parameters/UserID" }]
+    get:
+      tags: [follows]
+      security: [{}, { bearerAuth: [] }]
+      summary: Accounts followed, newest first
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200": { $ref: "#/components/responses/FollowPage" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/users/{userId}/stats:
+    parameters: [{ $ref: "#/components/parameters/UserID" }]
+    get:
+      tags: [follows]
+      security: [{}, { bearerAuth: [] }]
+      summary: Follow counters of an account
+      responses:
+        "200": { $ref: "#/components/responses/UserStats" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/v1/videos/{videoId}/shares:
+    parameters: [{ $ref: "#/components/parameters/VideoID" }]
+    post:
+      tags: [shares]
+      summary: Record a share (every share counts)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel: { type: string, enum: [whatsapp, copy_link, other] }
+      responses:
+        "201":
+          description: Share recorded
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - properties:
+                      data: { $ref: "#/components/schemas/ShareResult" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    VideoID:
+      name: videoId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserID:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CommentID:
+      name: commentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque `next_cursor` of the previous page; omit for the first page.
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+  responses:
+    Error:
+      description: Error envelope, see `error.code`
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    RateLimited:
+      description: "`rate_limited`"
+      headers:
+        Retry-After: { schema: { type: integer }, description: Seconds to wait }
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    VideoStats:
+      description: Video counters
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - properties:
+                  data: { $ref: "#/components/schemas/VideoStats" }
+    UserStats:
+      description: Account counters
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - properties:
+                  data: { $ref: "#/components/schemas/UserStats" }
+    Comment:
+      description: A comment
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - properties:
+                  data: { $ref: "#/components/schemas/Comment" }
+    CommentPage:
+      description: Page of comments
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - properties:
+                  data:
+                    type: object
+                    properties:
+                      items: { type: array, items: { $ref: "#/components/schemas/Comment" } }
+                      next_cursor: { type: ["string", "null"] }
+    CommentLike:
+      description: Comment like state
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - properties:
+                  data:
+                    type: object
+                    properties:
+                      comment_id: { type: string, format: uuid }
+                      likes_count: { type: integer }
+                      liked_by_me: { type: boolean }
+    FollowPage:
+      description: Page of accounts
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - properties:
+                  data:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            user_id: { type: string, format: uuid }
+                            followed_at: { type: string, format: date-time }
+                      next_cursor: { type: ["string", "null"] }
+  schemas:
+    Envelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: {}
+        error: { type: ["object", "null"] }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: { type: "null" }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              examples: [video_not_found, comment_not_found, user_not_found, cannot_follow_self, comment_invalid,
+                comment_reply_depth, parent_invalid, comment_edit_window_closed, channel_invalid, invalid_cursor,
+                invalid_id, invalid_request, unauthorized, forbidden, rate_limited]
+            message: { type: string }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string }
+    VideoStats:
+      type: object
+      properties:
+        video_id: { type: string, format: uuid }
+        likes: { type: integer }
+        comments: { type: integer, description: Visible comments and replies }
+        shares: { type: integer }
+        liked_by_me: { type: boolean, description: false for anonymous callers }
+    UserStats:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid }
+        followers: { type: integer }
+        following: { type: integer }
+        followed_by_me: { type: boolean }
+    Comment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        video_id: { type: string, format: uuid }
+        user_id: { type: ["string", "null"], format: uuid, description: null when deleted }
+        parent_id: { type: ["string", "null"], format: uuid }
+        content: { type: ["string", "null"], description: null when deleted }
+        likes_count: { type: integer }
+        replies_count: { type: integer, description: Visible replies of a top-level comment }
+        liked_by_me: { type: boolean }
+        edited: { type: boolean }
+        deleted: { type: boolean }
+        created_at: { type: string, format: date-time }
+    VideoLikePage:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - properties:
+            data:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      user_id: { type: string, format: uuid }
+                      liked_at: { type: string, format: date-time }
+                next_cursor: { type: ["string", "null"] }
+    LikedVideoPage:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - properties:
+            data:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      video_id: { type: string, format: uuid }
+                      liked_at: { type: string, format: date-time }
+                next_cursor: { type: ["string", "null"] }
+    ShareResult:
+      type: object
+      properties:
+        share_id: { type: string, format: uuid }
+        video_id: { type: string, format: uuid }
+        channel: { type: string, enum: [whatsapp, copy_link, other] }
+        shares_count: { type: integer }
