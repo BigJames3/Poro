@@ -27,10 +27,11 @@ function res(captured: Captured): {
 describe('HealthController', () => {
   it('live never checks dependencies', () => {
     const captured: Captured = {};
-    const prisma = { ping: jest.fn() } as unknown as PrismaService;
+    const ping = jest.fn();
+    const prisma = { ping } as unknown as PrismaService;
     new HealthController(prisma).live(res(captured) as never);
     expect(captured.body).toMatchObject({ status: 'ok', service: 'user' });
-    expect(prisma.ping).not.toHaveBeenCalled();
+    expect(ping).not.toHaveBeenCalled();
   });
 
   it('ready is degraded when postgres is down', async () => {

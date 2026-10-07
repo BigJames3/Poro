@@ -12,9 +12,9 @@ function consumer(): UserCreatedConsumer {
 
 describe('UserCreatedConsumer.handle', () => {
   it('rejects unsupported type or version without touching the database', async () => {
-    const { handle } = consumer();
+    const c = consumer();
     await expect(
-      handle({
+      c.handle({
         id: uuidv7(),
         type: TYPE_AUTH_USER_CREATED,
         version: 2,
@@ -25,7 +25,7 @@ describe('UserCreatedConsumer.handle', () => {
       }),
     ).rejects.toBeInstanceOf(PermanentError);
     await expect(
-      handle({
+      c.handle({
         id: uuidv7(),
         type: 'poro.auth.user.deleted',
         version: 1,
@@ -52,6 +52,8 @@ describe('UserCreatedConsumer.handle', () => {
   });
 
   it('does not start Kafka when disabled', () => {
-    expect(() => consumer().onApplicationBootstrap()).not.toThrow();
+    expect(() => {
+      consumer().onApplicationBootstrap();
+    }).not.toThrow();
   });
 });
