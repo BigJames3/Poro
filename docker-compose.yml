@@ -184,7 +184,7 @@ services:
       - |
         set -euo pipefail
         export RPK_BROKERS=redpanda:29092
-        for t in poro.auth.user.created poro.user.creator.activated poro.video.uploaded poro.video.ready poro.video.failed; do
+        for t in poro.auth.user.created poro.user.creator.activated poro.user.profile.updated poro.video.uploaded poro.video.ready poro.video.failed poro.video.deleted; do
           rpk topic describe "$$t" >/dev/null 2>&1 || rpk topic create "$$t" -p 3 -r 1 -c retention.ms=604800000
           rpk topic describe "$$t.dlq" >/dev/null 2>&1 || rpk topic create "$$t.dlq" -p 1 -r 1 -c retention.ms=2592000000
         done

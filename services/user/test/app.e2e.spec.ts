@@ -239,9 +239,11 @@ describe('user service HTTP API', () => {
       topic: string;
       event_key: string;
       payload: Record<string, unknown>;
-    }>('SELECT topic, event_key, payload FROM outbox_events WHERE event_key = $1', [userId]);
+    }>('SELECT topic, event_key, payload FROM outbox_events WHERE event_key = $1 AND topic = $2', [
+      userId,
+      'poro.user.creator.activated',
+    ]);
     expect(rows).toHaveLength(1);
-    expect(rows[0].topic).toBe('poro.user.creator.activated');
     expect(rows[0].payload).toMatchObject({
       type: 'poro.user.creator.activated',
       version: 1,
@@ -252,6 +254,60 @@ describe('user service HTTP API', () => {
         username: 'kofi.creates',
         activated_at: first.body.data.creator_since,
       },
+    });
+  });
+
+  async function profileSnapshots(userId: string): Promise<Record<string, unknown>[]> {
+    const { rows } = await pg.query<{ payload: { data: Record<string, unknown> } }>(
+      `SELECT payload FROM outbox_events
+        WHERE event_key = $1 AND topic = 'poro.user.profile.updated'
+        ORDER BY created_at, id`,
+      [userId],
+    );
+    return rows.map((r) => r.payload.data);
+  }
+
+  it('publishes poro.user.profile.updated only when a public field changes', async () => {
+    const { userId, auth } = await as();
+    await request(server).get('/api/v1/users/me').set('Authorization', auth);
+    expect(await profileSnapshots(userId)).toEqual([]);
+
+    await request(server)
+      .patch('/api/v1/users/me')
+      .set('Authorization', auth)
+      .send({ username: 'mariam.d', display_name: 'Mariam' });
+    await request(server)
+      .patch('/api/v1/users/me')
+      .set('Authorization', auth)
+      .send({ bio: 'Cheffe à Bamako' });
+    await request(server)
+      .patch('/api/v1/users/me')
+      .set('Authorization', auth)
+      .send({ username: 'mariam.d', display_name: 'Mariam' });
+    await request(server).post('/api/v1/users/me/creator').set('Authorization', auth);
+    await request(server).post('/api/v1/users/me/creator').set('Authorization', auth);
+
+    const snapshots = await profileSnapshots(userId);
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots[0]).toEqual({
+      user_id: userId,
+      username: 'mariam.d',
+      display_name: 'Mariam',
+      avatar_url: null,
+      is_creator: false,
+      updated_at: expect.any(String),
+    });
+    expect(snapshots[1]).toMatchObject({ username: 'mariam.d', is_creator: true });
+
+    const { rows } = await pg.query<{ payload: Record<string, unknown> }>(
+      `SELECT payload FROM outbox_events WHERE event_key = $1 AND topic = 'poro.user.profile.updated'`,
+      [userId],
+    );
+    expect(rows[0].payload).toMatchObject({
+      type: 'poro.user.profile.updated',
+      version: 1,
+      source: 'poro-user',
+      subject: userId,
     });
   });
 
@@ -296,6 +352,9 @@ describe('user service HTTP API', () => {
       height: 512,
     });
     expect(set.body.data.avatar_url).toBe(`https://cdn.poro.test/avatars/${put.Key}`);
+    expect((await profileSnapshots(userId)).map((d) => d.avatar_url)).toEqual([
+      `https://cdn.poro.test/avatars/${put.Key}`,
+    ]);
     expect(s3.commandCalls(DeleteObjectCommand).map((c) => c.args[0].input.Key)).toEqual([
       upload_key,
     ]);
@@ -305,6 +364,10 @@ describe('user service HTTP API', () => {
       .delete('/api/v1/users/me/avatar')
       .set('Authorization', auth);
     expect(removed.body.data.avatar_url).toBeNull();
+    expect((await profileSnapshots(userId)).map((d) => d.avatar_url)).toEqual([
+      `https://cdn.poro.test/avatars/${put.Key}`,
+      null,
+    ]);
     expect(s3.commandCalls(DeleteObjectCommand).map((c) => c.args[0].input.Key)).toEqual([put.Key]);
   });
 

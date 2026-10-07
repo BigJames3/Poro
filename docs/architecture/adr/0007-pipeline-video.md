@@ -20,7 +20,7 @@ de lecture. `project.md` fixe le service vidéo sur le port 8083.
    - `cmd/worker` (image `media-worker`, FFmpeg) : consomme `poro.video.uploaded`,
      transcode, écrit le statut et l'outbox `poro.video.ready` / `poro.video.failed`
      dans la **même** base. Pas d'HTTP public.
-   - Fusion dans `content` reportée à P0-6/P0-7.
+   - Fusion dans `content` abandonnée : voir [ADR-0008](0008-services-separes.md).
 
 2. **Upload.** Multipart S3, parties de 8 MiB, plafond 256 MiB. Après complete
    le service relit l'objet (`Head` + 32 premiers octets) : MP4/MOV (`ftyp`) ou
@@ -32,9 +32,17 @@ de lecture. `project.md` fixe le service vidéo sur le port 8083.
    `videos/{user_id}/{video_id}/…`. Le worker transcode **puis** claim l'inbox :
    un crash reprend ; un doublon Kafka n'écrit ready qu'une fois.
 
-4. **Événements.** `poro.video.uploaded` (API), `poro.video.ready` et
-   `poro.video.failed` (worker). Codes publics d'échec : `too_long`,
-   `invalid_media`, `transcode_failed`. stderr FFmpeg jamais renvoyé au client.
+4. **Événements.** `poro.video.uploaded` et `poro.video.deleted` (API),
+   `poro.video.ready` et `poro.video.failed` (worker). Codes publics d'échec :
+   `too_long`, `invalid_media`, `transcode_failed`. stderr FFmpeg jamais renvoyé
+   au client.
+   - `poro.video.ready` porte aussi, depuis le 2026-10-07, `title`,
+     `description`, `hashtags` (tags `#…` de la description, en minuscules,
+     sans `#`, 20 au plus) et `published_at`. Ajout rétro-compatible : ces
+     champs sont absents des événements plus anciens.
+   - `poro.video.deleted` part dans la transaction du soft delete par le
+     propriétaire, quel que soit le statut. L'abandon d'un upload (`DELETE
+     /uploads/:id`) n'émet rien : la vidéo n'a jamais été visible.
 
 5. **Visibilité.** Une vidéo `ready` est lisible sans JWT. Les autres statuts
    ne sont visibles que par le propriétaire (sinon 404, pas d'énumération).

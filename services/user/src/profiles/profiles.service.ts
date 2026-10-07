@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 
 import { AvatarService } from '../avatars/avatar.service';
 import { ApiError } from '../common/api-error';
-import { TYPE_USER_CREATOR_ACTIVATED, UserCreatorActivatedV1 } from '../events/catalog';
+import {
+  TYPE_USER_CREATOR_ACTIVATED,
+  TYPE_USER_PROFILE_UPDATED,
+  UserCreatorActivatedV1,
+  UserProfileUpdatedV1,
+} from '../events/catalog';
 import { newEnvelope } from '../events/envelope';
 import { enqueue } from '../events/outbox';
 import { Prisma, Profile } from '../generated/prisma/client';
@@ -77,6 +82,16 @@ function cleanBio(raw: string | null): string | null {
   return value;
 }
 
+/** Fields other services see; a change to one of them publishes poro.user.profile.updated. */
+function samePublicFields(a: Profile, b: Profile): boolean {
+  return (
+    a.username === b.username &&
+    a.displayName === b.displayName &&
+    a.avatarKey === b.avatarKey &&
+    a.isCreator === b.isCreator
+  );
+}
+
 @Injectable()
 export class ProfilesService {
   constructor(
@@ -101,7 +116,7 @@ export class ProfilesService {
       data.bio = cleanBio(dto.bio);
     }
     try {
-      return this.myView(await this.prisma.profile.update({ where: { userId }, data }));
+      return this.myView(await this.updatePublishing(userId, data));
     } catch (err) {
       if (isUniqueViolation(err)) {
         throw new ApiError(409, 'username_taken', 'username already taken');
@@ -149,7 +164,7 @@ export class ProfilesService {
     const key = await this.avatars.publish(userId, uploadKey);
     let after: Profile;
     try {
-      after = await this.prisma.profile.update({ where: { userId }, data: { avatarKey: key } });
+      after = await this.updatePublishing(userId, { avatarKey: key });
     } catch (err) {
       await this.avatars.remove(key);
       throw err;
@@ -165,10 +180,7 @@ export class ProfilesService {
     if (before.avatarKey === null) {
       return this.myView(before);
     }
-    const after = await this.prisma.profile.update({
-      where: { userId },
-      data: { avatarKey: null },
-    });
+    const after = await this.updatePublishing(userId, { avatarKey: null });
     await this.avatars.remove(before.avatarKey);
     return this.myView(after);
   }
@@ -194,6 +206,7 @@ export class ProfilesService {
           activated_at: now.toISOString(),
         };
         await enqueue(tx, newEnvelope(TYPE_USER_CREATOR_ACTIVATED, 1, userId, data, now));
+        await this.publishProfile(tx, current);
       }
       return current;
     });
@@ -222,6 +235,41 @@ export class ProfilesService {
       throw new ApiError(404, 'profile_not_found', 'profile not found');
     }
     return profile;
+  }
+
+  /**
+   * Applies data and, when a public field changed, enqueues
+   * poro.user.profile.updated in the same transaction. The row lock orders
+   * concurrent updates so each snapshot is compared with the state it replaced.
+   */
+  private async updatePublishing(
+    userId: string,
+    data: Prisma.ProfileUpdateInput,
+  ): Promise<Profile> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM profiles WHERE user_id = ${userId}::uuid FOR UPDATE`;
+      const before = await tx.profile.findUniqueOrThrow({ where: { userId } });
+      const after = await tx.profile.update({ where: { userId }, data });
+      if (!samePublicFields(before, after)) {
+        await this.publishProfile(tx, after);
+      }
+      return after;
+    });
+  }
+
+  private async publishProfile(tx: Prisma.TransactionClient, profile: Profile): Promise<void> {
+    const data: UserProfileUpdatedV1 = {
+      user_id: profile.userId,
+      username: profile.username,
+      display_name: profile.displayName,
+      avatar_url: profile.avatarKey === null ? null : this.avatars.publicUrl(profile.avatarKey),
+      is_creator: profile.isCreator,
+      updated_at: profile.updatedAt.toISOString(),
+    };
+    await enqueue(
+      tx,
+      newEnvelope(TYPE_USER_PROFILE_UPDATED, 1, profile.userId, data, profile.updatedAt),
+    );
   }
 
   private checkedUsername(raw: string): string {

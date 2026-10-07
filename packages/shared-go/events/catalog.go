@@ -6,9 +6,11 @@ import "time"
 const (
 	TypeAuthUserCreated      = "poro.auth.user.created"
 	TypeUserCreatorActivated = "poro.user.creator.activated"
+	TypeUserProfileUpdated   = "poro.user.profile.updated"
 	TypeVideoUploaded        = "poro.video.uploaded"
 	TypeVideoReady           = "poro.video.ready"
 	TypeVideoFailed          = "poro.video.failed"
+	TypeVideoDeleted         = "poro.video.deleted"
 )
 
 // AuthUserCreatedV1 is published by auth when an account is created.
@@ -26,6 +28,17 @@ type UserCreatorActivatedV1 struct {
 	UserID      string    `json:"user_id"`
 	Username    string    `json:"username"`
 	ActivatedAt time.Time `json:"activated_at"`
+}
+
+// UserProfileUpdatedV1 is published by the user service whenever a public
+// profile field changes. It is a full snapshot: keep the latest UpdatedAt.
+type UserProfileUpdatedV1 struct {
+	UserID      string    `json:"user_id"`
+	Username    *string   `json:"username"`
+	DisplayName *string   `json:"display_name"`
+	AvatarURL   *string   `json:"avatar_url"`
+	IsCreator   bool      `json:"is_creator"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // VideoUploadedV1 is published by the video API after a multipart upload completes.
@@ -49,6 +62,8 @@ type VideoRenditionV1 struct {
 }
 
 // VideoReadyV1 is published by the media-worker after HLS and a thumbnail exist.
+// Title, Description, Hashtags and PublishedAt were added after the first
+// release: consumers must accept events without them.
 type VideoReadyV1 struct {
 	VideoID      string             `json:"video_id"`
 	UserID       string             `json:"user_id"`
@@ -59,6 +74,10 @@ type VideoReadyV1 struct {
 	ThumbnailKey string             `json:"thumbnail_key"`
 	Renditions   []VideoRenditionV1 `json:"renditions"`
 	ReadyAt      time.Time          `json:"ready_at"`
+	Title        string             `json:"title"`
+	Description  string             `json:"description"`
+	Hashtags     []string           `json:"hashtags"`
+	PublishedAt  time.Time          `json:"published_at"`
 }
 
 // Failure codes on VideoFailedV1. Never include FFmpeg stderr or file paths.
@@ -74,4 +93,12 @@ type VideoFailedV1 struct {
 	UserID   string    `json:"user_id"`
 	Code     string    `json:"code"`
 	FailedAt time.Time `json:"failed_at"`
+}
+
+// VideoDeletedV1 is published by the video API when the owner deletes a video.
+// Projections must drop the video, whatever status they last saw.
+type VideoDeletedV1 struct {
+	VideoID   string    `json:"video_id"`
+	UserID    string    `json:"user_id"`
+	DeletedAt time.Time `json:"deleted_at"`
 }
