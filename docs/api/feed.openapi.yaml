@@ -1,0 +1,159 @@
+openapi: 3.1.0
+info:
+  title: PORO Feed API
+  version: 1.0.0
+  description: |
+    Following, trending and For You feeds of ready videos. All feed routes need
+    a token. Every JSON response uses `{data, error, meta}`.
+
+    Items are compact for slow mobile networks: no description (read it from
+    the video API) and no `liked_by_me` in v1 (read it from social stats).
+    Counters are the feed's projection of social events and may lag by a few
+    seconds. 120 requests per user per minute, then `429 rate_limited`.
+servers:
+  - url: http://localhost:8084
+    description: Local development
+tags:
+  - name: feed
+  - name: platform
+security:
+  - bearerAuth: []
+paths:
+  /health/live:
+    get:
+      tags: [platform]
+      security: []
+      summary: Liveness (also at /api/v1/health/live)
+      responses:
+        "200": { description: Process up }
+  /health/ready:
+    get:
+      tags: [platform]
+      security: []
+      summary: Readiness, Postgres and Redis (also at /health and /api/v1/health)
+      responses:
+        "200": { description: Ready }
+        "503": { description: A dependency is down }
+  /api/v1/feed/for-you:
+    get:
+      tags: [feed]
+      summary: Personalised feed
+      description: |
+        A session of up to 200 videos is built on the first call: 60% from
+        followed accounts, 30% trending, 10% discovery (authors under 1000
+        followers, videos under 48 hours). Without followed videos (cold
+        start): 70% trending, 30% discovery. No duplicates, never your own
+        videos, at most 2 videos of one author in a row. The session lives 30
+        minutes after its last read; an expired cursor silently starts a new
+        session.
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503": { description: Session store unavailable }
+  /api/v1/feed/following:
+    get:
+      tags: [feed]
+      summary: Videos of followed accounts, newest first
+      description: Page 1 is cached for 60 seconds per user.
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /api/v1/feed/trending:
+    get:
+      tags: [feed]
+      summary: Trending videos of the last 72 hours
+      description: |
+        Score = (likes + 2·comments + 3·shares) / (age_hours + 2)^1.5. There
+        is no view or watch-time signal yet. Page 1 is cached for 60 seconds.
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque `next_cursor` of the previous page of the same feed; omit for page 1.
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 30, default: 10 }
+  responses:
+    Error:
+      description: Error envelope, see `error.code`
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Page:
+      description: A page of videos
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data, error, meta]
+            properties:
+              data:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Item" } }
+                  next_cursor: { type: ["string", "null"] }
+              error: { type: "null" }
+              meta:
+                type: object
+                properties:
+                  request_id: { type: string }
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: { type: "null" }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [invalid_cursor, unauthorized, rate_limited, unavailable] }
+            message: { type: string }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string }
+    Item:
+      type: object
+      properties:
+        video_id: { type: string, format: uuid }
+        title: { type: string }
+        hashtags: { type: array, items: { type: string } }
+        duration_ms: { type: integer }
+        published_at: { type: string, format: date-time }
+        thumbnail_url: { type: string, format: uri }
+        hls_url: { type: string, format: uri }
+        stats:
+          type: object
+          properties:
+            likes: { type: integer }
+            comments: { type: integer }
+            shares: { type: integer }
+        author:
+          type: object
+          description: Profile fields are null until the author's first profile event.
+          properties:
+            id: { type: string, format: uuid }
+            username: { type: ["string", "null"] }
+            display_name: { type: ["string", "null"] }
+            avatar_url: { type: ["string", "null"] }
