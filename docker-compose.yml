@@ -9,6 +9,8 @@
 #                 9001 : 9333   (Master UI)
 # - Redpanda    : 9092 : 9092   (Kafka, listener "external" ; les
 #                               conteneurs utilisent redpanda:29092)
+#                 19644 : 9644  (Admin API ; 9644 tombe dans une plage
+#                               de ports réservée par Windows/Hyper-V)
 # - ClickHouse  : 8123 : 8123   (HTTP)
 #                 9440 : 9000   (TCP, évite conflit avec SeaweedFS)
 # - Qdrant      : 6333 : 6333   (HTTP)
@@ -16,6 +18,14 @@
 # - Auth        : 8081 : 8081
 # - User        : 8082 : 8082
 # - Video       : 8083 : 8083
+#
+# Images épinglées (Docker Hub, tags stables + digest, oct. 2026) :
+# - postgres:16.15-alpine                 2026-09-21
+# - redis:7.4.11-alpine                   2026-09-21
+# - chrislusf/seaweedfs:4.45              2026-09-01
+# - redpandadata/redpanda:v24.2.7         2024-10-11
+# - clickhouse/clickhouse-server:26.8.18.2-alpine  2026-10-05
+# - qdrant/qdrant:v1.19.2                 2026-10-05
 # =============================================================
 
 services:
@@ -24,11 +34,11 @@ services:
   # ─────────────────────────────────────────────
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     container_name: poro-postgres
     environment:
       POSTGRES_USER: poro
-      POSTGRES_PASSWORD: poro_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: poro_auth
     ports:
       - "127.0.0.1:5433:5432"
@@ -46,12 +56,12 @@ services:
 
   # Une base par service. Idempotent : fonctionne aussi sur un volume existant.
   postgres-init:
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     container_name: poro-postgres-init
     environment:
       PGHOST: postgres
       PGUSER: poro
-      PGPASSWORD: poro_dev_password
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       PGDATABASE: postgres
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -70,7 +80,7 @@ services:
     restart: "no"
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.11-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     container_name: poro-redis
     command: redis-server --appendonly yes
     ports:
@@ -91,7 +101,7 @@ services:
   # ─────────────────────────────────────────────
 
   seaweedfs:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:4.45@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5
     container_name: poro-seaweedfs
     command: server -s3 -dir=/data -master.volumeSizeLimitMB=1024
     ports:
@@ -100,12 +110,18 @@ services:
       - "127.0.0.1:9002:8888"   # Filer UI
     volumes:
       - poro_seaweedfs_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9333/cluster/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
     networks:
       - poro-network
     restart: unless-stopped
 
   seaweedfs-init:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:4.45@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5
     container_name: poro-seaweedfs-init
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -130,7 +146,7 @@ services:
   # Deux listeners : "internal" (redpanda:29092) pour les conteneurs,
   # "external" (localhost:9092) pour les processus lancés sur le poste.
   redpanda:
-    image: redpandadata/redpanda:v24.2.7
+    image: redpandadata/redpanda:v24.2.7@sha256:82a69763bef8d8b55ea5a520fa1b38f993908ef68946819ca1aed43541824c48
     container_name: poro-redpanda
     command:
       - redpanda
@@ -145,7 +161,7 @@ services:
       - --advertise-kafka-addr=internal://redpanda:29092,external://localhost:9092
     ports:
       - "127.0.0.1:9092:9092"   # Kafka API
-      - "127.0.0.1:9644:9644"   # Admin API
+      - "127.0.0.1:19644:9644"  # Admin API (9644 réservé par Windows)
       - "127.0.0.1:8080:8080"   # HTTP Proxy
     volumes:
       - poro_redpanda_data:/var/lib/redpanda/data
@@ -161,7 +177,7 @@ services:
 
   # Crée les topics (et leurs DLQ) : les services n'auto-créent jamais de topic.
   redpanda-init:
-    image: redpandadata/redpanda:v24.2.7
+    image: redpandadata/redpanda:v24.2.7@sha256:82a69763bef8d8b55ea5a520fa1b38f993908ef68946819ca1aed43541824c48
     container_name: poro-redpanda-init
     entrypoint: ["/bin/bash", "-c"]
     command:
@@ -186,13 +202,13 @@ services:
   # ─────────────────────────────────────────────
 
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:26.8.18.2-alpine@sha256:652d6997949183f3493f8ff601149e3df4d476be829f0d02b9861454d040c410
     container_name: poro-clickhouse
     profiles: ["analytics"]
     environment:
       CLICKHOUSE_DB: poro_analytics
       CLICKHOUSE_USER: poro
-      CLICKHOUSE_PASSWORD: poro_dev_password
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD must be set in .env}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
       - "127.0.0.1:8123:8123"   # HTTP
@@ -203,6 +219,12 @@ services:
       nofile:
         soft: 262144
         hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
     networks:
       - poro-network
     restart: unless-stopped
@@ -212,7 +234,7 @@ services:
   # ─────────────────────────────────────────────
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.19.2@sha256:b7b0444c4c351c970b98e90a6f89c2ee4287c65b44e52b4cb503fa5b2aa927ad
     container_name: poro-qdrant
     profiles: ["analytics"]
     ports:
@@ -220,6 +242,18 @@ services:
       - "127.0.0.1:6334:6334"   # gRPC
     volumes:
       - poro_qdrant_data:/qdrant/storage
+    # L'image n'a ni curl, ni wget, ni bash : perl (Debian) interroge /readyz.
+    healthcheck:
+      test:
+        - CMD
+        - perl
+        - -MIO::Socket::INET
+        - -e
+        - '$$s = IO::Socket::INET->new(PeerAddr => "127.0.0.1:6333", Timeout => 3) or exit 1; print $$s "GET /readyz HTTP/1.0\r\n\r\n"; exit((<$$s> // "") =~ m{^HTTP/\S+ 200} ? 0 : 1)'
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
     networks:
       - poro-network
     restart: unless-stopped
@@ -242,7 +276,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: poro
-      POSTGRES_PASSWORD: poro_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: poro_auth
       POSTGRES_SSLMODE: disable
 
@@ -303,7 +337,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: poro
-      POSTGRES_PASSWORD: poro_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: poro_auth
       POSTGRES_SSLMODE: disable
       KAFKA_BROKERS: redpanda:29092
@@ -344,7 +378,7 @@ services:
       target: migrate
     container_name: poro-user-migrate
     environment:
-      DATABASE_URL: postgresql://poro:poro_dev_password@postgres:5432/poro_user?sslmode=disable
+      DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_user?sslmode=disable
     depends_on:
       postgres-init:
         condition: service_completed_successfully
@@ -361,7 +395,7 @@ services:
       APP_ENV: dev
       PORT: "8082"
       LOG_LEVEL: debug
-      DATABASE_URL: postgresql://poro:poro_dev_password@postgres:5432/poro_user?sslmode=disable
+      DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_user?sslmode=disable
       REDIS_URL: redis://redis:6379/1
       JWKS_URL: http://auth:8081/.well-known/jwks.json
       KAFKA_BROKERS: redpanda:29092
@@ -370,8 +404,8 @@ services:
       S3_ENDPOINT: http://seaweedfs:8333
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_BUCKET: poro-avatars
-      S3_ACCESS_KEY_ID: poro_dev
-      S3_SECRET_ACCESS_KEY: poro_dev_secret
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID must be set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY must be set in .env}
       CORS_ORIGINS: ${USER_CORS_ORIGINS:-}
     ports:
       - "127.0.0.1:8082:8082"
@@ -424,7 +458,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: poro
-      POSTGRES_PASSWORD: poro_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: poro_video
       POSTGRES_SSLMODE: disable
       REDIS_HOST: redis
@@ -437,8 +471,8 @@ services:
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_REGION: us-east-1
       S3_BUCKET: poro-videos
-      S3_ACCESS_KEY_ID: poro_dev
-      S3_SECRET_ACCESS_KEY: poro_dev_secret
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID must be set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY must be set in .env}
       S3_FORCE_PATH_STYLE: "true"
     ports:
       - "127.0.0.1:8083:8083"
@@ -468,7 +502,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: poro
-      POSTGRES_PASSWORD: poro_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: poro_video
       POSTGRES_SSLMODE: disable
       JWKS_URL: http://auth:8081/.well-known/jwks.json
@@ -477,8 +511,8 @@ services:
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_REGION: us-east-1
       S3_BUCKET: poro-videos
-      S3_ACCESS_KEY_ID: poro_dev
-      S3_SECRET_ACCESS_KEY: poro_dev_secret
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID must be set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY must be set in .env}
       S3_FORCE_PATH_STYLE: "true"
       FFMPEG_BIN: ffmpeg
       FFPROBE_BIN: ffprobe

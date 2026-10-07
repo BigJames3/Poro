@@ -142,6 +142,10 @@ jobs:
     defaults:
       run:
         working-directory: services/user
+    env:
+      # prisma.config.ts refuses an unset URL; generate never connects and
+      # the e2e tests start their own Postgres container.
+      DATABASE_URL: postgresql://ci@localhost:5432/ci
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

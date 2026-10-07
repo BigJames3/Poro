@@ -2,6 +2,8 @@ module github.com/poro/shared-go
 
 go 1.26.0
 
+toolchain go1.26.8
+
 require (
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/golang-jwt/jwt/v5 v5.3.1
