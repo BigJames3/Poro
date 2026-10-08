@@ -22,7 +22,8 @@ Fiber v2, pgx v5, port **8085**, base `poro_social`).
   pas de caractères de contrôle ni invisibles (bidi, zero-width). **Une seule
   profondeur** de réponse (`422 comment_reply_depth`).
 - Édition : auteur seulement, 15 minutes après la publication
-  (`403 comment_edit_window_closed`). Pas d'événement à l'édition.
+  (`403 comment_edit_window_closed`). Une édition qui change le texte publie
+  `poro.social.comment.updated` (texte complet).
 - Suppression (soft delete) : auteur ou propriétaire de la vidéo, idempotente.
   Un commentaire supprimé reste dans le fil, sans auteur ni texte, tant qu'il
   a des réponses visibles.
@@ -37,11 +38,18 @@ Fiber v2, pgx v5, port **8085**, base `poro_social`).
 | Sens | Topic | Clé (`subject`) |
 |---|---|---|
 | Produit | `poro.social.like.created`, `poro.social.like.deleted` | video_id |
-| Produit | `poro.social.comment.created`, `poro.social.comment.deleted` | video_id |
+| Produit | `poro.social.comment.created` (extrait et texte complet), `poro.social.comment.updated`, `poro.social.comment.deleted` | video_id |
 | Produit | `poro.social.follow.created`, `poro.social.follow.deleted` | follower_id |
 | Produit | `poro.social.share.created` | video_id |
 | Consommé | `poro.video.ready`, `poro.video.deleted` → `videos_projection` | groupe `poro-social-projections` |
 | Consommé | `poro.auth.user.created` → `users_projection` | groupe `poro-social-projections` |
+| Consommé | `poro.moderation.content.removed` / `.restored` | groupe `poro-social-projections` |
+
+Modération : une vidéo retirée passe à `removed` (plus aucune action ni lecture,
+`404 video_not_found`) jusqu'à sa restauration ; un `poro.video.ready` tardif ne
+la republie pas. Un commentaire retiré est supprimé comme par son auteur :
+compteurs mis à jour et `poro.social.comment.deleted` publié. Un commentaire
+retiré ne peut pas être restauré.
 
 Contrats : [`packages/contracts/events`](../../packages/contracts/events).
 Les événements produits passent par l'outbox et le relais `outbox-relay-social`.

@@ -300,6 +300,30 @@ describe('notification dispatcher', () => {
     expect(await notifications(author)).toEqual([]);
   });
 
+  it('forgets notifications about content removed by moderation', async () => {
+    const [owner, actor, video] = [uuidv7(), uuidv7(), uuidv7()];
+    const commentId = uuidv7();
+    await dispatcher.handle(like(actor, owner, video));
+    await dispatcher.handle(comment(actor, owner, uuidv7(), null, commentId));
+    const removed = (targetType: string, targetId: string) =>
+      event('poro.moderation.content.removed', {
+        case_id: uuidv7(),
+        target_type: targetType,
+        target_id: targetId,
+        owner_id: owner,
+        reason: 'spam',
+        decided_by: 'moderator',
+        removed_at: new Date().toISOString(),
+      });
+    await dispatcher.handle(removed('video', video));
+    expect((await notifications(owner)).map((row) => row.type)).toEqual(['comment']);
+    await dispatcher.handle(removed('comment', commentId));
+    expect(await notifications(owner)).toEqual([]);
+    await expect(dispatcher.handle(removed('user', owner))).rejects.toThrow(
+      'target_type must be video or comment',
+    );
+  });
+
   it('honours preferences: a muted type is not stored, push off keeps in-app', async () => {
     const [owner, actor, video] = [uuidv7(), uuidv7(), uuidv7()];
     await device(owner, 'token-owner-prefs-0000001');

@@ -21,14 +21,14 @@ func ReadyVideoOwner(ctx context.Context, db DBTX, videoID uuid.UUID) (uuid.UUID
 	return owner, nil
 }
 
-// MarkVideoReady records a ready video. A video already deleted stays deleted,
-// whatever order the events arrive in.
+// MarkVideoReady records a ready video. A video already deleted or removed by
+// moderation keeps that status, whatever order the events arrive in.
 func MarkVideoReady(ctx context.Context, db DBTX, videoID, ownerID uuid.UUID, at time.Time) error {
 	_, err := db.Exec(ctx, `INSERT INTO videos_projection (video_id, owner_id, status, updated_at)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (video_id) DO UPDATE SET owner_id = EXCLUDED.owner_id, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
-		WHERE videos_projection.status <> $5`,
-		videoID, ownerID, model.VideoReady, at, model.VideoDeleted)
+		WHERE videos_projection.status NOT IN ($5, $6)`,
+		videoID, ownerID, model.VideoReady, at, model.VideoDeleted, model.VideoRemoved)
 	if err != nil {
 		return fmt.Errorf("mark video ready: %w", err)
 	}
@@ -44,6 +44,33 @@ func MarkVideoDeleted(ctx context.Context, db DBTX, videoID, ownerID uuid.UUID, 
 		videoID, ownerID, model.VideoDeleted, at)
 	if err != nil {
 		return fmt.Errorf("mark video deleted: %w", err)
+	}
+	return nil
+}
+
+// MarkVideoRemoved hides a video removed by moderation. A deleted video stays
+// deleted; an unknown one is recorded removed, so a late video.ready cannot
+// publish it.
+func MarkVideoRemoved(ctx context.Context, db DBTX, videoID, ownerID uuid.UUID, at time.Time) error {
+	_, err := db.Exec(ctx, `INSERT INTO videos_projection (video_id, owner_id, status, updated_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (video_id) DO UPDATE SET status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+		WHERE videos_projection.status <> $5`,
+		videoID, ownerID, model.VideoRemoved, at, model.VideoDeleted)
+	if err != nil {
+		return fmt.Errorf("mark video removed: %w", err)
+	}
+	return nil
+}
+
+// MarkVideoRestored makes a removed video ready again. Other statuses are left
+// as they are.
+func MarkVideoRestored(ctx context.Context, db DBTX, videoID uuid.UUID, at time.Time) error {
+	_, err := db.Exec(ctx, `UPDATE videos_projection SET status = $2, updated_at = $3
+		WHERE video_id = $1 AND status = $4`,
+		videoID, model.VideoReady, at, model.VideoRemoved)
+	if err != nil {
+		return fmt.Errorf("mark video restored: %w", err)
 	}
 	return nil
 }

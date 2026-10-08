@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://poro.africa/events/poro.social.comment.created.v1.json",
-  "title": "poro.social.comment.created v1",
-  "description": "Published by social when a comment or a reply is posted. parent_id and parent_author_id are null for a top-level comment. text is the full comment; events published before it existed carry only the excerpt.",
+  "$id": "https://poro.africa/events/poro.social.comment.updated.v1.json",
+  "title": "poro.social.comment.updated v1",
+  "description": "Published by social when the author edits the text of a comment, within the edit window. Consumers that read the text (moderation, search) replace their copy.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -20,7 +20,7 @@
       "format": "uuid"
     },
     "type": {
-      "const": "poro.social.comment.created"
+      "const": "poro.social.comment.updated"
     },
     "version": {
       "const": 1
@@ -45,11 +45,8 @@
         "comment_id",
         "user_id",
         "video_id",
-        "video_owner_id",
-        "parent_id",
-        "parent_author_id",
-        "excerpt",
-        "created_at"
+        "text",
+        "updated_at"
       ],
       "properties": {
         "comment_id": {
@@ -64,37 +61,13 @@
           "type": "string",
           "format": "uuid"
         },
-        "video_owner_id": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "parent_id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "uuid"
-        },
-        "parent_author_id": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "uuid"
-        },
-        "excerpt": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 140,
-          "description": "First 140 characters of the comment."
-        },
         "text": {
           "type": "string",
           "minLength": 1,
           "maxLength": 1000,
-          "description": "Full text of the comment."
+          "description": "Full text after the edit."
         },
-        "created_at": {
+        "updated_at": {
           "type": "string",
           "format": "date-time"
         }

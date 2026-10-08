@@ -16,10 +16,12 @@ const (
 	MaxPageSize     = 50
 )
 
-// Video projection statuses. Only ready videos accept actions.
+// Video projection statuses. Only ready videos accept actions; a removed
+// video comes back to ready when moderation restores it.
 const (
 	VideoReady   = "ready"
 	VideoDeleted = "deleted"
+	VideoRemoved = "removed"
 )
 
 // EventSource identifies this service in event envelopes.

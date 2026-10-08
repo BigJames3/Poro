@@ -60,7 +60,10 @@ func contractSamples() map[string]any {
 		},
 		events.TypeSocialCommentCreated: events.SocialCommentCreatedV1{
 			CommentID: other, UserID: user, VideoID: id, VideoOwnerID: owner,
-			ParentID: &parent, ParentAuthorID: &owner, Excerpt: "Trop beau 🔥", CreatedAt: now,
+			ParentID: &parent, ParentAuthorID: &owner, Excerpt: "Trop beau 🔥", Text: "Trop beau 🔥", CreatedAt: now,
+		},
+		events.TypeSocialCommentUpdated: events.SocialCommentUpdatedV1{
+			CommentID: other, UserID: user, VideoID: id, Text: "Trop beau, bravo 🔥", UpdatedAt: now,
 		},
 		events.TypeSocialCommentDeleted: events.SocialCommentDeletedV1{
 			CommentID: other, VideoID: id, UserID: user, DeletedAt: now,
@@ -73,6 +76,13 @@ func contractSamples() map[string]any {
 		},
 		events.TypeSocialShareCreated: events.SocialShareCreatedV1{
 			ShareID: other, UserID: user, VideoID: id, VideoOwnerID: owner, Channel: events.ShareChannelWhatsApp, CreatedAt: now,
+		},
+		events.TypeModerationContentRemoved: events.ModerationContentRemovedV1{
+			CaseID: other, TargetType: events.ModerationTargetComment, TargetID: id, OwnerID: owner,
+			Reason: events.ModerationReasonHarassment, DecidedBy: events.ModerationDecidedByAuto, RemovedAt: now,
+		},
+		events.TypeModerationContentRestored: events.ModerationContentRestoredV1{
+			CaseID: other, TargetType: events.ModerationTargetVideo, TargetID: id, OwnerID: owner, RestoredAt: now,
 		},
 	}
 }
@@ -172,6 +182,18 @@ func TestSocialContractsRejectBadPayloads(t *testing.T) {
 	notUUID := samples[events.TypeSocialFollowCreated].(events.SocialFollowCreatedV1)
 	notUUID.FollowingID = "awa"
 
+	withoutText := samples[events.TypeSocialCommentCreated].(events.SocialCommentCreatedV1)
+	withoutText.Text = ""
+
+	longText := samples[events.TypeSocialCommentUpdated].(events.SocialCommentUpdatedV1)
+	longText.Text = strings.Repeat("a", 1001)
+
+	badReason := samples[events.TypeModerationContentRemoved].(events.ModerationContentRemovedV1)
+	badReason.Reason = "boring"
+
+	restoredComment := samples[events.TypeModerationContentRestored].(events.ModerationContentRestoredV1)
+	restoredComment.TargetType = events.ModerationTargetComment
+
 	cases := []struct {
 		name  string
 		typ   string
@@ -182,6 +204,10 @@ func TestSocialContractsRejectBadPayloads(t *testing.T) {
 		{"excerpt longer than 140", events.TypeSocialCommentCreated, longExcerpt, false},
 		{"unknown share channel", events.TypeSocialShareCreated, badChannel, false},
 		{"following_id must be a uuid", events.TypeSocialFollowCreated, notUUID, false},
+		{"comment without text predates the field", events.TypeSocialCommentCreated, withoutText, true},
+		{"edited text longer than 1000", events.TypeSocialCommentUpdated, longText, false},
+		{"unknown removal reason", events.TypeModerationContentRemoved, badReason, false},
+		{"comments cannot be restored", events.TypeModerationContentRestored, restoredComment, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

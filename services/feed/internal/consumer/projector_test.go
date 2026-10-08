@@ -63,6 +63,50 @@ func TestVideoLifecycleIsIdempotentAndNeverRevives(t *testing.T) {
 	require.True(t, row[bool](t, `SELECT deleted_at IS NOT NULL FROM videos WHERE video_id = $1`, early), "tombstone wins")
 }
 
+func TestModerationHidesAndRestoresVideos(t *testing.T) {
+	testdb.Available(t)
+	video, author := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	status := func(id uuid.UUID) string {
+		return row[string](t, `SELECT moderation_status FROM videos WHERE video_id = $1`, id)
+	}
+	removed := func(id uuid.UUID, target string) events.ModerationContentRemovedV1 {
+		return events.ModerationContentRemovedV1{CaseID: uuid.NewString(), TargetType: target, TargetID: id.String(),
+			OwnerID: author.String(), Reason: events.ModerationReasonSpam, DecidedBy: events.ModerationDecidedByAuto, RemovedAt: time.Now()}
+	}
+	restored := func(id uuid.UUID) events.ModerationContentRestoredV1 {
+		return events.ModerationContentRestoredV1{CaseID: uuid.NewString(), TargetType: events.ModerationTargetVideo,
+			TargetID: id.String(), OwnerID: author.String(), RestoredAt: time.Now()}
+	}
+
+	require.NoError(t, send(t, events.TypeVideoReady, ready(video, author, time.Now())))
+	require.NoError(t, send(t, events.TypeSocialLikeCreated, events.SocialLikeCreatedV1{
+		LikeID: uuid.NewString(), UserID: uuid.NewString(), VideoID: video.String(), VideoOwnerID: author.String(), CreatedAt: time.Now(),
+	}))
+	require.Positive(t, row[float64](t, `SELECT trending_score FROM video_stats WHERE video_id = $1`, video))
+
+	require.NoError(t, send(t, events.TypeModerationContentRemoved, removed(video, events.ModerationTargetVideo)))
+	require.Equal(t, "rejected", status(video))
+	require.Zero(t, row[float64](t, `SELECT trending_score FROM video_stats WHERE video_id = $1`, video))
+	require.NoError(t, send(t, events.TypeVideoReady, ready(video, author, time.Now())))
+	require.Equal(t, "rejected", status(video), "a late ready keeps the video hidden")
+
+	require.NoError(t, send(t, events.TypeModerationContentRestored, restored(video)))
+	require.Equal(t, "approved", status(video))
+	require.Positive(t, row[float64](t, `SELECT trending_score FROM video_stats WHERE video_id = $1`, video))
+	require.NoError(t, send(t, events.TypeModerationContentRestored, restored(video)), "restoring twice is a no-op")
+
+	early := uuid.Must(uuid.NewV7())
+	require.NoError(t, send(t, events.TypeModerationContentRemoved, removed(early, events.ModerationTargetVideo)))
+	require.NoError(t, send(t, events.TypeVideoReady, ready(early, author, time.Now())))
+	require.Equal(t, "rejected", status(early), "removed before ready stays hidden")
+	require.Equal(t, "Danse", row[string](t, `SELECT title FROM videos WHERE video_id = $1`, early))
+
+	comment := uuid.Must(uuid.NewV7())
+	require.NoError(t, send(t, events.TypeModerationContentRemoved, removed(comment, events.ModerationTargetComment)))
+	require.False(t, row[bool](t, `SELECT EXISTS (SELECT 1 FROM videos WHERE video_id = $1)`, comment),
+		"comments are handled through social.comment.deleted")
+}
+
 func TestLegacyReadyWithoutPublishedAt(t *testing.T) {
 	testdb.Available(t)
 	video, author := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
@@ -136,6 +180,11 @@ func TestProfileKeepsLatestSnapshot(t *testing.T) {
 	require.Equal(t, "awa.new", row[string](t, `SELECT username FROM authors WHERE author_id = $1`, author))
 }
 
+func withData(env events.Envelope, raw string) events.Envelope {
+	env.Data = json.RawMessage(raw)
+	return env
+}
+
 func TestBadEventsArePermanent(t *testing.T) {
 	h := consumer.NewProjector(nil, zap.NewNop())
 	mk := func(typ string, data any) events.Envelope {
@@ -159,6 +208,16 @@ func TestBadEventsArePermanent(t *testing.T) {
 		"profile no time":  mk(events.TypeUserProfileUpdated, events.UserProfileUpdatedV1{UserID: uuid.NewString()}),
 		"profile bad id":   mk(events.TypeUserProfileUpdated, events.UserProfileUpdatedV1{UserID: "x", UpdatedAt: time.Now()}),
 		"unknown type":     mk(events.TypeAuthUserCreated, events.AuthUserCreatedV1{UserID: uuid.NewString()}),
+		"removed user": mk(events.TypeModerationContentRemoved, events.ModerationContentRemovedV1{
+			TargetType: "user", TargetID: uuid.NewString(), OwnerID: uuid.NewString()}),
+		"removed bad id": mk(events.TypeModerationContentRemoved, events.ModerationContentRemovedV1{
+			TargetType: events.ModerationTargetVideo, TargetID: "x", OwnerID: uuid.NewString()}),
+		"restored comment": mk(events.TypeModerationContentRestored, events.ModerationContentRestoredV1{
+			TargetType: events.ModerationTargetComment, TargetID: uuid.NewString(), OwnerID: uuid.NewString()}),
+		"restored bad id": mk(events.TypeModerationContentRestored, events.ModerationContentRestoredV1{
+			TargetType: events.ModerationTargetVideo, TargetID: "x", OwnerID: uuid.NewString()}),
+		"removed wrong types":  withData(mk(events.TypeModerationContentRemoved, events.ModerationContentRemovedV1{}), `{"target_id": 1}`),
+		"restored wrong types": withData(mk(events.TypeModerationContentRestored, events.ModerationContentRestoredV1{}), `{"target_id": 1}`),
 	}
 	for name, env := range cases {
 		t.Run(name, func(t *testing.T) {

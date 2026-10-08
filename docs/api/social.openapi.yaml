@@ -157,6 +157,7 @@ paths:
     patch:
       tags: [comments]
       summary: Edit your comment within 15 minutes
+      description: A changed text publishes `poro.social.comment.updated` with the full text.
       requestBody:
         required: true
         content:

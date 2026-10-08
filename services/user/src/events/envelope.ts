@@ -15,7 +15,8 @@ export interface Envelope<T = unknown> {
 }
 
 export const EVENT_SOURCE = 'poro-user';
-const TYPE_PATTERN = /^poro\.[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
+// Same rule as shared-go/events: poro.{domain}.{action} or poro.{domain}.{entity}.{action}.
+const TYPE_PATTERN = /^poro(\.[a-z][a-z0-9_]*){2,3}$/;
 
 export class InvalidEnvelopeError extends Error {
   constructor(reason: string) {
@@ -49,7 +50,7 @@ export function validateEnvelope(env: Partial<Envelope>): asserts env is Envelop
     throw new InvalidEnvelopeError('missing id');
   }
   if (typeof env.type !== 'string' || !TYPE_PATTERN.test(env.type)) {
-    throw new InvalidEnvelopeError('type must match poro.{domain}.{entity}.{action}');
+    throw new InvalidEnvelopeError('type must match poro.{domain}[.{entity}].{action}');
   }
   if (typeof env.version !== 'number' || !Number.isInteger(env.version) || env.version < 1) {
     throw new InvalidEnvelopeError('version must be at least 1');
