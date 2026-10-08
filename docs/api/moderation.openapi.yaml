@@ -1,0 +1,310 @@
+openapi: 3.1.0
+info:
+  title: PORO Moderation API
+  version: 1.0.0
+  description: |
+    Reports from every account, and the moderation queue for the MODERATOR and ADMIN roles.
+    Removals and restorations are published as `poro.moderation.content.removed` and
+    `poro.moderation.content.restored`; feed, social and notification apply them.
+    Every JSON response uses the envelope `{data, error, meta}`; `meta.request_id` echoes the
+    `X-Request-ID` header. Clients must branch on `error.code`, never on `error.message`.
+    Access tokens are verified offline against `GET http://auth:8081/.well-known/jwks.json`.
+    Rate limits per account: 120 requests per minute, 10 reports per hour.
+servers:
+  - url: http://localhost:8087
+    description: Local development
+tags:
+  - name: reports
+  - name: cases
+  - name: platform
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/moderation/reports:
+    post:
+      tags: [reports]
+      summary: Report a video, a comment or an account
+      description: |
+        A second report of the same target by the same account returns the first one (`200`,
+        `created: false`). Reaching the report threshold (3 distinct accounts by default) moves
+        the case to high priority.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [target_type, target_id, reason]
+              properties:
+                target_type: { type: string, enum: [video, comment, user] }
+                target_id: { type: string, format: uuid }
+                reason: { $ref: "#/components/schemas/Reason" }
+                comment: { type: ["string", "null"], maxLength: 500 }
+      responses:
+        "201": { $ref: "#/components/responses/Report" }
+        "200": { $ref: "#/components/responses/Report" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422":
+          description: "`cannot_report_self`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+  /api/v1/moderation/cases:
+    get:
+      tags: [cases]
+      summary: Moderation queue, high priority first, then most recent activity
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, removed, dismissed, restored], default: open } }
+        - { name: target_type, in: query, schema: { type: string, enum: [video, comment, user] } }
+        - { name: priority, in: query, schema: { type: string, enum: [normal, high] } }
+        - { name: cursor, in: query, description: "Opaque `next_cursor` of the previous page.", schema: { type: string, maxLength: 200 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+      responses:
+        "200":
+          description: One page
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items, next_cursor]
+                        properties:
+                          items: { type: array, items: { $ref: "#/components/schemas/Case" } }
+                          next_cursor: { type: ["string", "null"] }
+        "400":
+          description: "`invalid_cursor` or `invalid_request`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/moderation/cases/{case_id}:
+    parameters:
+      - { name: case_id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [cases]
+      summary: A case with the content seen, the latest 50 reports and every decision
+      responses:
+        "200": { $ref: "#/components/responses/CaseDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/CaseNotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/moderation/cases/{case_id}/decision:
+    parameters:
+      - { name: case_id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [cases]
+      summary: Remove, dismiss or restore
+      description: |
+        `remove` (open, dismissed or restored case; reason required) publishes
+        `poro.moderation.content.removed`. `restore` (removed video only) publishes
+        `poro.moderation.content.restored`. `dismiss` closes an open case. Accounts can only be dismissed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action]
+              properties:
+                action: { type: string, enum: [remove, dismiss, restore] }
+                reason: { $ref: "#/components/schemas/Reason" }
+                note: { type: ["string", "null"], maxLength: 500 }
+      responses:
+        "200": { $ref: "#/components/responses/CaseDetail" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/CaseNotFound" }
+        "409":
+          description: "`invalid_transition`, or `target_unknown` (content not received yet)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: "`reason_required`, `action_not_allowed` or `restore_not_supported`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/health:
+    get:
+      tags: [platform]
+      summary: Readiness (Postgres, Redis); same as /health/ready
+      security: []
+      responses:
+        "200": { description: Ready }
+        "503": { description: Degraded }
+  /health/live:
+    get:
+      tags: [platform]
+      summary: Liveness; checks nothing
+      security: []
+      responses:
+        "200": { description: Alive }
+  /health/ready:
+    get:
+      tags: [platform]
+      summary: Readiness (Postgres, Redis)
+      security: []
+      responses:
+        "200": { description: Ready }
+        "503": { description: Degraded }
+  /metrics:
+    get:
+      tags: [platform]
+      summary: Prometheus metrics; never exposed by the public gateway
+      security: []
+      responses:
+        "200": { description: Prometheus text format }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Reason:
+      type: string
+      enum: [spam, nudity, violence, harassment, hate, fraud, other]
+    Envelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: {}
+        error: { type: "null" }
+        meta: { type: object, properties: { request_id: { type: string } } }
+    ErrorEnvelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: { type: "null" }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_json
+                - invalid_request
+                - invalid_cursor
+                - unauthorized
+                - forbidden
+                - not_found
+                - case_not_found
+                - cannot_report_self
+                - reason_required
+                - action_not_allowed
+                - restore_not_supported
+                - invalid_transition
+                - target_unknown
+                - rate_limited
+                - unavailable
+                - internal_error
+            message: { type: string }
+        meta: { type: object, properties: { request_id: { type: string } } }
+    Case:
+      type: object
+      required: [id, target_type, target_id, owner_id, status, priority, reports_count, auto_verdict, auto_reason, auto_matches, reason, created_at, updated_at, decided_at]
+      properties:
+        id: { type: string, format: uuid }
+        target_type: { type: string, enum: [video, comment, user] }
+        target_id: { type: string, format: uuid }
+        owner_id: { type: ["string", "null"], format: uuid, description: "Null until the content reaches moderation." }
+        status: { type: string, enum: [open, removed, dismissed, restored] }
+        priority: { type: string, enum: [normal, high] }
+        reports_count: { type: integer, minimum: 0 }
+        auto_verdict: { type: ["string", "null"], enum: [allow, review, block, null] }
+        auto_reason: { oneOf: [{ $ref: "#/components/schemas/Reason" }, { type: "null" }] }
+        auto_matches: { type: array, items: { type: string }, description: "Rules that fired, e.g. review:harassment:connard." }
+        reason: { oneOf: [{ $ref: "#/components/schemas/Reason" }, { type: "null" }] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        decided_at: { type: ["string", "null"], format: date-time }
+    CaseDetail:
+      allOf:
+        - $ref: "#/components/schemas/Case"
+        - type: object
+          required: [content, reports, decisions]
+          properties:
+            content:
+              oneOf:
+                - type: "null"
+                - type: object
+                  required: [text, video_id, seen_at]
+                  properties:
+                    text: { type: string }
+                    video_id: { type: ["string", "null"], format: uuid }
+                    seen_at: { type: string, format: date-time }
+            reports:
+              type: array
+              items:
+                type: object
+                required: [id, reporter_id, reason, comment, created_at]
+                properties:
+                  id: { type: string, format: uuid }
+                  reporter_id: { type: string, format: uuid }
+                  reason: { $ref: "#/components/schemas/Reason" }
+                  comment: { type: ["string", "null"] }
+                  created_at: { type: string, format: date-time }
+            decisions:
+              type: array
+              items:
+                type: object
+                required: [action, reason, note, decided_by, moderator_id, created_at]
+                properties:
+                  action: { type: string, enum: [remove, dismiss, restore] }
+                  reason: { oneOf: [{ $ref: "#/components/schemas/Reason" }, { type: "null" }] }
+                  note: { type: ["string", "null"] }
+                  decided_by: { type: string, enum: [auto, moderator] }
+                  moderator_id: { type: ["string", "null"], format: uuid }
+                  created_at: { type: string, format: date-time }
+  responses:
+    Report:
+      description: The report (201 when new, 200 when it already existed)
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    required: [report_id, case_id, created]
+                    properties:
+                      report_id: { type: string, format: uuid }
+                      case_id: { type: string, format: uuid }
+                      created: { type: boolean }
+    CaseDetail:
+      description: The case
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data: { $ref: "#/components/schemas/CaseDetail" }
+    CaseNotFound:
+      description: "`case_not_found`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    InvalidRequest:
+      description: "`invalid_json` or `invalid_request`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Unauthorized:
+      description: "`unauthorized`: missing, expired or forged access token"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Forbidden:
+      description: "`forbidden`: MODERATOR or ADMIN role required"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    RateLimited:
+      description: "`rate_limited`, with `Retry-After`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Unavailable:
+      description: "`unavailable`: JWKS unreachable"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }

@@ -69,7 +69,7 @@ services:
     command:
       - |
         set -eu
-        for db in poro_auth poro_user poro_video poro_social poro_feed poro_notification; do
+        for db in poro_auth poro_user poro_video poro_social poro_feed poro_notification poro_moderation; do
           if [ "$$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$$db'")" != "1" ]; then
             psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE $$db OWNER poro"
           fi
@@ -635,6 +635,70 @@ services:
       auth:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # SERVICE MODERATION (signalements, filtre automatique, file des modérateurs)
+  # ─────────────────────────────────────────────
+
+  moderation-migrate:
+    build:
+      context: ./services/moderation
+      target: migrate
+    container_name: poro-moderation-migrate
+    environment:
+      DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_moderation?sslmode=disable
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: "no"
+
+  moderation:
+    build:
+      context: ./services/moderation
+      target: runtime
+    container_name: poro-moderation
+    environment:
+      APP_ENV: dev
+      PORT: "8087"
+      LOG_LEVEL: DEBUG
+      DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_moderation?sslmode=disable
+      REDIS_URL: redis://redis:6379/6
+      JWKS_URL: http://auth:8081/.well-known/jwks.json
+      KAFKA_BROKERS: redpanda:29092
+    ports:
+      - "127.0.0.1:8087:8087"
+    depends_on:
+      moderation-migrate:
+        condition: service_completed_successfully
+      auth:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  outbox-relay-moderation:
+    build:
+      context: .
+      dockerfile: services/outbox-relay/Dockerfile
+    container_name: poro-outbox-relay-moderation
+    environment:
+      <<: *relay-env
+      RELAY_SOURCE: moderation
+      POSTGRES_DB: poro_moderation
+    depends_on:
+      moderation:
         condition: service_healthy
       redpanda-init:
         condition: service_completed_successfully
