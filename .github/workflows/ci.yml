@@ -25,6 +25,7 @@ jobs:
       social: ${{ steps.filter.outputs.social }}
       feed: ${{ steps.filter.outputs.feed }}
       notification: ${{ steps.filter.outputs.notification }}
+      moderation: ${{ steps.filter.outputs.moderation }}
       mobile: ${{ steps.filter.outputs.mobile }}
     steps:
       - uses: actions/checkout@v4
@@ -67,6 +68,10 @@ jobs:
               - '.github/workflows/ci.yml'
             notification:
               - 'services/notification/**'
+              - 'packages/contracts/events/**'
+              - '.github/workflows/ci.yml'
+            moderation:
+              - 'services/moderation/**'
               - 'packages/contracts/events/**'
               - '.github/workflows/ci.yml'
             mobile:
@@ -216,6 +221,35 @@ jobs:
         run: npm run test:cov
       - name: Docker build
         run: docker build -t poro-notification:${{ github.sha }} .
+
+  moderation:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.moderation == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/moderation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install uv
+        run: pip install uv==0.11.32
+      - name: Install
+        run: uv sync --frozen
+      - name: Format
+        run: uv run ruff format --check src tests migrations
+      - name: Lint
+        run: uv run ruff check src tests migrations
+      - name: Typecheck
+        run: uv run mypy
+      - name: Tests
+        run: uv run pytest --cov --cov-report=term
+      - name: Audit
+        run: uv run pip-audit --skip-editable
+      - name: Docker build
+        run: docker build -t poro-moderation:${{ github.sha }} .
 
   video:
     needs: detect-changes

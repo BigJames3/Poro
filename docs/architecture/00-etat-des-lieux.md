@@ -15,7 +15,8 @@ il est mis à jour à chaque jalon P0.
 | `services/notification` (NestJS 11, Prisma 7, port 8086) | Notifications in-app (likes regroupés par vidéo et par heure, commentaires, réponses, abonnements, vidéo en ligne), push FCM après commit, préférences par type, purge à 90 jours. |
 | `packages/shared-go` | HTTP envelope, JWKS, health, Prometheus, OTel, outbox/inbox, Kafka. |
 | `services/outbox-relay` | Relais SQL → Redpanda (un processus par base). |
-| Autres services (`moderation`, `search`, `chat`, `shop`, …) | Aucun code. Seulement listés dans `.cursor/rules/project.md`. |
+| `services/moderation` (Python 3.13, FastAPI, port 8087) | Signalements, filtre automatique par règles (retrait immédiat des contenus bloquants), file des modérateurs ; outbox `poro.moderation.*`. |
+| Autres services (`search`, `chat`, `shop`, …) | Aucun code. Seulement listés dans `.cursor/rules/project.md`. |
 | `packages/`, `infra/`, `data/`, `docs/` | Vides avant ce jalon. |
 | `apps/mobile-android` | Projet Android Studio (36 fichiers suivis), ne consomme encore aucune API. Non modifié. |
 | `docker-compose.yml` | Postgres 16 (`poro_auth`, `poro_user`, `poro_video`), Redis 7, SeaweedFS (avatars + videos), Redpanda, auth, user, video, media-worker, relais outbox. |
@@ -107,7 +108,7 @@ reste acceptable hors auth jusqu'à 15 min ([ADR-0005](adr/0005-evenements-json-
 | P0-6 | Social : follow, like, commentaire, partage, compteurs | **Fait** — [ADR-0008](adr/0008-services-separes.md) |
 | P0-7 | Feed : following, chronologique, trending, For You à règles ; pagination par curseur ; cache Redis | **Fait** — [ADR-0009](adr/0009-feed-v1.md) |
 | P0-8 | Notifications push FCM | **Fait** — in-app + FCM ; [runbook](../runbooks/notification.md) |
-| P0-9 | Modération de base : signalement, filtre texte, actions ADMIN/MODERATOR | À faire |
+| P0-9 | Modération de base : signalement, filtre texte, actions ADMIN/MODERATOR | **Fait** — [ADR-0010](adr/0010-moderation-v1-vague-2.md) ; reste : quarantaine des médias dans video |
 | P0-10 | Fournisseur SMS réel (Africa's Talking), liste des pays autorisés, anti-SMS pumping | **Fait** — [ADR-0004](adr/0004-decisions-produit-lancement.md) ; reste : compte, Sender ID, tarifs |
 | P0-11 | CI : golangci-lint, gosec, Trivy (actions épinglées par SHA), Dependabot | À faire |
 | P0-12 | Staging : Terraform + k3s + Helm + ingress, sauvegardes Postgres (après vérification des prix actuels) | À faire |

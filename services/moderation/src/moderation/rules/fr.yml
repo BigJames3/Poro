@@ -1,0 +1,91 @@
+# Listes de termes du filtre automatique (français d'Afrique de l'Ouest et
+# centrale). Chaque terme est comparé après normalisation : minuscules, sans
+# accents, chiffres de leetspeak remplacés (0→o, 1→i, 3→e, 4→a, 5→s, 7→t, @→a,
+# $→s), lettres répétées réduites à une seule, ponctuation retirée.
+# Un terme de plusieurs mots doit apparaître mot pour mot dans cet ordre.
+#
+# block  : retrait immédiat du contenu (vidéo ou commentaire).
+# review : dossier en file de modération, priorité haute.
+# Motifs : spam, nudity, violence, harassment, hate, fraud, other.
+
+block:
+  hate:
+    - sale negre
+    - sale noir
+    - sale arabe
+    - bougnoule
+    - youpin
+    - sale juif
+    - sale pede
+    - pedale
+    - gouine
+    - macaque
+  violence:
+    - je vais te tuer
+    - on va te tuer
+    - je vais te buter
+    - je vais te bruler
+    - va te pendre
+    - suicide toi
+  nudity:
+    - envoie tes nudes
+    - envoie nude
+    - video porno
+    - porno gratuit
+    - nude gratuit
+    - xxx gratuit
+  fraud:
+    - gagnant de la loterie
+    - vous avez gagne
+    - envoie ton code
+    - donne ton code secret
+
+review:
+  harassment:
+    - connard
+    - connasse
+    - salope
+    - pute
+    - putain de
+    - encule
+    - batard
+    - fdp
+    - fils de pute
+    - ntm
+    - nique ta mere
+    - ta gueule
+    - ferme ta gueule
+    - idiot
+    - imbecile
+    - debile
+    - abruti
+    - grosse vache
+  violence:
+    - creve
+    - je te frappe
+    - je vais te frapper
+  nudity:
+    - nude
+    - nudes
+    - porno
+    - xxx
+    - sexe gratuit
+  fraud:
+    - transfert d'argent rapide
+    - double ton argent
+    - multiplie ton argent
+
+# Mots qui, avec un numéro de téléphone, signalent une arnaque au paiement
+# mobile : le contenu est retiré (motif fraud).
+money_terms:
+  - orange money
+  - wave
+  - mtn momo
+  - momo
+  - moov money
+  - free money
+  - transfert
+  - depot
+  - envoie
+  - gagne
+  - code
