@@ -43,6 +43,22 @@ Bucket `poro-videos` créé ? (`seaweedfs-init`). Clé
 `videos/<user_id>/<video_id>/hls/master.m3u8`. L'URL publique utilise
 `S3_PUBLIC_ENDPOINT` (localhost:9000 en dev).
 
+## Vidéo retirée par la modération ou supprimée
+
+`SELECT moderation_status, moderated_at, deleted_at FROM videos WHERE id = '<id>';`
+Les médias d'une vidéo `removed` ou supprimée sont dans le bucket privé
+`poro-quarantine` (mêmes clés, préfixe `videos/<user_id>/<video_id>/`). Le
+groupe `poro-video-moderation` les déplace ; une restauration
+(`poro.moderation.content.restored`) les remet dans `poro-videos`, sauf pour une
+vidéo supprimée entre-temps.
+
+- Médias encore publics après un retrait : lag du groupe
+  `rpk group describe poro-video-moderation --brokers localhost:9092`, puis la DLQ
+  `rpk topic consume poro.moderation.content.removed.dlq` (en-tête `x-poro-error`).
+  Un échec S3 est retenté (le statut est déjà enregistré, le déplacement est idempotent).
+- Le CDN peut servir les segments déjà en cache jusqu'à l'expiration de leur TTL :
+  purger le préfixe dans Bunny si l'urgence l'exige.
+
 ## FFmpeg absent
 
 L'image worker installe `ffmpeg`. En local : `ffmpeg` et `ffprobe` sur le PATH,

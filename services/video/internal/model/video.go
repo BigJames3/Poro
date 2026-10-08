@@ -8,6 +8,9 @@ const (
 	StatusReady      = "ready"
 	StatusFailed     = "failed"
 
+	ModerationApproved = "approved"
+	ModerationRemoved  = "removed"
+
 	MaxBytes            = 256 << 20
 	MaxDurationSeconds  = 180
 	PartSize            = 8 << 20
@@ -55,6 +58,10 @@ type Video struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	DeletedAt    *time.Time
+	// ModerationStatus is approved or removed; a removed video is shown to
+	// its owner only, without media.
+	ModerationStatus string
+	ModeratedAt      *time.Time
 }
 
 // PartCount is how many multipart parts a client must upload for size bytes.
@@ -77,6 +84,11 @@ func SourceKey(userID, videoID, ext string) string {
 // HLSDir is the prefix of transcoded HLS objects.
 func HLSDir(userID, videoID string) string {
 	return "videos/" + userID + "/" + videoID + "/hls"
+}
+
+// MediaPrefix holds every object of a video: source, HLS and thumbnail.
+func MediaPrefix(userID, videoID string) string {
+	return "videos/" + userID + "/" + videoID + "/"
 }
 
 // ThumbKey is the JPEG thumbnail object key.

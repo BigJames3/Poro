@@ -108,7 +108,7 @@ reste acceptable hors auth jusqu'à 15 min ([ADR-0005](adr/0005-evenements-json-
 | P0-6 | Social : follow, like, commentaire, partage, compteurs | **Fait** — [ADR-0008](adr/0008-services-separes.md) |
 | P0-7 | Feed : following, chronologique, trending, For You à règles ; pagination par curseur ; cache Redis | **Fait** — [ADR-0009](adr/0009-feed-v1.md) |
 | P0-8 | Notifications push FCM | **Fait** — in-app + FCM ; [runbook](../runbooks/notification.md) |
-| P0-9 | Modération de base : signalement, filtre texte, actions ADMIN/MODERATOR | **Fait** — [ADR-0010](adr/0010-moderation-v1-vague-2.md) ; reste : quarantaine des médias dans video |
+| P0-9 | Modération de base : signalement, filtre texte, actions ADMIN/MODERATOR | **Fait** — [ADR-0010](adr/0010-moderation-v1-vague-2.md) ; médias des vidéos retirées ou supprimées en quarantaine (bucket privé) |
 | P0-10 | Fournisseur SMS réel (Africa's Talking), liste des pays autorisés, anti-SMS pumping | **Fait** — [ADR-0004](adr/0004-decisions-produit-lancement.md) ; reste : compte, Sender ID, tarifs |
 | P0-11 | CI : golangci-lint, gosec, Trivy (actions épinglées par SHA), Dependabot | À faire |
 | P0-12 | Staging : Terraform + k3s + Helm + ingress, sauvegardes Postgres (après vérification des prix actuels) | À faire |

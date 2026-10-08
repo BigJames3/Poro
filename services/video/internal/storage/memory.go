@@ -5,16 +5,18 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
 
 // Memory is an in-process object store for tests.
 type Memory struct {
-	mu      sync.Mutex
-	objects map[string][]byte
-	uploads map[string]*memUpload
-	seq     atomic.Int64
+	mu         sync.Mutex
+	objects    map[string][]byte
+	quarantine map[string][]byte
+	uploads    map[string]*memUpload
+	seq        atomic.Int64
 }
 
 type memUpload struct {
@@ -24,7 +26,7 @@ type memUpload struct {
 
 // NewMemory builds an empty store.
 func NewMemory() *Memory {
-	return &Memory{objects: map[string][]byte{}, uploads: map[string]*memUpload{}}
+	return &Memory{objects: map[string][]byte{}, quarantine: map[string][]byte{}, uploads: map[string]*memUpload{}}
 }
 
 func (m *Memory) CreateMultipart(_ context.Context, key, _ string) (string, error) {
@@ -145,4 +147,44 @@ func (m *Memory) Bytes(key string) []byte {
 	out := make([]byte, len(b))
 	copy(out, b)
 	return out
+}
+
+func (m *Memory) Hide(_ context.Context, prefix string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return moveObjects(m.objects, m.quarantine, prefix), nil
+}
+
+func (m *Memory) Reveal(_ context.Context, prefix string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return moveObjects(m.quarantine, m.objects, prefix), nil
+}
+
+// Quarantined reports whether key sits in the quarantine bucket.
+func (m *Memory) Quarantined(key string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.quarantine[key]
+	return ok
+}
+
+// Has reports whether key sits in the public bucket.
+func (m *Memory) Has(key string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.objects[key]
+	return ok
+}
+
+func moveObjects(from, to map[string][]byte, prefix string) int {
+	moved := 0
+	for key, body := range from {
+		if strings.HasPrefix(key, prefix) {
+			to[key] = body
+			delete(from, key)
+			moved++
+		}
+	}
+	return moved
 }

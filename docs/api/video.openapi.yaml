@@ -169,7 +169,9 @@ paths:
       tags: [videos]
       security: []
       summary: Get a video
-      description: Ready videos are public. Other statuses are owner-only (404 otherwise).
+      description: |
+        Ready videos are public. Other statuses, and videos removed by moderation, are owner-only
+        (404 otherwise). The owner of a removed video gets `moderation_status: removed` and no media URL.
       parameters:
         - $ref: "#/components/parameters/VideoID"
       responses:
@@ -188,6 +190,7 @@ paths:
     delete:
       tags: [videos]
       summary: Soft-delete own video
+      description: The media leave the public bucket shortly after (quarantine bucket).
       parameters:
         - $ref: "#/components/parameters/VideoID"
       responses:
@@ -251,7 +254,7 @@ components:
               url: { type: string, format: uri }
     Video:
       type: object
-      required: [id, user_id, title, description, status, created_at]
+      required: [id, user_id, title, description, status, moderation_status, created_at]
       properties:
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
@@ -260,6 +263,10 @@ components:
         status:
           type: string
           enum: [uploading, processing, ready, failed]
+        moderation_status:
+          type: string
+          enum: [approved, removed]
+          description: "`removed`: hidden by moderation; only its owner sees it, without media URLs."
         duration_ms: { type: integer }
         width: { type: integer }
         height: { type: integer }

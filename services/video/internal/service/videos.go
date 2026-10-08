@@ -237,7 +237,7 @@ func (s *Videos) Get(ctx context.Context, id uuid.UUID, viewer *uuid.UUID) (*dto
 		return nil, errInternal.WithCause(err)
 	}
 	owner := viewer != nil && viewer.String() == row.UserID
-	if row.Status != model.StatusReady && !owner {
+	if (row.Status != model.StatusReady || row.ModerationStatus == model.ModerationRemoved) && !owner {
 		return nil, errNotFound
 	}
 	return s.view(row, owner), nil
@@ -322,9 +322,10 @@ func (s *Videos) Delete(ctx context.Context, userID, videoID uuid.UUID) error {
 func (s *Videos) view(row *model.Video, owner bool) *dto.VideoView {
 	v := &dto.VideoView{
 		ID: row.ID, UserID: row.UserID, Title: row.Title, Description: row.Description,
-		Status: row.Status, CreatedAt: row.CreatedAt,
+		Status: row.Status, ModerationStatus: row.ModerationStatus, CreatedAt: row.CreatedAt,
 	}
-	if row.Status == model.StatusReady {
+	// A removed video keeps no media URL: its objects are in quarantine.
+	if row.Status == model.StatusReady && row.ModerationStatus != model.ModerationRemoved {
 		v.DurationMs, v.Width, v.Height = row.DurationMs, row.Width, row.Height
 		if row.HLSKey != nil {
 			u := s.public(*row.HLSKey)

@@ -40,8 +40,9 @@ une inférence CPU lente sur les postes de développement, sans GPU.
 
 - Un commentaire retiré ne peut pas être restauré en v1 (il faudrait le
   republier sans renotifier).
-- Les médias d'une vidéo retirée restent servis par l'API video et le
-  stockage objet tant que video ne consomme pas `content.removed` : à traiter
-  dans le plan du service moderation.
+- Video consomme `content.removed` et `content.restored` : une vidéo retirée
+  répond 404 sauf à son propriétaire, et ses médias passent dans le bucket
+  privé `poro-quarantine` (de même pour une vidéo supprimée). Le cache CDN
+  n'est pas purgé automatiquement.
 - Un modèle ML pourra s'ajouter derrière le même contrat, sans changer les
   consommateurs.

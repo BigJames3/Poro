@@ -16,6 +16,7 @@ import (
 	"github.com/poro/shared-go/health"
 	"github.com/poro/shared-go/httpx"
 	"github.com/poro/shared-go/jwtauth"
+	"github.com/poro/shared-go/kafka"
 	"github.com/poro/shared-go/logging"
 	"github.com/poro/shared-go/metrics"
 	"github.com/poro/shared-go/tracing"
@@ -24,6 +25,7 @@ import (
 	"github.com/poro/video/internal/database"
 	"github.com/poro/video/internal/handler"
 	"github.com/poro/video/internal/middleware"
+	"github.com/poro/video/internal/moderation"
 	"github.com/poro/video/internal/repository"
 	"github.com/poro/video/internal/routes"
 	"github.com/poro/video/internal/service"
@@ -85,7 +87,16 @@ func run() error {
 		return fmt.Errorf("init rate limiter: %w", err)
 	}
 
-	svc := service.NewVideos(cfg, repository.New(pool), store, log)
+	repo := repository.New(pool)
+	svc := service.NewVideos(cfg, repo, store, log)
+	moderator, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   moderation.Group,
+		Topics:  moderation.Topics,
+	}, moderation.New(pool, repo, store, log).Handle, log)
+	if err != nil {
+		return fmt.Errorf("init moderation consumer: %w", err)
+	}
 
 	app := fiber.New(fiber.Config{
 		AppName:                 "poro-video",
@@ -112,6 +123,12 @@ func run() error {
 		Limiter: limiter,
 	})
 
+	consumerDone := make(chan struct{})
+	go func() {
+		defer close(consumerDone)
+		_ = moderator.Run(ctx)
+	}()
+
 	addr := ":" + cfg.AppPort
 	errCh := make(chan error, 1)
 	go func() { errCh <- app.Listen(addr) }()
@@ -130,6 +147,10 @@ func run() error {
 	defer cancel()
 	if err := app.ShutdownWithContext(shutdownCtx); err != nil && listenErr == nil {
 		listenErr = fmt.Errorf("shutdown: %w", err)
+	}
+	select {
+	case <-consumerDone:
+	case <-shutdownCtx.Done():
 	}
 	log.Info("video service stopped")
 	return listenErr

@@ -27,4 +27,9 @@ type Storage interface {
 	Get(ctx context.Context, key string, dest io.Writer) error
 	Put(ctx context.Context, key, contentType string, body io.Reader) error
 	Delete(ctx context.Context, key string) error
+	// Hide moves every object under prefix from the public bucket to the
+	// private quarantine bucket; Reveal moves them back. Both are idempotent
+	// and return how many objects moved.
+	Hide(ctx context.Context, prefix string) (int, error)
+	Reveal(ctx context.Context, prefix string) (int, error)
 }

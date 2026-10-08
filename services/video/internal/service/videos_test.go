@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -133,4 +134,41 @@ func TestCompleteWrongPartCount(t *testing.T) {
 	require.NoError(t, err)
 	_, err = svc.Complete(ctx, user, uuid.MustParse(init.VideoID), dto.CompleteRequest{})
 	require.Error(t, err)
+}
+
+func TestRemovedVideosAreHiddenFromEveryoneButTheOwner(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newSvc(t)
+	repo := repository.New(testdb.Pool)
+	user, id := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	now := time.Now().UTC()
+	require.NoError(t, repo.Create(ctx, &model.Video{
+		ID: id.String(), UserID: user.String(), Title: "t", Status: model.StatusProcessing, ContentType: "video/mp4",
+		SizeBytes: 1, SourceKey: model.SourceKey(user.String(), id.String(), "mp4"), CreatedAt: now, UpdatedAt: now,
+	}))
+	tx, err := testdb.Pool.Begin(ctx)
+	require.NoError(t, err)
+	require.NoError(t, repo.MarkReady(ctx, tx, id, 1000, 720, 1280, "videos/x/master.m3u8", "videos/x/thumb.jpg", nil))
+	require.NoError(t, tx.Commit(ctx))
+
+	stranger := uuid.Must(uuid.NewV7())
+	visible, err := svc.Get(ctx, id, &stranger)
+	require.NoError(t, err)
+	require.Equal(t, model.ModerationApproved, visible.ModerationStatus)
+	require.NotNil(t, visible.HLSURL)
+
+	_, err = repo.SetModeration(ctx, id, model.ModerationRemoved, now)
+	require.NoError(t, err)
+	for _, viewer := range []*uuid.UUID{&stranger, nil} {
+		_, err = svc.Get(ctx, id, viewer)
+		require.Error(t, err)
+	}
+	own, err := svc.Get(ctx, id, &user)
+	require.NoError(t, err)
+	require.Equal(t, model.ModerationRemoved, own.ModerationStatus)
+	require.Nil(t, own.HLSURL, "a removed video exposes no media URL")
+	require.Nil(t, own.ThumbnailURL)
+	listed, err := svc.List(ctx, user, "", 20)
+	require.NoError(t, err)
+	require.Equal(t, model.ModerationRemoved, listed.Items[0].ModerationStatus)
 }

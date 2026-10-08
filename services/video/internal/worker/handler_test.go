@@ -138,3 +138,62 @@ func TestHandlerMarksFailedTooLong(t *testing.T) {
 	require.Equal(t, model.StatusFailed, got.Status)
 	require.Equal(t, events.VideoFailTooLong, *got.FailureCode)
 }
+
+// slowFF stands for a transcode during which a moderator removes the video
+// or its owner deletes it: the API sees no media yet and moves nothing.
+type slowFF struct {
+	fakeFF
+	during func()
+}
+
+func (f slowFF) Transcode(ctx context.Context, src, workDir, userID, videoID string) (*transcode.Output, error) {
+	f.during()
+	return f.fakeFF.Transcode(ctx, src, workDir, userID, videoID)
+}
+
+func TestMediaOfAVideoWithdrawnDuringTranscodeAreQuarantined(t *testing.T) {
+	ctx := context.Background()
+	repo := repository.New(testdb.Pool)
+	for name, withdraw := range map[string]func(user, id uuid.UUID){
+		"removed by moderation": func(_, id uuid.UUID) {
+			_, err := repo.SetModeration(ctx, id, model.ModerationRemoved, time.Now())
+			require.NoError(t, err)
+		},
+		"deleted by its owner": func(user, id uuid.UUID) {
+			tx, err := testdb.Pool.Begin(ctx)
+			require.NoError(t, err)
+			_, err = repo.SoftDelete(ctx, tx, id, user)
+			require.NoError(t, err)
+			require.NoError(t, tx.Commit(ctx))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			user, id := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+			seedProcessing(t, user, id)
+			mem := storage.NewMemory()
+			key := model.SourceKey(user.String(), id.String(), "mp4")
+			require.NoError(t, mem.Put(ctx, key, "video/mp4", bytes.NewReader([]byte("src"))))
+			ff := slowFF{during: func() { withdraw(user, id) }}
+			h := worker.New(testdb.Pool, repo, mem, ff, zap.NewNop())
+			require.NoError(t, h.Handle(ctx, uploadedEnv(t, user, id, key)))
+
+			thumb := model.ThumbKey(user.String(), id.String())
+			require.False(t, mem.Has(thumb), "no media stays public")
+			require.True(t, mem.Quarantined(thumb))
+			require.True(t, mem.Quarantined(model.HLSDir(user.String(), id.String())+"/master.m3u8"))
+		})
+	}
+}
+
+func TestHideIfWithdrawnLeavesApprovedVideosAlone(t *testing.T) {
+	ctx := context.Background()
+	user, id := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	seedProcessing(t, user, id)
+	mem := storage.NewMemory()
+	thumb := model.ThumbKey(user.String(), id.String())
+	require.NoError(t, mem.Put(ctx, thumb, "image/jpeg", bytes.NewReader([]byte("jpg"))))
+	h := worker.New(testdb.Pool, repository.New(testdb.Pool), mem, fakeFF{}, zap.NewNop())
+	require.NoError(t, h.HideIfWithdrawn(ctx, id))
+	require.True(t, mem.Has(thumb))
+	require.NoError(t, h.HideIfWithdrawn(ctx, uuid.Must(uuid.NewV7())), "an unknown video is ignored")
+}
