@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.moderation.content.removed.v1.json",
+  "title": "poro.moderation.content.removed v1",
+  "description": "Published by moderation when a video or a comment is removed, automatically or by a moderator. Social soft-deletes a removed comment (and publishes poro.social.comment.deleted); feed and social hide a removed video until it is restored.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "type",
+    "version",
+    "source",
+    "subject",
+    "occurred_at",
+    "data"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "const": "poro.moderation.content.removed"
+    },
+    "version": {
+      "const": 1
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "subject": {
+      "type": "string",
+      "format": "uuid",
+      "description": "target id (video or comment)"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "target_type",
+        "target_id",
+        "owner_id",
+        "reason",
+        "decided_by",
+        "removed_at"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "target_type": {
+          "type": "string",
+          "enum": [
+            "video",
+            "comment"
+          ]
+        },
+        "target_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "owner_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Author of the removed content."
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "spam",
+            "nudity",
+            "violence",
+            "harassment",
+            "hate",
+            "fraud",
+            "other"
+          ]
+        },
+        "decided_by": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "moderator"
+          ]
+        },
+        "removed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

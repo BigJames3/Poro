@@ -23,6 +23,7 @@ n'a aucun effet. Un événement invalide part en DLQ (`<topic>.dlq`).
 | `poro.video.ready` | `user_id` (l'auteur) | « Ta vidéo est en ligne ». |
 | `poro.social.comment.deleted` | — | Supprime les notifications de ce commentaire. |
 | `poro.video.deleted` | — | Supprime les notifications de cette vidéo. |
+| `poro.moderation.content.removed` | — | Supprime les notifications de la vidéo ou du commentaire retiré ; une restauration ne les recrée pas. |
 | `poro.auth.user.created`, `poro.user.profile.updated` | — | Projection `user_projections` (nom, username, avatar des acteurs) ; le snapshot le plus récent gagne. |
 
 Règles :

@@ -27,6 +27,11 @@ describe('event envelopes', () => {
     expect(decodeEnvelope(Buffer.from(goJson)).source).toBe('poro-auth');
   });
 
+  it.each(['poro.video.ready', 'poro.social.like.created'])('accepts the type %s', (type) => {
+    const env = { ...valid, type };
+    expect(decodeEnvelope(Buffer.from(JSON.stringify(env))).type).toBe(type);
+  });
+
   const valid = {
     id: uuidv7(),
     type: 'poro.auth.user.created',
@@ -42,6 +47,8 @@ describe('event envelopes', () => {
     ['a number', Buffer.from('42')],
     ['missing id', Buffer.from(JSON.stringify({ ...valid, id: undefined }))],
     ['bad type', Buffer.from(JSON.stringify({ ...valid, type: 'user.created' }))],
+    ['too short a type', Buffer.from(JSON.stringify({ ...valid, type: 'poro.video' }))],
+    ['too long a type', Buffer.from(JSON.stringify({ ...valid, type: 'poro.a.b.c.d' }))],
     ['zero version', Buffer.from(JSON.stringify({ ...valid, version: 0 }))],
     ['no source', Buffer.from(JSON.stringify({ ...valid, source: '' }))],
     ['no subject', Buffer.from(JSON.stringify({ ...valid, subject: '' }))],

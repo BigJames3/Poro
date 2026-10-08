@@ -33,6 +33,12 @@ Groupe `poro-feed-projector` (inbox, DLQ). Le feed ne publie rien.
 | `poro.social.follow.created` / `.deleted` | Abonnements et nombre d'abonnés par auteur |
 | `poro.social.like.*`, `poro.social.comment.*`, `poro.social.share.created` | Compteurs et score de tendance |
 | `poro.user.profile.updated` | Nom, nom affiché et avatar des auteurs (instantané le plus récent) |
+| `poro.moderation.content.removed` (vidéo) | `moderation_status = 'rejected'` : vidéo masquée de tous les flux, score à zéro ; un `ready` tardif la laisse masquée |
+| `poro.moderation.content.restored` | Vidéo de nouveau `approved` et rescorée (sauf si supprimée entre-temps) |
+
+Les commentaires retirés arrivent par `poro.social.comment.deleted`. La page 1
+en cache (60 s) peut encore montrer une vidéo retirée pendant une minute ;
+les sessions For You la filtrent à l'hydratation.
 
 Un ticker de 5 minutes recalcule la décroissance des scores (arrêt propre avec
 le service).

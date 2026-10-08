@@ -19,6 +19,13 @@ Port 8085, base `poro_social`, Redis DB 3, groupe Kafka `poro-social-projections
 4. Événement en DLQ : `rpk topic consume poro.video.ready.dlq` (en-tête
    `x-poro-error`).
 
+## Vidéo ou commentaire retiré par la modération
+
+`SELECT status FROM videos_projection WHERE video_id = '<id>';` : `removed`
+signifie retirée par la modération (actions refusées en `404 video_not_found`).
+Seul un `poro.moderation.content.restored` la remet à `ready`. Un commentaire
+retiré a `deleted_at` renseigné, comme une suppression par son auteur.
+
 ## « user_not_found » sur un follow
 
 Le compte n'est connu que par `poro.auth.user.created` ou par un appel

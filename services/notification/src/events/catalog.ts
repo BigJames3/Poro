@@ -8,6 +8,7 @@ export const TYPE_SOCIAL_LIKE_CREATED = 'poro.social.like.created';
 export const TYPE_SOCIAL_COMMENT_CREATED = 'poro.social.comment.created';
 export const TYPE_SOCIAL_COMMENT_DELETED = 'poro.social.comment.deleted';
 export const TYPE_SOCIAL_FOLLOW_CREATED = 'poro.social.follow.created';
+export const TYPE_MODERATION_CONTENT_REMOVED = 'poro.moderation.content.removed';
 
 export const CONSUMED_TYPES = [
   TYPE_AUTH_USER_CREATED,
@@ -18,6 +19,7 @@ export const CONSUMED_TYPES = [
   TYPE_SOCIAL_COMMENT_CREATED,
   TYPE_SOCIAL_COMMENT_DELETED,
   TYPE_SOCIAL_FOLLOW_CREATED,
+  TYPE_MODERATION_CONTENT_REMOVED,
 ] as const;
 
 export interface AuthUserCreatedV1 {
@@ -78,4 +80,15 @@ export interface SocialFollowCreatedV1 {
   follower_id: string;
   following_id: string;
   created_at: string;
+}
+
+/** Removed comments also arrive as poro.social.comment.deleted from social. */
+export interface ModerationContentRemovedV1 {
+  case_id: string;
+  target_type: 'video' | 'comment';
+  target_id: string;
+  owner_id: string;
+  reason: string;
+  decided_by: 'auto' | 'moderator';
+  removed_at: string;
 }

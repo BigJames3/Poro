@@ -30,6 +30,7 @@ var Topics = []string{
 	events.TypeSocialCommentCreated, events.TypeSocialCommentDeleted,
 	events.TypeSocialShareCreated,
 	events.TypeUserProfileUpdated,
+	events.TypeModerationContentRemoved, events.TypeModerationContentRestored,
 }
 
 // NewProjector applies each event once, in the transaction of its inbox claim.
@@ -104,9 +105,51 @@ func decode(env events.Envelope) (applyFunc, error) {
 		return func(ctx context.Context, tx pgx.Tx) error {
 			return repository.UpsertAuthor(ctx, tx, ids[0], d.Username, d.DisplayName, d.AvatarURL, d.UpdatedAt)
 		}, nil
+	case events.TypeModerationContentRemoved, events.TypeModerationContentRestored:
+		return decodeModeration(env)
 	default:
 		return nil, fmt.Errorf("unsupported event %s", env.Type)
 	}
+}
+
+// decodeModeration hides removed videos and shows restored ones. Removed
+// comments reach the feed as social.comment.deleted, so they are skipped here.
+func decodeModeration(env events.Envelope) (applyFunc, error) {
+	skip := func(context.Context, pgx.Tx) error { return nil }
+	if env.Type == events.TypeModerationContentRemoved {
+		var d events.ModerationContentRemovedV1
+		if err := env.DecodeData(&d); err != nil {
+			return nil, err
+		}
+		ids, err := parseIDs(d.TargetID, d.OwnerID)
+		if err != nil {
+			return nil, err
+		}
+		switch d.TargetType {
+		case events.ModerationTargetVideo:
+			return func(ctx context.Context, tx pgx.Tx) error {
+				return repository.RejectVideo(ctx, tx, ids[0], ids[1], d.RemovedAt)
+			}, nil
+		case events.ModerationTargetComment:
+			return skip, nil
+		default:
+			return nil, fmt.Errorf("unsupported target_type %q", d.TargetType)
+		}
+	}
+	var d events.ModerationContentRestoredV1
+	if err := env.DecodeData(&d); err != nil {
+		return nil, err
+	}
+	ids, err := parseIDs(d.TargetID, d.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	if d.TargetType != events.ModerationTargetVideo {
+		return nil, fmt.Errorf("unsupported target_type %q", d.TargetType)
+	}
+	return func(ctx context.Context, tx pgx.Tx) error {
+		return repository.ApproveVideo(ctx, tx, ids[0])
+	}, nil
 }
 
 func decodeVideoReady(env events.Envelope) (applyFunc, error) {

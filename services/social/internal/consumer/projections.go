@@ -16,13 +16,17 @@ import (
 	"github.com/poro/shared-go/kafka"
 
 	"github.com/poro/social/internal/repository"
+	"github.com/poro/social/internal/service"
 )
 
 // Group is the Kafka consumer group of the social projections.
 const Group = "poro-social-projections"
 
 // Topics are the events the projections consume.
-var Topics = []string{events.TypeVideoReady, events.TypeVideoDeleted, events.TypeAuthUserCreated}
+var Topics = []string{
+	events.TypeVideoReady, events.TypeVideoDeleted, events.TypeAuthUserCreated,
+	events.TypeModerationContentRemoved, events.TypeModerationContentRestored,
+}
 
 // NewProjections applies each event once, in the transaction of its inbox claim.
 func NewProjections(pool *pgxpool.Pool, log *zap.Logger) kafka.Handler {
@@ -106,6 +110,42 @@ func decode(env events.Envelope) (applyFunc, error) {
 		return func(ctx context.Context, tx pgx.Tx) error {
 			return repository.EnsureUser(ctx, tx, user)
 		}, nil
+	case events.TypeModerationContentRemoved:
+		var d events.ModerationContentRemovedV1
+		if err := env.DecodeData(&d); err != nil {
+			return nil, err
+		}
+		target, owner, err := targetIDs(d.TargetID, d.OwnerID)
+		if err != nil {
+			return nil, err
+		}
+		switch d.TargetType {
+		case events.ModerationTargetVideo:
+			return func(ctx context.Context, tx pgx.Tx) error {
+				return repository.MarkVideoRemoved(ctx, tx, target, owner, d.RemovedAt)
+			}, nil
+		case events.ModerationTargetComment:
+			return func(ctx context.Context, tx pgx.Tx) error {
+				return service.RemoveComment(ctx, tx, target, d.RemovedAt)
+			}, nil
+		default:
+			return nil, fmt.Errorf("unsupported target_type %q", d.TargetType)
+		}
+	case events.TypeModerationContentRestored:
+		var d events.ModerationContentRestoredV1
+		if err := env.DecodeData(&d); err != nil {
+			return nil, err
+		}
+		if d.TargetType != events.ModerationTargetVideo {
+			return nil, fmt.Errorf("unsupported target_type %q", d.TargetType)
+		}
+		target, _, err := targetIDs(d.TargetID, d.OwnerID)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, tx pgx.Tx) error {
+			return repository.MarkVideoRestored(ctx, tx, target, d.RestoredAt)
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported event %s", env.Type)
 	}
@@ -124,4 +164,16 @@ func ids(videoID, userID string) (uuid.UUID, uuid.UUID, error) {
 		return uuid.Nil, uuid.Nil, errors.New("ids must not be nil")
 	}
 	return video, user, nil
+}
+
+func targetIDs(targetID, ownerID string) (uuid.UUID, uuid.UUID, error) {
+	target, err := uuid.Parse(targetID)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("target_id: %w", err)
+	}
+	owner, err := uuid.Parse(ownerID)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("owner_id: %w", err)
+	}
+	return target, owner, nil
 }

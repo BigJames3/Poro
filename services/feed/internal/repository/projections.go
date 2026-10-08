@@ -52,6 +52,38 @@ func DeleteVideo(ctx context.Context, db DBTX, videoID, authorID uuid.UUID, at t
 	return nil
 }
 
+// Moderation statuses of a video. Only approved videos appear in the feeds.
+const (
+	ModerationApproved = "approved"
+	ModerationRejected = "rejected"
+)
+
+// RejectVideo hides a video removed by moderation, or stores a stub for an
+// unknown one so that a late video.ready keeps it hidden.
+func RejectVideo(ctx context.Context, db DBTX, videoID, authorID uuid.UUID, at time.Time) error {
+	_, err := db.Exec(ctx, `INSERT INTO videos (video_id, author_id, published_at, moderation_status) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (video_id) DO UPDATE SET moderation_status = EXCLUDED.moderation_status`,
+		videoID, authorID, at, ModerationRejected)
+	if err != nil {
+		return fmt.Errorf("reject video: %w", err)
+	}
+	return Rescore(ctx, db, videoID)
+}
+
+// ApproveVideo makes a video rejected by moderation visible again. A deleted
+// video stays deleted: the feeds also filter on deleted_at.
+func ApproveVideo(ctx context.Context, db DBTX, videoID uuid.UUID) error {
+	tag, err := db.Exec(ctx, `UPDATE videos SET moderation_status = $2 WHERE video_id = $1 AND moderation_status = $3`,
+		videoID, ModerationApproved, ModerationRejected)
+	if err != nil {
+		return fmt.Errorf("approve video: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil
+	}
+	return Rescore(ctx, db, videoID)
+}
+
 // AddFollow records a follow and bumps the author's follower count once.
 func AddFollow(ctx context.Context, db DBTX, followerID, followingID uuid.UUID, at time.Time) error {
 	tag, err := db.Exec(ctx, `INSERT INTO follows (follower_id, following_id, created_at) VALUES ($1, $2, $3)

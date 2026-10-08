@@ -11,6 +11,7 @@ import { appConfig, type AppConfigType } from '../config/app.config';
 import {
   CONSUMED_TYPES,
   TYPE_AUTH_USER_CREATED,
+  TYPE_MODERATION_CONTENT_REMOVED,
   TYPE_SOCIAL_COMMENT_CREATED,
   TYPE_SOCIAL_COMMENT_DELETED,
   TYPE_SOCIAL_FOLLOW_CREATED,
@@ -160,6 +161,9 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
               entityId: uuidField(data, 'comment_id'),
             },
           });
+          return;
+        case TYPE_MODERATION_CONTENT_REMOVED:
+          await this.contentRemoved(tx, data);
           return;
         default:
           for (const draft of this.drafts(env.type, data)) {
@@ -398,6 +402,21 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
         lastActivityAt: now,
       },
     });
+  }
+
+  /** Forgets every notification about removed content; a restore brings none back. */
+  private async contentRemoved(tx: Tx, data: Data): Promise<void> {
+    const targetId = uuidField(data, 'target_id');
+    switch (data.target_type) {
+      case 'video':
+        await tx.notification.deleteMany({ where: { videoId: targetId } });
+        return;
+      case 'comment':
+        await tx.notification.deleteMany({ where: { entityType: 'comment', entityId: targetId } });
+        return;
+      default:
+        throw new PermanentError('target_type must be video or comment');
+    }
   }
 
   private async userCreated(tx: Tx, data: Data): Promise<void> {

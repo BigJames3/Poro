@@ -57,6 +57,7 @@ func TestCommentAndReply(t *testing.T) {
 	require.Equal(t, owner.String(), first.VideoOwnerID)
 	require.Len(t, []rune(first.Excerpt), 140)
 	require.True(t, strings.HasPrefix(first.Excerpt, "Trop beau 🔥"))
+	require.Equal(t, "Trop beau 🔥 "+strings.Repeat("x", 200), first.Text, "the full text, trimmed")
 	second := decodeData[events.SocialCommentCreatedV1](t, created[1])
 	require.Equal(t, top.ID, *second.ParentID)
 	require.Equal(t, awa.String(), *second.ParentAuthorID)
@@ -110,6 +111,15 @@ func TestEditCommentWindowAndAuthor(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "version finale", *edited.Content)
 	require.True(t, edited.Edited)
+	_, err = svc.EditComment(ctx, author, id, dto.EditCommentRequest{Content: "version finale"})
+	require.NoError(t, err, "the same text again is accepted")
+	updates := outboxed(t, events.TypeSocialCommentUpdated, video.String())
+	require.Len(t, updates, 1, "only a real change publishes")
+	update := decodeData[events.SocialCommentUpdatedV1](t, updates[0])
+	require.Equal(t, events.SocialCommentUpdatedV1{
+		CommentID: c.ID, UserID: author.String(), VideoID: video.String(), Text: "version finale",
+		UpdatedAt: update.UpdatedAt,
+	}, update)
 
 	svc.now = func() time.Time { return start.Add(16 * time.Minute) }
 	_, err = svc.EditComment(ctx, author, id, dto.EditCommentRequest{Content: "trop tard"})
@@ -239,4 +249,37 @@ func TestCommentPagination(t *testing.T) {
 	requireCode(t, err, 404, "video_not_found")
 	_, err = svc.ListReplies(ctx, uuid.MustParse(c.ID), nil, "", 10)
 	requireCode(t, err, 404, "video_not_found")
+}
+
+func TestRemoveCommentByModeration(t *testing.T) {
+	ctx := context.Background()
+	svc := newSvc(t)
+	video, _ := seedVideo(t)
+	author, replier := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	top, err := svc.CreateComment(ctx, author, video, dto.CreateCommentRequest{Content: "insulte"})
+	require.NoError(t, err)
+	reply, err := svc.CreateComment(ctx, replier, video, dto.CreateCommentRequest{Content: "réponse", ParentID: &top.ID})
+	require.NoError(t, err)
+
+	remove := func(id uuid.UUID) {
+		t.Helper()
+		tx, err := testdb.Pool.Begin(ctx)
+		require.NoError(t, err)
+		defer func() { _ = tx.Rollback(ctx) }()
+		require.NoError(t, RemoveComment(ctx, tx, id, time.Now()))
+		require.NoError(t, tx.Commit(ctx))
+	}
+	remove(uuid.MustParse(reply.ID))
+	remove(uuid.MustParse(reply.ID))
+	remove(uuid.Must(uuid.NewV7()))
+
+	deleted := outboxed(t, events.TypeSocialCommentDeleted, video.String())
+	require.Len(t, deleted, 1, "a second removal and an unknown comment publish nothing")
+	require.Equal(t, replier.String(), decodeData[events.SocialCommentDeletedV1](t, deleted[0]).UserID)
+	stats, err := svc.VideoStats(ctx, video, nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), stats.Comments)
+	page, err := svc.ListComments(ctx, video, nil, "", 10)
+	require.NoError(t, err)
+	require.Equal(t, 0, page.Items[0].RepliesCount)
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -75,7 +76,7 @@ func (s *Social) CreateComment(ctx context.Context, user, videoID uuid.UUID, req
 		return emit(ctx, tx, events.TypeSocialCommentCreated, videoID.String(), events.SocialCommentCreatedV1{
 			CommentID: comment.ID.String(), UserID: user.String(), VideoID: videoID.String(),
 			VideoOwnerID: owner.String(), ParentID: uuidString(parentID), ParentAuthorID: parentAuthor,
-			Excerpt: text.Excerpt(content), CreatedAt: now,
+			Excerpt: text.Excerpt(content), Text: content, CreatedAt: now,
 		}, now)
 	})
 	if err != nil {
@@ -85,7 +86,7 @@ func (s *Social) CreateComment(ctx context.Context, user, videoID uuid.UUID, req
 }
 
 // EditComment replaces the text of the caller's comment within 15 minutes of
-// posting. Editing publishes no event: consumers only see creations.
+// posting, and publishes the new text for the consumers that read it.
 func (s *Social) EditComment(ctx context.Context, user, commentID uuid.UUID, req dto.EditCommentRequest) (*dto.Comment, error) {
 	content, ok := text.Comment(req.Content)
 	if !ok {
@@ -109,6 +110,11 @@ func (s *Social) EditComment(ctx context.Context, user, commentID uuid.UUID, req
 				return err
 			}
 			c.Content, c.UpdatedAt = content, now
+			if err := emit(ctx, tx, events.TypeSocialCommentUpdated, c.VideoID.String(), events.SocialCommentUpdatedV1{
+				CommentID: c.ID.String(), UserID: c.UserID.String(), VideoID: c.VideoID.String(), Text: content, UpdatedAt: now,
+			}, now); err != nil {
+				return err
+			}
 		}
 		edited = c
 		return nil
@@ -143,22 +149,43 @@ func (s *Social) DeleteComment(ctx context.Context, user, commentID uuid.UUID) e
 		if c.DeletedAt != nil {
 			return nil
 		}
-		now := s.clock()
-		if err := repository.SoftDeleteComment(ctx, tx, c.ID, now); err != nil {
-			return err
-		}
-		if c.ParentID != nil {
-			if err := repository.AddReplies(ctx, tx, *c.ParentID, -1); err != nil {
-				return err
-			}
-		}
-		if err := repository.AddVideoCounters(ctx, tx, c.VideoID, 0, -1, 0); err != nil {
-			return err
-		}
-		return emit(ctx, tx, events.TypeSocialCommentDeleted, c.VideoID.String(), events.SocialCommentDeletedV1{
-			CommentID: c.ID.String(), VideoID: c.VideoID.String(), UserID: c.UserID.String(), DeletedAt: now,
-		}, now)
+		return softDelete(ctx, tx, c, s.clock())
 	})
+}
+
+// RemoveComment soft-deletes a comment removed by moderation, in the caller's
+// transaction, exactly as its author would. An unknown or already deleted
+// comment is left alone.
+func RemoveComment(ctx context.Context, tx pgx.Tx, commentID uuid.UUID, at time.Time) error {
+	c, err := repository.LockComment(ctx, tx, commentID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if c.DeletedAt != nil {
+		return nil
+	}
+	return softDelete(ctx, tx, c, at.UTC().Truncate(time.Microsecond))
+}
+
+// softDelete hides c, updates the counters and publishes comment.deleted.
+func softDelete(ctx context.Context, tx pgx.Tx, c *repository.Comment, now time.Time) error {
+	if err := repository.SoftDeleteComment(ctx, tx, c.ID, now); err != nil {
+		return err
+	}
+	if c.ParentID != nil {
+		if err := repository.AddReplies(ctx, tx, *c.ParentID, -1); err != nil {
+			return err
+		}
+	}
+	if err := repository.AddVideoCounters(ctx, tx, c.VideoID, 0, -1, 0); err != nil {
+		return err
+	}
+	return emit(ctx, tx, events.TypeSocialCommentDeleted, c.VideoID.String(), events.SocialCommentDeletedV1{
+		CommentID: c.ID.String(), VideoID: c.VideoID.String(), UserID: c.UserID.String(), DeletedAt: now,
+	}, now)
 }
 
 // LikeComment likes a visible comment. Comment likes publish no event.

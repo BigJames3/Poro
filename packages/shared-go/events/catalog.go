@@ -15,10 +15,14 @@ const (
 	TypeSocialLikeCreated    = "poro.social.like.created"
 	TypeSocialLikeDeleted    = "poro.social.like.deleted"
 	TypeSocialCommentCreated = "poro.social.comment.created"
+	TypeSocialCommentUpdated = "poro.social.comment.updated"
 	TypeSocialCommentDeleted = "poro.social.comment.deleted"
 	TypeSocialFollowCreated  = "poro.social.follow.created"
 	TypeSocialFollowDeleted  = "poro.social.follow.deleted"
 	TypeSocialShareCreated   = "poro.social.share.created"
+
+	TypeModerationContentRemoved  = "poro.moderation.content.removed"
+	TypeModerationContentRestored = "poro.moderation.content.restored"
 )
 
 // AuthUserCreatedV1 is published by auth when an account is created.
@@ -138,14 +142,26 @@ type SocialLikeDeletedV1 struct {
 // SocialCommentCreatedV1 is published by social for a comment or a reply.
 // ParentID and ParentAuthorID are nil for a top-level comment.
 type SocialCommentCreatedV1 struct {
-	CommentID      string    `json:"comment_id"`
-	UserID         string    `json:"user_id"`
-	VideoID        string    `json:"video_id"`
-	VideoOwnerID   string    `json:"video_owner_id"`
-	ParentID       *string   `json:"parent_id"`
-	ParentAuthorID *string   `json:"parent_author_id"`
-	Excerpt        string    `json:"excerpt"`
-	CreatedAt      time.Time `json:"created_at"`
+	CommentID      string  `json:"comment_id"`
+	UserID         string  `json:"user_id"`
+	VideoID        string  `json:"video_id"`
+	VideoOwnerID   string  `json:"video_owner_id"`
+	ParentID       *string `json:"parent_id"`
+	ParentAuthorID *string `json:"parent_author_id"`
+	Excerpt        string  `json:"excerpt"`
+	// Text is the full comment. Events published before it existed lack it.
+	Text      string    `json:"text,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// SocialCommentUpdatedV1 is published by social when the author edits a
+// comment. Text is the full text after the edit.
+type SocialCommentUpdatedV1 struct {
+	CommentID string    `json:"comment_id"`
+	UserID    string    `json:"user_id"`
+	VideoID   string    `json:"video_id"`
+	Text      string    `json:"text"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // SocialCommentDeletedV1 is published by social when a comment is soft-deleted.
@@ -179,4 +195,43 @@ type SocialShareCreatedV1 struct {
 	VideoOwnerID string    `json:"video_owner_id"`
 	Channel      string    `json:"channel"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+// Moderation targets, reasons and deciders.
+const (
+	ModerationTargetVideo   = "video"
+	ModerationTargetComment = "comment"
+
+	ModerationReasonSpam       = "spam"
+	ModerationReasonNudity     = "nudity"
+	ModerationReasonViolence   = "violence"
+	ModerationReasonHarassment = "harassment"
+	ModerationReasonHate       = "hate"
+	ModerationReasonFraud      = "fraud"
+	ModerationReasonOther      = "other"
+
+	ModerationDecidedByAuto      = "auto"
+	ModerationDecidedByModerator = "moderator"
+)
+
+// ModerationContentRemovedV1 is published by moderation when a video or a
+// comment is removed. The subject is TargetID.
+type ModerationContentRemovedV1 struct {
+	CaseID     string    `json:"case_id"`
+	TargetType string    `json:"target_type"` // video, comment
+	TargetID   string    `json:"target_id"`
+	OwnerID    string    `json:"owner_id"`
+	Reason     string    `json:"reason"`
+	DecidedBy  string    `json:"decided_by"` // auto, moderator
+	RemovedAt  time.Time `json:"removed_at"`
+}
+
+// ModerationContentRestoredV1 is published by moderation when a moderator
+// restores a removed video. The subject is TargetID.
+type ModerationContentRestoredV1 struct {
+	CaseID     string    `json:"case_id"`
+	TargetType string    `json:"target_type"` // video
+	TargetID   string    `json:"target_id"`
+	OwnerID    string    `json:"owner_id"`
+	RestoredAt time.Time `json:"restored_at"`
 }

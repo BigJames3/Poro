@@ -12,6 +12,8 @@ For You répond `503 unavailable`.
 ## Une vidéo n'apparaît pas
 
 1. `SELECT video_id, deleted_at, moderation_status, published_at FROM videos WHERE video_id = '<id>';`
+   `moderation_status = 'rejected'` : retirée par la modération, jusqu'à un
+   `poro.moderation.content.restored`.
 2. Absente → retard ou erreur du consommateur :
    `rpk group describe poro-feed-projector --brokers localhost:9092` (lag),
    DLQ `rpk topic consume poro.video.ready.dlq`.
