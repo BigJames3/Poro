@@ -1,0 +1,108 @@
+// PORO notification service database (poro_notification).
+// Migrations are written by hand and checked with `prisma migrate diff`.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+  runtime      = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// An FCM registration token. A token belongs to one account at a time: when
+// another account registers it, the device changed hands.
+model Device {
+  id        String   @id @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  fcmToken  String   @unique @map("fcm_token") @db.VarChar(512)
+  platform  String   @db.VarChar(10)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId, updatedAt])
+  @@map("devices")
+}
+
+// One in-app notification. group_key makes each source event idempotent per
+// recipient and folds the likes of one video in one hour into one row.
+model Notification {
+  id             String    @id @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  type           String    @db.VarChar(20)
+  title          String    @db.VarChar(200)
+  body           String    @db.VarChar(500)
+  data           Json
+  actorId        String?   @map("actor_id") @db.Uuid
+  actorCount     Int       @default(1) @map("actor_count")
+  entityType     String    @map("entity_type") @db.VarChar(20)
+  entityId       String    @map("entity_id") @db.Uuid
+  videoId        String?   @map("video_id") @db.Uuid
+  groupKey       String    @map("group_key") @db.VarChar(200)
+  readAt         DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  // Moves when a grouped notification gains an actor, never when it is read:
+  // lists sort on it.
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at") @db.Timestamptz(6)
+
+  actors NotificationActor[]
+
+  @@unique([userId, groupKey])
+  @@index([userId, lastActivityAt(sort: Desc), id(sort: Desc)])
+  @@index([userId, readAt])
+  @@index([entityType, entityId])
+  @@index([videoId])
+  @@index([lastActivityAt])
+  @@map("notifications")
+}
+
+// The distinct actors of a grouped notification, so a like removed and given
+// again within the hour is counted once.
+model NotificationActor {
+  notificationId String       @map("notification_id") @db.Uuid
+  actorId        String       @map("actor_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, actorId])
+  @@map("notification_actors")
+}
+
+// Per-account settings. No row means every default (all true).
+// A disabled type creates neither the in-app notification nor the push.
+model Preference {
+  userId      String   @id @map("user_id") @db.Uuid
+  pushEnabled Boolean  @default(true) @map("push_enabled")
+  likes       Boolean  @default(true)
+  comments    Boolean  @default(true)
+  follows     Boolean  @default(true)
+  videoReady  Boolean  @default(true) @map("video_ready")
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("preferences")
+}
+
+// Public profile fields of every account, fed by auth.user.created and
+// user.profile.updated. The newest updated_at wins.
+model UserProjection {
+  userId      String   @id @map("user_id") @db.Uuid
+  username    String?  @db.VarChar(30)
+  displayName String?  @map("display_name") @db.VarChar(50)
+  avatarUrl   String?  @map("avatar_url") @db.VarChar(2048)
+  updatedAt   DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@map("user_projections")
+}
+
+// Consumer idempotency: one row per (consumer group, event) already applied.
+model InboxEvent {
+  consumer    String   @db.VarChar(100)
+  eventId     String   @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@id([consumer, eventId])
+  @@index([processedAt])
+  @@map("inbox_events")
+}
