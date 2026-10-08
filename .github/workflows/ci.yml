@@ -26,6 +26,7 @@ jobs:
       feed: ${{ steps.filter.outputs.feed }}
       notification: ${{ steps.filter.outputs.notification }}
       moderation: ${{ steps.filter.outputs.moderation }}
+      search: ${{ steps.filter.outputs.search }}
       mobile: ${{ steps.filter.outputs.mobile }}
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +74,12 @@ jobs:
             moderation:
               - 'services/moderation/**'
               - 'packages/contracts/events/**'
+              - '.github/workflows/ci.yml'
+            search:
+              - 'services/search/**'
+              - 'packages/shared-go/**'
+              - 'packages/contracts/events/**'
+              - '.golangci.yml'
               - '.github/workflows/ci.yml'
             mobile:
               - 'apps/mobile-android/**'
@@ -361,6 +368,46 @@ jobs:
       - name: Docker build
         working-directory: .
         run: docker build -f services/feed/Dockerfile -t poro-feed:${{ github.sha }} .
+
+  search:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.search == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/search
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/search/go.mod
+          cache-dependency-path: |
+            services/search/go.sum
+            packages/shared-go/go.sum
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.14.0
+          working-directory: services/search
+          args: --config ../../.golangci.yml
+      - name: Unit and integration tests
+        run: go test ./... -count=1 -race -coverpkg=./internal/... -coverprofile=coverage.out
+      - name: Coverage at least 70%
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {sub("%", "", $3); print $3}')
+          echo "coverage: ${total}%"
+          awk -v t="$total" 'BEGIN { exit (t < 70) }'
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: Docker build
+        working-directory: .
+        run: docker build -f services/search/Dockerfile -t poro-search:${{ github.sha }} .
 
   mobile-build:
     needs: detect-changes

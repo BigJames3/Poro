@@ -1,0 +1,197 @@
+openapi: 3.1.0
+info:
+  title: PORO Search API
+  version: 1.0.0
+  description: |
+    Search of videos, accounts and hashtags, and autocompletion of the search
+    box. A token is optional: anonymous search is allowed and the token only
+    keys the rate limit (60 requests per minute per account, otherwise per IP,
+    then `429 rate_limited`). Every JSON response uses `{data, error, meta}`.
+
+    Matching ignores case and accents, stems French words ("danses" finds
+    "danse") and tolerates a typo in a word of a title or a name. Results are
+    a projection of events and may lag by a few seconds. Comments are not
+    searchable in v1.
+servers:
+  - url: http://localhost:8088
+    description: Local development
+tags:
+  - name: search
+  - name: platform
+security:
+  - {}
+  - bearerAuth: []
+paths:
+  /health/live:
+    get:
+      tags: [platform]
+      security: []
+      summary: Liveness (also at /api/v1/health/live)
+      responses:
+        "200": { description: Process up }
+  /health/ready:
+    get:
+      tags: [platform]
+      security: []
+      summary: Readiness, Postgres and Redis (also at /health and /api/v1/health)
+      responses:
+        "200": { description: Ready }
+        "503": { description: A dependency is down }
+  /api/v1/search:
+    get:
+      tags: [search]
+      summary: Ranked results of one kind
+      description: |
+        - `videos`: published, approved and not deleted videos whose title,
+          hashtags or description match. Ranked by relevance, boosted by
+          engagement (likes + 2·comments + 3·shares) and decayed by age in
+          months.
+        - `users`: accounts with a username. An exact username (with or
+          without `@`) comes first, then relevance boosted by followers and a
+          bonus for creators.
+        - `hashtags`: tags of at least one searchable video, prefix matches
+          first, then similar tags, then the most used.
+
+        At most 500 results per query. Pages use an offset: a ranking that
+        changes between two pages can repeat or skip a result.
+      parameters:
+        - { $ref: "#/components/parameters/Query" }
+        - name: type
+          in: query
+          schema: { type: string, enum: [videos, users, hashtags], default: videos }
+        - name: cursor
+          in: query
+          description: Opaque `next_cursor` of the previous page of the same query and type; omit for page 1.
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: A page of results; `items` holds objects of the requested `type`
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, error, meta]
+                properties:
+                  data:
+                    type: object
+                    required: [type, items, next_cursor]
+                    properties:
+                      type: { type: string, enum: [videos, users, hashtags] }
+                      items:
+                        type: array
+                        items:
+                          oneOf:
+                            - { $ref: "#/components/schemas/Video" }
+                            - { $ref: "#/components/schemas/User" }
+                            - { $ref: "#/components/schemas/Hashtag" }
+                      next_cursor: { type: ["string", "null"] }
+                  error: { type: "null" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /api/v1/search/suggest:
+    get:
+      tags: [search]
+      summary: Autocompletion of usernames and hashtags
+      description: |
+        Up to 5 usernames (most followed first) and 5 hashtags (most used
+        first) starting with `q`. A leading `@` or `#` is ignored.
+      parameters: [{ $ref: "#/components/parameters/Query" }]
+      responses:
+        "200":
+          description: Suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, error, meta]
+                properties:
+                  data:
+                    type: object
+                    required: [users, hashtags]
+                    properties:
+                      users: { type: array, items: { $ref: "#/components/schemas/User" } }
+                      hashtags: { type: array, items: { $ref: "#/components/schemas/Hashtag" } }
+                  error: { type: "null" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Optional. An invalid or expired token is rejected with 401.
+  parameters:
+    Query:
+      name: q
+      in: query
+      required: true
+      description: 1 to 100 characters after trimming, without control or format characters.
+      schema: { type: string, minLength: 1, maxLength: 100 }
+  responses:
+    Error:
+      description: Error envelope, see `error.code`
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+  schemas:
+    Meta:
+      type: object
+      properties:
+        request_id: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: { type: "null" }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [invalid_query, invalid_type, invalid_cursor, unauthorized, rate_limited] }
+            message: { type: string }
+        meta: { $ref: "#/components/schemas/Meta" }
+    Video:
+      type: object
+      properties:
+        video_id: { type: string, format: uuid }
+        title: { type: string }
+        hashtags: { type: array, items: { type: string } }
+        thumbnail_url: { type: ["string", "null"], format: uri }
+        duration_ms: { type: ["integer", "null"] }
+        published_at: { type: string, format: date-time }
+        stats:
+          type: object
+          properties:
+            likes: { type: integer }
+            comments: { type: integer }
+            shares: { type: integer }
+        author:
+          type: object
+          description: Profile fields are null until the author's first profile event.
+          properties:
+            user_id: { type: string, format: uuid }
+            username: { type: ["string", "null"] }
+            display_name: { type: ["string", "null"] }
+            avatar_url: { type: ["string", "null"] }
+    User:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid }
+        username: { type: string }
+        display_name: { type: ["string", "null"] }
+        avatar_url: { type: ["string", "null"] }
+        is_creator: { type: boolean }
+        followers: { type: integer }
+    Hashtag:
+      type: object
+      properties:
+        tag: { type: string }
+        videos_count: { type: integer }
