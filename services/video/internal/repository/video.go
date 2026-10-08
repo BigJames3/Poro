@@ -18,7 +18,8 @@ import (
 var ErrNotFound = errors.New("video not found")
 
 const videoColumns = `id, user_id, title, description, status, content_type, size_bytes, source_key, s3_upload_id,
-duration_ms, width, height, hls_key, thumbnail_key, renditions, failure_code, last_error, created_at, updated_at, deleted_at`
+duration_ms, width, height, hls_key, thumbnail_key, renditions, failure_code, last_error, created_at, updated_at, deleted_at,
+moderation_status, moderated_at`
 
 // Videos persists the VIDEO aggregate.
 type Videos struct {
@@ -132,6 +133,13 @@ func (r *Videos) MarkReady(ctx context.Context, tx pgx.Tx, id uuid.UUID, duratio
 	return nil
 }
 
+// SetModeration records a moderation decision, deleted or not, and returns
+// the row. An unknown video is ErrNotFound.
+func (r *Videos) SetModeration(ctx context.Context, id uuid.UUID, status string, at time.Time) (*model.Video, error) {
+	return scanVideo(r.pool.QueryRow(ctx, `UPDATE videos SET moderation_status = $2, moderated_at = $3, updated_at = now()
+		WHERE id = $1 RETURNING `+videoColumns, id, status, at))
+}
+
 // MarkFailed records a public failure code. internalErr is never returned to clients.
 func (r *Videos) MarkFailed(ctx context.Context, tx pgx.Tx, id uuid.UUID, code, internalErr string) error {
 	tag, err := tx.Exec(ctx, `UPDATE videos SET status = $2, failure_code = $3, last_error = $4, updated_at = now()
@@ -156,7 +164,7 @@ func scanVideo(row scannable) (*model.Video, error) {
 	err := row.Scan(
 		&v.ID, &v.UserID, &v.Title, &v.Description, &v.Status, &v.ContentType, &v.SizeBytes, &v.SourceKey, &v.S3UploadID,
 		&v.DurationMs, &v.Width, &v.Height, &v.HLSKey, &v.ThumbnailKey, &rend, &v.FailureCode, &v.LastError,
-		&v.CreatedAt, &v.UpdatedAt, &v.DeletedAt,
+		&v.CreatedAt, &v.UpdatedAt, &v.DeletedAt, &v.ModerationStatus, &v.ModeratedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound

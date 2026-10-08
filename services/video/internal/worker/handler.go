@@ -71,7 +71,10 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		return err
 	}
 	if row.DeletedAt != nil || row.Status == model.StatusReady || row.Status == model.StatusFailed {
-		return h.claimOnly(ctx, env.ID)
+		if err := h.claimOnly(ctx, env.ID); err != nil {
+			return err
+		}
+		return h.HideIfWithdrawn(ctx, videoID)
 	}
 	if row.Status != model.StatusProcessing {
 		return kafka.Permanent(fmt.Errorf("unexpected status %s", row.Status))
@@ -135,7 +138,11 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 	if first {
 		if err := h.repo.MarkReady(ctx, tx, videoID, out.DurationMs, out.Width, out.Height, hlsKey, thumbKey, out.Renditions); err != nil {
 			if errors.Is(err, repository.ErrNotFound) {
-				return tx.Commit(ctx)
+				// Deleted while transcoding: the uploads must not stay public.
+				if err := tx.Commit(ctx); err != nil {
+					return err
+				}
+				return h.HideIfWithdrawn(ctx, videoID)
 			}
 			return err
 		}
@@ -144,7 +151,35 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		}
 		h.log.Info("video ready", zap.String("video_id", videoID.String()), zap.Int("duration_ms", out.DurationMs))
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	return h.HideIfWithdrawn(ctx, videoID)
+}
+
+// HideIfWithdrawn moves the media of a video removed by moderation or deleted
+// by its owner while it was transcoding. The video API commits the status
+// before it moves media, so either this read sees the status or the API's
+// move runs after this worker's uploads.
+func (h *Handler) HideIfWithdrawn(ctx context.Context, videoID uuid.UUID) error {
+	row, err := h.repo.GetAny(ctx, videoID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if row.DeletedAt == nil && row.ModerationStatus != model.ModerationRemoved {
+		return nil
+	}
+	n, err := h.store.Hide(ctx, model.MediaPrefix(row.UserID, row.ID))
+	if err != nil {
+		return fmt.Errorf("hide media: %w", err)
+	}
+	if n > 0 {
+		h.log.Info("withdrawn video media quarantined", zap.String("video_id", row.ID), zap.Int("objects", n))
+	}
+	return nil
 }
 
 func (h *Handler) uploadOutput(ctx context.Context, outDir, userID, videoID string, out *transcode.Output) error {

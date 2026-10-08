@@ -33,18 +33,20 @@ type CompletePart struct {
 }
 
 type VideoView struct {
-	ID           string          `json:"id"`
-	UserID       string          `json:"user_id"`
-	Title        string          `json:"title"`
-	Description  string          `json:"description"`
-	Status       string          `json:"status"`
-	DurationMs   *int            `json:"duration_ms,omitempty"`
-	Width        *int            `json:"width,omitempty"`
-	Height       *int            `json:"height,omitempty"`
-	HLSURL       *string         `json:"hls_url,omitempty"`
-	ThumbnailURL *string         `json:"thumbnail_url,omitempty"`
-	Renditions   []RenditionView `json:"renditions,omitempty"`
-	CreatedAt    time.Time       `json:"created_at"`
+	ID          string `json:"id"`
+	UserID      string `json:"user_id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
+	// ModerationStatus is approved or removed; only the owner sees a removed video.
+	ModerationStatus string          `json:"moderation_status"`
+	DurationMs       *int            `json:"duration_ms,omitempty"`
+	Width            *int            `json:"width,omitempty"`
+	Height           *int            `json:"height,omitempty"`
+	HLSURL           *string         `json:"hls_url,omitempty"`
+	ThumbnailURL     *string         `json:"thumbnail_url,omitempty"`
+	Renditions       []RenditionView `json:"renditions,omitempty"`
+	CreatedAt        time.Time       `json:"created_at"`
 }
 
 type RenditionView struct {

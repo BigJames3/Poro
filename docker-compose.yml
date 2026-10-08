@@ -130,7 +130,7 @@ services:
       - |
         set -eu
         until echo "cluster.check" | weed shell -master=seaweedfs:9333 >/dev/null 2>&1; do sleep 2; done
-        for b in poro-avatars poro-videos; do
+        for b in poro-avatars poro-videos poro-quarantine; do
           if ! echo "s3.bucket.list" | weed shell -master=seaweedfs:9333 2>/dev/null | grep -q "$$b"; then
             echo "s3.bucket.create -name $$b" | weed shell -master=seaweedfs:9333
           fi
@@ -473,6 +473,8 @@ services:
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_REGION: us-east-1
       S3_BUCKET: poro-videos
+      # Médias des vidéos retirées ou supprimées ; privé en production.
+      S3_QUARANTINE_BUCKET: poro-quarantine
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID must be set in .env}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY must be set in .env}
       S3_FORCE_PATH_STYLE: "true"
@@ -726,6 +728,8 @@ services:
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_REGION: us-east-1
       S3_BUCKET: poro-videos
+      # Médias des vidéos retirées ou supprimées ; privé en production.
+      S3_QUARANTINE_BUCKET: poro-quarantine
       S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID must be set in .env}
       S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY must be set in .env}
       S3_FORCE_PATH_STYLE: "true"

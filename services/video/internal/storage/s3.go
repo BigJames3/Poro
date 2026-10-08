@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -17,9 +19,10 @@ import (
 
 // S3 talks to a path-style S3-compatible store (SeaweedFS in development).
 type S3 struct {
-	internal *s3.Client
-	presign  *s3.PresignClient
-	bucket   string
+	internal   *s3.Client
+	presign    *s3.PresignClient
+	bucket     string
+	quarantine string
 }
 
 // NewS3 builds two clients: one for the service, one whose presigned URLs
@@ -34,9 +37,10 @@ func NewS3(ctx context.Context, cfg *config.Config) (*S3, error) {
 		return nil, err
 	}
 	return &S3{
-		internal: internal,
-		presign:  s3.NewPresignClient(public),
-		bucket:   cfg.S3Bucket,
+		internal:   internal,
+		presign:    s3.NewPresignClient(public),
+		bucket:     cfg.S3Bucket,
+		quarantine: cfg.S3QuarantineBucket,
 	}, nil
 }
 
@@ -172,4 +176,55 @@ func (s *S3) Delete(ctx context.Context, key string) error {
 		return fmt.Errorf("delete %s: %w", key, err)
 	}
 	return nil
+}
+
+func (s *S3) Hide(ctx context.Context, prefix string) (int, error) {
+	return s.move(ctx, s.bucket, s.quarantine, prefix)
+}
+
+func (s *S3) Reveal(ctx context.Context, prefix string) (int, error) {
+	return s.move(ctx, s.quarantine, s.bucket, prefix)
+}
+
+// move copies then deletes each object, so an interrupted move leaves every
+// object in at least one bucket and a retry finishes it.
+func (s *S3) move(ctx context.Context, from, to, prefix string) (int, error) {
+	moved := 0
+	pages := s3.NewListObjectsV2Paginator(s.internal, &s3.ListObjectsV2Input{
+		Bucket: aws.String(from),
+		Prefix: aws.String(prefix),
+	})
+	for pages.HasMorePages() {
+		page, err := pages.NextPage(ctx)
+		if err != nil {
+			return moved, fmt.Errorf("list %s/%s: %w", from, prefix, err)
+		}
+		for _, obj := range page.Contents {
+			key := aws.ToString(obj.Key)
+			if _, err := s.internal.CopyObject(ctx, &s3.CopyObjectInput{
+				Bucket:     aws.String(to),
+				Key:        aws.String(key),
+				CopySource: aws.String(copySource(from, key)),
+			}); err != nil {
+				return moved, fmt.Errorf("copy %s/%s: %w", from, key, err)
+			}
+			if _, err := s.internal.DeleteObject(ctx, &s3.DeleteObjectInput{
+				Bucket: aws.String(from),
+				Key:    aws.String(key),
+			}); err != nil {
+				return moved, fmt.Errorf("delete %s/%s: %w", from, key, err)
+			}
+			moved++
+		}
+	}
+	return moved, nil
+}
+
+// copySource is bucket/key with each path segment URL-encoded, as S3 expects.
+func copySource(bucket, key string) string {
+	parts := strings.Split(bucket+"/"+key, "/")
+	for i, part := range parts {
+		parts[i] = url.PathEscape(part)
+	}
+	return strings.Join(parts, "/")
 }

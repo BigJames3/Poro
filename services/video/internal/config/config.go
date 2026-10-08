@@ -45,9 +45,12 @@ type Config struct {
 	S3PublicEndpoint string
 	S3Region         string
 	S3Bucket         string
-	S3AccessKey      string
-	S3SecretKey      string
-	S3ForcePathStyle bool
+	// S3QuarantineBucket holds the media of removed and deleted videos. It
+	// must not be publicly readable.
+	S3QuarantineBucket string
+	S3AccessKey        string
+	S3SecretKey        string
+	S3ForcePathStyle   bool
 
 	FFmpegBin  string
 	FFprobeBin string
@@ -99,6 +102,9 @@ func (c *Config) Validate() error {
 	}
 	if c.S3Endpoint == "" || c.S3Bucket == "" {
 		errs = append(errs, errors.New("S3_ENDPOINT and S3_BUCKET are required"))
+	}
+	if c.S3QuarantineBucket == "" || c.S3QuarantineBucket == c.S3Bucket {
+		errs = append(errs, errors.New("S3_QUARANTINE_BUCKET is required and must differ from S3_BUCKET"))
 	}
 	if c.S3PublicEndpoint == "" {
 		errs = append(errs, errors.New("S3_PUBLIC_ENDPOINT is required"))
@@ -158,13 +164,14 @@ func Load() (*Config, error) {
 		KafkaBrokers: splitList(v.GetString("KAFKA_BROKERS")),
 		OtelEndpoint: v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),
 
-		S3Endpoint:       v.GetString("S3_ENDPOINT"),
-		S3PublicEndpoint: v.GetString("S3_PUBLIC_ENDPOINT"),
-		S3Region:         v.GetString("S3_REGION"),
-		S3Bucket:         v.GetString("S3_BUCKET"),
-		S3AccessKey:      v.GetString("S3_ACCESS_KEY_ID"),
-		S3SecretKey:      v.GetString("S3_SECRET_ACCESS_KEY"),
-		S3ForcePathStyle: v.GetBool("S3_FORCE_PATH_STYLE"),
+		S3Endpoint:         v.GetString("S3_ENDPOINT"),
+		S3PublicEndpoint:   v.GetString("S3_PUBLIC_ENDPOINT"),
+		S3Region:           v.GetString("S3_REGION"),
+		S3Bucket:           v.GetString("S3_BUCKET"),
+		S3QuarantineBucket: v.GetString("S3_QUARANTINE_BUCKET"),
+		S3AccessKey:        v.GetString("S3_ACCESS_KEY_ID"),
+		S3SecretKey:        v.GetString("S3_SECRET_ACCESS_KEY"),
+		S3ForcePathStyle:   v.GetBool("S3_FORCE_PATH_STYLE"),
 
 		FFmpegBin:  v.GetString("FFMPEG_BIN"),
 		FFprobeBin: v.GetString("FFPROBE_BIN"),
@@ -201,6 +208,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("S3_PUBLIC_ENDPOINT", "http://localhost:9000")
 	v.SetDefault("S3_REGION", "us-east-1")
 	v.SetDefault("S3_BUCKET", "poro-videos")
+	v.SetDefault("S3_QUARANTINE_BUCKET", "poro-quarantine")
 	v.SetDefault("S3_ACCESS_KEY_ID", "poro_dev")
 	v.SetDefault("S3_SECRET_ACCESS_KEY", "poro_dev_secret")
 	v.SetDefault("S3_FORCE_PATH_STYLE", true)
