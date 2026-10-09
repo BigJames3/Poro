@@ -1,0 +1,374 @@
+openapi: 3.1.0
+info:
+  title: PORO Order API
+  version: 1.0.0
+  description: |
+    Cart, checkout and orders of the PORO marketplace. Every route needs a
+    token; every JSON response uses `{data, error, meta}`. Amounts are
+    integers in minor units of the order currency (XOF and XAF have none,
+    NGN is in kobo).
+
+    Checkout splits the cart into one order per shop. Each order starts
+    `pending` until the shop reserves the stock; the reserved price is
+    authoritative and may differ from the cart price. Cash on delivery goes
+    to `confirmed`, other methods to `awaiting_payment` for 30 minutes.
+
+    Error codes besides the generic ones: `variant_unavailable`, `own_shop`,
+    `cart_full`, `cart_empty`, `cart_unavailable`, `too_many_lines`,
+    `payment_method_unavailable`, `delivery_invalid`, `tracking_invalid`
+    (422); `invalid_idempotency_key`, `invalid_cursor` (400);
+    `idempotency_key_reused`, `order_status_conflict` (409);
+    `order_not_found` (404).
+servers:
+  - url: http://localhost:8091
+    description: Local development
+tags:
+  - name: cart
+  - name: orders
+  - name: seller
+  - name: platform
+security:
+  - bearerAuth: []
+paths:
+  /health/live:
+    get:
+      tags: [platform]
+      security: []
+      summary: Liveness
+      responses:
+        "200": { description: Process up }
+  /health/ready:
+    get:
+      tags: [platform]
+      security: []
+      summary: Readiness, Postgres and Redis (also at /health)
+      responses:
+        "200": { description: Ready }
+        "503": { description: A dependency is down }
+  /api/v1/cart:
+    get:
+      tags: [cart]
+      summary: The cart grouped by shop, with current catalogue prices
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+        "401": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [cart]
+      summary: Empty the cart
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+  /api/v1/cart/items/{variantId}:
+    parameters:
+      - name: variantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      tags: [cart]
+      summary: Set the quantity of a variant (100 lines at most)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [quantity]
+              properties:
+                quantity: { type: integer, minimum: 1, maximum: 99 }
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+        "400": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [cart]
+      summary: Remove a variant from the cart
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+  /api/v1/checkout:
+    post:
+      tags: [orders]
+      summary: Turn the cart into one order per shop
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: 8 to 100 of [A-Za-z0-9_-]. A replay returns the first result; a different body with the same key is 409.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [payment_method, delivery]
+              properties:
+                payment_method: { enum: [cash_on_delivery, wave, simulated], description: Only the methods enabled on the server are accepted }
+                delivery: { $ref: "#/components/schemas/Delivery" }
+      responses:
+        "201":
+          description: The orders created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      checkout_id: { type: string, format: uuid }
+                      orders: { type: array, items: { $ref: "#/components/schemas/Order" } }
+                  error: { type: "null" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /api/v1/orders:
+    get:
+      tags: [orders]
+      summary: Orders of the calling buyer, newest first
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Status" }
+      responses:
+        "200": { $ref: "#/components/responses/OrderPage" }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/orders/{orderId}:
+    parameters: [{ $ref: "#/components/parameters/OrderId" }]
+    get:
+      tags: [orders]
+      summary: One order of the calling buyer
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/orders/{orderId}/cancel:
+    parameters: [{ $ref: "#/components/parameters/OrderId" }]
+    post:
+      tags: [orders]
+      summary: Cancel before shipping; a paid order is refunded
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/orders/{orderId}/confirm-receipt:
+    parameters: [{ $ref: "#/components/parameters/OrderId" }]
+    post:
+      tags: [orders]
+      summary: Confirm receipt of a shipped order; it completes
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/seller/orders:
+    get:
+      tags: [seller]
+      summary: Orders of the calling seller's shop, newest first
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Status" }
+      responses:
+        "200": { $ref: "#/components/responses/OrderPage" }
+  /api/v1/seller/orders/{orderId}:
+    parameters: [{ $ref: "#/components/parameters/OrderId" }]
+    get:
+      tags: [seller]
+      summary: One order of the calling seller, with the delivery contact
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/seller/orders/{orderId}/ship:
+    parameters: [{ $ref: "#/components/parameters/OrderId" }]
+    post:
+      tags: [seller]
+      summary: Mark a confirmed or paid order shipped
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                tracking: { type: ["string", "null"], description: "Free text, 200 characters at most" }
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/seller/orders/{orderId}/cancel:
+    parameters: [{ $ref: "#/components/parameters/OrderId" }]
+    post:
+      tags: [seller]
+      summary: Cancel before shipping; a paid order is refunded
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque `next_cursor` of the previous page; omit for page 1.
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+    Status:
+      name: status
+      in: query
+      schema: { $ref: "#/components/schemas/OrderStatus" }
+  responses:
+    Error:
+      description: Error envelope, see `error.code`
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Cart:
+      description: The cart
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/Cart" }
+              error: { type: "null" }
+              meta: { $ref: "#/components/schemas/Meta" }
+    Order:
+      description: The order
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/Order" }
+              error: { type: "null" }
+              meta: { $ref: "#/components/schemas/Meta" }
+    OrderPage:
+      description: A page of orders
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Order" } }
+                  next_cursor: { type: ["string", "null"] }
+              error: { type: "null" }
+              meta: { $ref: "#/components/schemas/Meta" }
+  schemas:
+    Meta:
+      type: object
+      properties:
+        request_id: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: { type: "null" }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [cart_empty, own_shop, order_status_conflict] }
+            message: { type: string }
+        meta: { $ref: "#/components/schemas/Meta" }
+    OrderStatus: { enum: [pending, awaiting_payment, confirmed, paid, shipped, completed, cancelled] }
+    Delivery:
+      type: object
+      additionalProperties: false
+      required: [name, phone, city, address]
+      properties:
+        name: { type: string, description: 1 to 80 characters }
+        phone: { type: string, pattern: "^\\+[1-9]\\d{7,14}$", examples: ["+2250700000000"] }
+        city: { type: string, description: 1 to 80 characters }
+        address: { type: string, description: "1 to 300 characters, 3 lines at most" }
+    CartLine:
+      type: object
+      properties:
+        variant_id: { type: string, format: uuid }
+        product_id: { type: ["string", "null"], format: uuid }
+        title: { type: ["string", "null"] }
+        variant_title: { type: ["string", "null"] }
+        image_url: { type: ["string", "null"], format: uri }
+        quantity: { type: integer }
+        unit_price: { type: ["integer", "null"] }
+        line_total: { type: ["integer", "null"] }
+        in_stock: { type: boolean, description: A hint; the reservation decides }
+        available: { type: boolean }
+    Cart:
+      type: object
+      properties:
+        shops:
+          type: array
+          items:
+            type: object
+            properties:
+              shop:
+                type: object
+                properties:
+                  shop_id: { type: string, format: uuid }
+                  name: { type: string }
+                  handle: { type: string }
+                  currency: { enum: [XOF, XAF, NGN] }
+              items: { type: array, items: { $ref: "#/components/schemas/CartLine" } }
+              subtotal: { type: integer }
+        unavailable: { type: array, items: { $ref: "#/components/schemas/CartLine" } }
+        item_count: { type: integer }
+    Order:
+      type: object
+      properties:
+        order_id: { type: string, format: uuid }
+        checkout_id: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/OrderStatus" }
+        shop:
+          type: object
+          properties:
+            shop_id: { type: string, format: uuid }
+            name: { type: string }
+        buyer_id: { type: string, format: uuid }
+        seller_id: { type: string, format: uuid }
+        currency: { enum: [XOF, XAF, NGN] }
+        payment_method: { enum: [cash_on_delivery, wave, simulated] }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id: { type: string, format: uuid }
+              variant_id: { type: string, format: uuid }
+              title: { type: string }
+              quantity: { type: integer }
+              unit_price: { type: integer, description: Authoritative once reserved }
+              unit_price_seen: { type: integer, description: The cart price at checkout }
+        subtotal_seen: { type: integer }
+        total: { type: ["integer", "null"], description: Null until the stock is reserved }
+        delivery:
+          oneOf:
+            - { $ref: "#/components/schemas/Delivery" }
+            - { type: "null", description: Erased 90 days after the order ended }
+        tracking: { type: ["string", "null"] }
+        cancel_reason: { enum: [stock_rejected, payment_timeout, buyer_cancelled, seller_cancelled, null] }
+        paid: { type: boolean }
+        last_payment_error: { type: ["string", "null"] }
+        expires_at: { type: ["string", "null"], format: date-time }
+        placed_at: { type: ["string", "null"], format: date-time }
+        paid_at: { type: ["string", "null"], format: date-time }
+        shipped_at: { type: ["string", "null"], format: date-time }
+        completed_at: { type: ["string", "null"], format: date-time }
+        cancelled_at: { type: ["string", "null"], format: date-time }
+        refunded_at: { type: ["string", "null"], format: date-time }
+        created_at: { type: string, format: date-time }
