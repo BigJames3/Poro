@@ -1,0 +1,557 @@
+openapi: 3.1.0
+info:
+  title: PORO Shop API
+  version: 1.0.0
+  description: |
+    Shops, products, variants and photos of the PORO marketplace. A shop
+    always belongs to one auth account (the `sub` of the token that opened
+    it) and an account holds at most one shop. Every JSON response uses
+    `{data, error, meta}`.
+
+    Amounts are integers in minor units of the shop currency: XOF and XAF
+    have none, NGN is in kobo. The country chosen at opening sets the
+    currency and never changes. 120 requests per minute per account (per IP
+    when anonymous), fewer on uploads, then `429 rate_limited`.
+
+    Error codes besides the generic ones: `shop_exists`, `handle_taken` (409);
+    `handle_invalid`, `handle_reserved`, `shop_name_invalid` (422);
+    `shop_not_found`, `product_not_found`, `variant_not_found`,
+    `image_not_found` (404); `shop_suspended` (403); `shop_status_conflict`,
+    `stock_below_reserved`, `variant_has_reservations`,
+    `product_has_reservations` (409); `image_required`, `too_many_images`,
+    `stock_not_editable_here`, `image_upload_invalid`, `image_not_uploaded`,
+    `image_too_large`, `image_invalid` (422); `invalid_cursor` (400).
+servers:
+  - url: http://localhost:8090
+    description: Local development
+tags:
+  - name: shops
+  - name: products
+  - name: public
+  - name: admin
+  - name: platform
+security:
+  - bearerAuth: []
+paths:
+  /health/live:
+    get:
+      tags: [platform]
+      security: []
+      summary: Liveness
+      responses:
+        "200": { description: Process up }
+  /health/ready:
+    get:
+      tags: [platform]
+      security: []
+      summary: Readiness, Postgres and Redis (also at /health)
+      responses:
+        "200": { description: Ready }
+        "503": { description: A dependency is down }
+  /api/v1/shops:
+    post:
+      tags: [shops]
+      summary: Open the shop of the calling account
+      description: |
+        Publishes poro.shop.shop.created; auth then grants BUSINESS, visible
+        in the access token after the next refresh.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, handle, country_code]
+              properties:
+                name: { type: string, description: 1 to 60 characters }
+                handle: { type: string, pattern: "^@?[A-Za-z0-9._]{3,30}$", description: Lowercased; never changes }
+                country_code: { $ref: "#/components/schemas/Country" }
+                description: { type: ["string", "null"], description: At most 500 characters and 10 lines }
+      responses:
+        "201": { $ref: "#/components/responses/MyShop" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/me:
+    get:
+      tags: [shops]
+      summary: The shop of the calling account
+      responses:
+        "200": { $ref: "#/components/responses/MyShop" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [shops]
+      summary: Change the name or the description
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string }
+                description: { type: ["string", "null"], description: null clears it }
+      responses:
+        "200": { $ref: "#/components/responses/MyShop" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/me/close:
+    post:
+      tags: [shops]
+      summary: Close an active shop; it disappears from the catalogue
+      responses:
+        "200": { $ref: "#/components/responses/MyShop" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/me/reopen:
+    post:
+      tags: [shops]
+      summary: Reopen a closed shop
+      responses:
+        "200": { $ref: "#/components/responses/MyShop" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/me/logo/upload-url:
+    post:
+      tags: [shops]
+      summary: Presigned POST to upload a logo (1 B to 5 MiB)
+      requestBody: { $ref: "#/components/requestBodies/ImageUpload" }
+      responses:
+        "201": { $ref: "#/components/responses/ImageUpload" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/me/logo:
+    put:
+      tags: [shops]
+      summary: Confirm an upload; it is re-encoded to a 512×512 WebP without metadata
+      requestBody: { $ref: "#/components/requestBodies/ConfirmImage" }
+      responses:
+        "200": { $ref: "#/components/responses/MyShop" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [shops]
+      summary: Remove the logo
+      responses:
+        "200": { $ref: "#/components/responses/MyShop" }
+  /api/v1/shops/me/products:
+    post:
+      tags: [products]
+      summary: Create a draft product with its variants
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title, variants]
+              properties:
+                title: { type: string, description: 1 to 120 characters }
+                description: { type: ["string", "null"], description: At most 2000 characters and 50 lines }
+                variants:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: { $ref: "#/components/schemas/NewVariant" }
+      responses:
+        "201": { $ref: "#/components/responses/MyProduct" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    get:
+      tags: [products]
+      summary: Products of the calling account's shop, newest first
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/ProductStatus" }
+      responses:
+        "200":
+          description: A page of products
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MyProductPageEnvelope" }
+        "400": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/me/products/{productId}:
+    parameters: [{ $ref: "#/components/parameters/ProductId" }]
+    get:
+      tags: [products]
+      summary: One product with its stock
+      responses:
+        "200": { $ref: "#/components/responses/MyProduct" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [products]
+      summary: Change fields, publish, archive, or replace the variant list
+      description: |
+        `variants`, when present, is the full list: listed ids are updated,
+        entries without id are created (with an optional initial `stock`),
+        missing ones are removed. Publishing (`status: active`) needs a photo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                title: { type: string }
+                description: { type: ["string", "null"] }
+                status: { $ref: "#/components/schemas/ProductStatus" }
+                variants:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    allOf:
+                      - { $ref: "#/components/schemas/NewVariant" }
+                      - type: object
+                        properties:
+                          variant_id: { type: string, format: uuid, description: Omitted for a new variant }
+      responses:
+        "200": { $ref: "#/components/responses/MyProduct" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [products]
+      summary: Delete the product; refused while orders hold its stock
+      responses:
+        "204": { description: Deleted }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/me/products/{productId}/variants/{variantId}/stock:
+    parameters:
+      - { $ref: "#/components/parameters/ProductId" }
+      - name: variantId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    put:
+      tags: [products]
+      summary: Set the stock on hand of a variant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [stock_on_hand]
+              properties:
+                stock_on_hand: { type: integer, minimum: 0, maximum: 1000000 }
+      responses:
+        "200": { $ref: "#/components/responses/MyProduct" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/me/products/{productId}/images/upload-url:
+    parameters: [{ $ref: "#/components/parameters/ProductId" }]
+    post:
+      tags: [products]
+      summary: Presigned POST to upload a photo; 10 photos at most
+      requestBody: { $ref: "#/components/requestBodies/ImageUpload" }
+      responses:
+        "201": { $ref: "#/components/responses/ImageUpload" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/me/products/{productId}/images:
+    parameters: [{ $ref: "#/components/parameters/ProductId" }]
+    put:
+      tags: [products]
+      summary: Confirm an upload; it is re-encoded to WebP within 1080 px, without metadata
+      requestBody: { $ref: "#/components/requestBodies/ConfirmImage" }
+      responses:
+        "200": { $ref: "#/components/responses/MyProduct" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/me/products/{productId}/images/{imageId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProductId" }
+      - name: imageId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [products]
+      summary: Remove a photo; a published product keeps at least one
+      responses:
+        "200": { $ref: "#/components/responses/MyProduct" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/{handle}:
+    get:
+      tags: [public]
+      security: []
+      summary: An active shop
+      parameters: [{ $ref: "#/components/parameters/Handle" }]
+      responses:
+        "200":
+          description: The shop
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Shop" }
+                  error: { type: "null" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/shops/{handle}/products:
+    get:
+      tags: [public]
+      security: []
+      summary: Published products of an active shop, newest first
+      parameters:
+        - { $ref: "#/components/parameters/Handle" }
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: A page of products
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items: { type: array, items: { $ref: "#/components/schemas/Product" } }
+                      next_cursor: { type: ["string", "null"] }
+                  error: { type: "null" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/products/{productId}:
+    get:
+      tags: [public]
+      security: []
+      summary: A published product of an active shop
+      parameters: [{ $ref: "#/components/parameters/ProductId" }]
+      responses:
+        "200":
+          description: The product
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Product" }
+                  error: { type: "null" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/shops/{shopId}/suspend:
+    parameters: [{ $ref: "#/components/parameters/ShopId" }]
+    post:
+      tags: [admin]
+      summary: Suspend an active shop (ADMIN or MODERATOR)
+      responses:
+        "200": { $ref: "#/components/responses/MyShop" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /api/v1/admin/shops/{shopId}/reinstate:
+    parameters: [{ $ref: "#/components/parameters/ShopId" }]
+    post:
+      tags: [admin]
+      summary: Reinstate a suspended shop (ADMIN or MODERATOR)
+      responses:
+        "200": { $ref: "#/components/responses/MyShop" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque `next_cursor` of the previous page; omit for page 1.
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+    Handle:
+      name: handle
+      in: path
+      required: true
+      schema: { type: string }
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ShopId:
+      name: shopId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  requestBodies:
+    ImageUpload:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [content_type]
+            properties:
+              content_type: { enum: [image/jpeg, image/png, image/webp] }
+    ConfirmImage:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [upload_key]
+            properties:
+              upload_key: { type: string }
+  responses:
+    Error:
+      description: Error envelope, see `error.code`
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    MyShop:
+      description: The shop with its owner view
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/MyShop" }
+              error: { type: "null" }
+              meta: { $ref: "#/components/schemas/Meta" }
+    MyProduct:
+      description: The product with its stock
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/MyProduct" }
+              error: { type: "null" }
+              meta: { $ref: "#/components/schemas/Meta" }
+    ImageUpload:
+      description: Presigned POST form; send the fields then the file to upload_url
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: object
+                properties:
+                  upload_url: { type: string, format: uri }
+                  fields: { type: object, additionalProperties: { type: string } }
+                  upload_key: { type: string }
+                  max_bytes: { type: integer }
+                  expires_in: { type: integer, description: Seconds }
+              error: { type: "null" }
+              meta: { $ref: "#/components/schemas/Meta" }
+  schemas:
+    Meta:
+      type: object
+      properties:
+        request_id: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: { type: "null" }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, examples: [shop_not_found, handle_taken, stock_below_reserved, rate_limited] }
+            message: { type: string }
+        meta: { $ref: "#/components/schemas/Meta" }
+    Country: { enum: [CI, SN, CM, NG] }
+    Currency: { enum: [XOF, XAF, NGN] }
+    ProductStatus: { enum: [draft, active, archived] }
+    Shop:
+      type: object
+      properties:
+        shop_id: { type: string, format: uuid }
+        handle: { type: string }
+        name: { type: string }
+        description: { type: ["string", "null"] }
+        logo_url: { type: ["string", "null"], format: uri }
+        country_code: { $ref: "#/components/schemas/Country" }
+        currency: { $ref: "#/components/schemas/Currency" }
+        created_at: { type: string, format: date-time }
+    MyShop:
+      allOf:
+        - { $ref: "#/components/schemas/Shop" }
+        - type: object
+          properties:
+            owner_id: { type: string, format: uuid, description: The auth account that owns the shop }
+            status: { enum: [active, suspended, closed] }
+            updated_at: { type: string, format: date-time }
+    NewVariant:
+      type: object
+      required: [title, price]
+      properties:
+        title: { type: string, description: 1 to 60 characters }
+        price: { type: integer, minimum: 1, maximum: 1000000000000, description: Minor units }
+        stock: { type: integer, minimum: 0, maximum: 1000000, description: Initial stock of a new variant }
+    Variant:
+      type: object
+      properties:
+        variant_id: { type: string, format: uuid }
+        title: { type: string }
+        price: { type: integer }
+        in_stock: { type: boolean, description: A hint; the reservation at checkout decides }
+    MyVariant:
+      allOf:
+        - { $ref: "#/components/schemas/Variant" }
+        - type: object
+          properties:
+            stock_on_hand: { type: integer }
+            stock_reserved: { type: integer, description: Held by orders not yet completed or cancelled }
+            stock_available: { type: integer }
+    Product:
+      type: object
+      properties:
+        product_id: { type: string, format: uuid }
+        shop:
+          type: object
+          properties:
+            shop_id: { type: string, format: uuid }
+            handle: { type: string }
+            name: { type: string }
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        currency: { $ref: "#/components/schemas/Currency" }
+        images:
+          type: array
+          items:
+            type: object
+            properties:
+              image_id: { type: string, format: uuid }
+              url: { type: string, format: uri }
+        variants: { type: array, items: { $ref: "#/components/schemas/Variant" } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    MyProduct:
+      allOf:
+        - { $ref: "#/components/schemas/Product" }
+        - type: object
+          properties:
+            status: { $ref: "#/components/schemas/ProductStatus" }
+            variants: { type: array, items: { $ref: "#/components/schemas/MyVariant" } }
+    MyProductPageEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items: { type: array, items: { $ref: "#/components/schemas/MyProduct" } }
+            next_cursor: { type: ["string", "null"] }
+        error: { type: "null" }
+        meta: { $ref: "#/components/schemas/Meta" }

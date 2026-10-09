@@ -27,6 +27,7 @@ jobs:
       notification: ${{ steps.filter.outputs.notification }}
       moderation: ${{ steps.filter.outputs.moderation }}
       search: ${{ steps.filter.outputs.search }}
+      shop: ${{ steps.filter.outputs.shop }}
       mobile: ${{ steps.filter.outputs.mobile }}
     steps:
       - uses: actions/checkout@v4
@@ -80,6 +81,10 @@ jobs:
               - 'packages/shared-go/**'
               - 'packages/contracts/events/**'
               - '.golangci.yml'
+              - '.github/workflows/ci.yml'
+            shop:
+              - 'services/shop/**'
+              - 'packages/contracts/events/**'
               - '.github/workflows/ci.yml'
             mobile:
               - 'apps/mobile-android/**'
@@ -197,6 +202,37 @@ jobs:
         run: npm run test:cov
       - name: Docker build
         run: docker build -t poro-user:${{ github.sha }} .
+
+  shop:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.shop == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/shop
+    env:
+      # prisma.config.ts refuses an unset URL; generate never connects and
+      # the e2e tests start their own Postgres container.
+      DATABASE_URL: postgresql://ci@localhost:5432/ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: services/shop/package-lock.json
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Format
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Tests
+        run: npm run test:cov
+      - name: Docker build
+        run: docker build -t poro-shop:${{ github.sha }} .
 
   notification:
     needs: detect-changes
