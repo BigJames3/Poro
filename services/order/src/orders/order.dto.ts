@@ -1,10 +1,11 @@
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
   IsString,
-  Matches,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -12,6 +13,12 @@ import {
 } from 'class-validator';
 
 import { PAYMENT_METHODS, type PaymentMethod } from '../config/app.config';
+import {
+  DeliveryInputDto,
+  PAYMENT_METHOD_LABELS,
+  toDeliveryView,
+  type DeliveryView,
+} from '../delivery/delivery';
 import type { CancelReason } from '../events/catalog';
 import { Order, OrderLine } from '../generated/prisma/client';
 
@@ -27,34 +34,34 @@ export const ORDER_STATUSES = [
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const MAX_LINES_PER_ORDER = 50;
 
-export class DeliveryDto {
-  @IsString()
-  @MaxLength(200)
-  name!: string;
+/** Step 1: the recap. Nothing is ordered yet. */
+export class PreviewDto {
+  @ValidateNested()
+  @Type(() => DeliveryInputDto)
+  delivery!: DeliveryInputDto;
 
-  /** E.164, for instance +2250700000000. */
-  @IsString()
-  @Matches(/^\+[1-9]\d{7,14}$/, {
-    message: 'phone must be in international format, e.g. +2250700000000',
-  })
-  phone!: string;
+  @IsOptional()
+  @IsIn(PAYMENT_METHODS)
+  payment_method?: PaymentMethod;
 
-  @IsString()
-  @MaxLength(200)
-  city!: string;
+  /** Keep this delivery in the address book once the order is confirmed. */
+  @IsOptional()
+  @IsBoolean()
+  save_address?: boolean;
 
+  @IsOptional()
   @IsString()
-  @MaxLength(1000)
-  address!: string;
+  @MaxLength(100)
+  address_label?: string | null;
 }
 
-export class CheckoutDto {
-  @IsIn(PAYMENT_METHODS)
-  payment_method!: PaymentMethod;
+/** Step 2: the buyer explicitly confirms the recap they reviewed. */
+export class ConfirmDto {
+  @IsUUID()
+  preview_id!: string;
 
-  @ValidateNested()
-  @Type(() => DeliveryDto)
-  delivery!: DeliveryDto;
+  @IsBoolean()
+  confirmed!: boolean;
 }
 
 export class ShipDto {
@@ -92,13 +99,6 @@ export interface OrderLineView {
   unit_price_seen: number;
 }
 
-export interface DeliveryView {
-  name: string;
-  phone: string;
-  city: string;
-  address: string;
-}
-
 export interface OrderView {
   order_id: string;
   checkout_id: string;
@@ -108,6 +108,8 @@ export interface OrderView {
   seller_id: string;
   currency: string;
   payment_method: PaymentMethod;
+  /** For instance "Paiement à la livraison". */
+  payment_method_label: string;
   items: OrderLineView[];
   subtotal_seen: number;
   /** Null until the shop reserved the stock. */
@@ -131,6 +133,56 @@ export interface OrderView {
 export interface CheckoutView {
   checkout_id: string;
   orders: OrderView[];
+  /** True when the delivery was added to the address book. */
+  address_saved: boolean;
+}
+
+export interface PreviewLineView {
+  product_id: string;
+  variant_id: string;
+  title: string;
+  variant_title: string;
+  image_url: string | null;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+}
+
+export interface PreviewShopView {
+  shop: { shop_id: string; name: string; handle: string };
+  currency: string;
+  items: PreviewLineView[];
+  subtotal: number;
+}
+
+/** The full recap shown before the buyer confirms. */
+export interface PreviewView {
+  preview_id: string;
+  expires_at: string;
+  shops: PreviewShopView[];
+  /** Total of the items per currency; delivery fees are not included. */
+  totals: { currency: string; amount: number }[];
+  item_count: number;
+  delivery: DeliveryView;
+  payment_method: PaymentMethod;
+  payment_method_label: string;
+  delivery_fee_notice: string;
+}
+
+export interface PrefillView {
+  /** address_book: from a saved address; account: from the account; empty: nothing known. */
+  source: 'address_book' | 'account' | 'empty';
+  address_id: string | null;
+  delivery: {
+    full_name: string | null;
+    phone: string | null;
+    city: string | null;
+    address: string | null;
+    landmark: string | null;
+    location: DeliveryView['location'];
+  };
+  /** Whether auth and user answered; skipped when a saved address was used. */
+  account_lookup: 'ok' | 'partial' | 'unavailable' | 'skipped';
 }
 
 export interface Page<T> {
@@ -143,18 +195,6 @@ export type OrderWithLines = Order & { lines: OrderLine[] };
 const iso = (at: Date | null): string | null => at?.toISOString() ?? null;
 
 export function toOrderView(order: OrderWithLines): OrderView {
-  const contact =
-    order.contactName !== null &&
-    order.contactPhone !== null &&
-    order.city !== null &&
-    order.address !== null
-      ? {
-          name: order.contactName,
-          phone: order.contactPhone,
-          city: order.city,
-          address: order.address,
-        }
-      : null;
   return {
     order_id: order.id,
     checkout_id: order.checkoutId,
@@ -164,6 +204,7 @@ export function toOrderView(order: OrderWithLines): OrderView {
     seller_id: order.sellerId,
     currency: order.currency,
     payment_method: order.paymentMethod as PaymentMethod,
+    payment_method_label: PAYMENT_METHOD_LABELS[order.paymentMethod] ?? order.paymentMethod,
     items: [...order.lines]
       .sort((a, b) => a.position - b.position)
       .map((line) => ({
@@ -176,7 +217,7 @@ export function toOrderView(order: OrderWithLines): OrderView {
       })),
     subtotal_seen: Number(order.subtotalSeen),
     total: order.total === null ? null : Number(order.total),
-    delivery: contact,
+    delivery: toDeliveryView(order),
     tracking: order.tracking,
     cancel_reason: order.cancelReason as CancelReason | null,
     paid: order.paid,

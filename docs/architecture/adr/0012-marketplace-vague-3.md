@@ -77,3 +77,16 @@ Wave ne couvre que la Côte d'Ivoire et le Sénégal.
   v1 (litiges et retours plus tard).
 - Un paiement arrivé après l'annulation republie `order.cancelled` avec
   `paid: true` pour déclencher le remboursement.
+
+## Complément du 2026-10-09 — passage en caisse v2
+
+- Paiement à la livraison seul pour l'instant ; le service payment est reporté.
+- Passage en caisse en deux temps : récapitulatif (`preview`), puis
+  confirmation explicite (`confirm`). Les commandes ne naissent qu'à la
+  confirmation, et seulement si le panier et les prix n'ont pas bougé.
+- Coordonnées pré-remplies : carnet d'adresses d'order, sinon nom (user) et
+  téléphone (auth) lus avec le jeton de l'acheteur. C'est le seul appel
+  synchrone entre services : lecture seule, délai court, jamais bloquant.
+- Un seul champ « Nom et prénom ». Obligatoires : nom, téléphone, ville, et
+  position GPS ou adresse ; indications facultatives.
+- Frais de livraison : seulement mentionnés comme payés au livreur.

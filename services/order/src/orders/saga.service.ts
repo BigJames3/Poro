@@ -169,10 +169,19 @@ export class SagaService {
     const before = new Date(now.getTime() - this.config.contactRetentionDays * DAY_MS);
     return this.prisma.$executeRaw`
       UPDATE orders SET contact_name = NULL, contact_phone = NULL, city = NULL, address = NULL,
-                        contact_erased_at = ${now}, updated_at = ${now}
+                        landmark = NULL, latitude = NULL, longitude = NULL,
+                        location_accuracy_m = NULL, contact_erased_at = ${now}, updated_at = ${now}
       WHERE contact_erased_at IS NULL
         AND ((status = 'completed' AND completed_at <= ${before})
           OR (status = 'cancelled' AND cancelled_at <= ${before}))`;
+  }
+
+  /** Deletes previews a day after they expired: they hold delivery contacts. */
+  async purgePreviews(now: Date = new Date()): Promise<number> {
+    const { count } = await this.prisma.checkoutPreview.deleteMany({
+      where: { expiresAt: { lt: new Date(now.getTime() - DAY_MS) } },
+    });
+    return count;
   }
 
   private async sweep(

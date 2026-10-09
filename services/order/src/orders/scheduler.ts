@@ -47,6 +47,7 @@ export class Scheduler implements OnApplicationBootstrap, OnApplicationShutdown 
       ['expired', () => this.saga.expireUnpaid(now)],
       ['auto_completed', () => this.saga.autoComplete(now)],
       ['contacts_erased', () => this.saga.eraseContacts(now)],
+      ['previews_purged', () => this.saga.purgePreviews(now)],
     ];
     for (const [name, task] of tasks) {
       try {

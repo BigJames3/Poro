@@ -27,6 +27,12 @@ export interface AppConfig {
   contactRetentionDays: number;
   schedulerEnabled: boolean;
   schedulerIntervalMs: number;
+  /** Base URLs used to prefill the delivery contact from the buyer's account. */
+  authUrl: string;
+  userUrl: string;
+  accountLookupTimeoutMs: number;
+  /** A checkout preview must be confirmed within this delay. */
+  previewTtlMinutes: number;
 }
 
 export const PAYMENT_METHODS = ['cash_on_delivery', 'wave', 'simulated'] as const;
@@ -163,6 +169,24 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     errors,
   );
 
+  const authUrl = (env.AUTH_URL ?? 'http://localhost:8081').replace(/\/$/, '');
+  const userUrl = (env.USER_URL ?? 'http://localhost:8082').replace(/\/$/, '');
+  for (const [name, value] of [
+    ['AUTH_URL', authUrl],
+    ['USER_URL', userUrl],
+  ] as const) {
+    if (!parseUrl(value)) {
+      errors.push(`${name} must be a URL`);
+    }
+  }
+  const accountLookupTimeoutMs = positiveInt(
+    env.ACCOUNT_LOOKUP_TIMEOUT_MS,
+    2_000,
+    'ACCOUNT_LOOKUP_TIMEOUT_MS',
+    errors,
+  );
+  const previewTtlMinutes = positiveInt(env.PREVIEW_TTL_MINUTES, 15, 'PREVIEW_TTL_MINUTES', errors);
+
   if (errors.length > 0) {
     throw new Error(`invalid config: ${errors.join('; ')}`);
   }
@@ -183,6 +207,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     contactRetentionDays,
     schedulerEnabled: (env.SCHEDULER_ENABLED ?? 'true') !== 'false',
     schedulerIntervalMs,
+    authUrl,
+    userUrl,
+    accountLookupTimeoutMs,
+    previewTtlMinutes,
   };
 }
 

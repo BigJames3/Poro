@@ -7,6 +7,8 @@ import { trace } from '@opentelemetry/api';
 import type Redis from 'ioredis';
 import { LoggerModule } from 'nestjs-pino';
 
+import { AddressesController } from './addresses/addresses.controller';
+import { AddressesService } from './addresses/addresses.service';
 import { AuthGuard } from './auth/auth.guard';
 import { CartController } from './cart/cart.controller';
 import { CartService } from './cart/cart.service';
@@ -16,6 +18,7 @@ import { EnvelopeInterceptor } from './common/envelope.interceptor';
 import { HttpExceptionFilter } from './common/http-exception.filter';
 import { PoroRequest, requestIdOf } from './common/request';
 import { appConfig, type AppConfigType } from './config/app.config';
+import { AccountClient } from './delivery/account.client';
 import { HealthController } from './health/health.controller';
 import { MetricsController, MetricsService } from './metrics/metrics';
 import { CheckoutService } from './orders/checkout.service';
@@ -78,13 +81,21 @@ class AccountThrottlerGuard extends ThrottlerGuard {
       }),
     }),
   ],
-  controllers: [HealthController, MetricsController, CartController, OrdersController],
+  controllers: [
+    HealthController,
+    MetricsController,
+    CartController,
+    AddressesController,
+    OrdersController,
+  ],
   providers: [
     PrismaService,
     MetricsService,
     TokenVerifier,
     CatalogConsumer,
     CartService,
+    AddressesService,
+    AccountClient,
     CheckoutService,
     OrdersService,
     SagaService,

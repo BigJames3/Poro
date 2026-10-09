@@ -12,18 +12,28 @@ la saga de commande avec shop (stock) et payment (paiement)
 
 1. Le panier (un par compte) contient des variantes du catalogue, copié
    localement depuis les événements de shop : aucun appel à shop.
-2. `POST /api/v1/checkout` découpe le panier en une commande par boutique
-   (`pending`), publie `poro.order.order.created` et vide le panier.
-   `Idempotency-Key` rend l'appel rejouable sans doublon.
-3. Shop répond. `stock.reserved` fixe les prix qui font foi : paiement à la
+2. `GET /api/v1/checkout/prefill` propose les coordonnées : l'adresse par
+   défaut du carnet, sinon le nom (user) et le téléphone (auth) du compte, lus
+   avec le jeton de l'acheteur, sans bloquer si ces services ne répondent pas.
+3. `POST /api/v1/checkout/preview` valide le panier et la livraison (nom,
+   téléphone, ville, et position GPS ou adresse ; indications facultatives)
+   et renvoie le récapitulatif : articles, quantités, totaux, coordonnées,
+   adresse, « Paiement à la livraison » et la mention des frais de livraison
+   payés au livreur. Rien n'est commandé.
+4. `POST /api/v1/checkout/confirm` (`confirmed: true`) crée une commande par
+   boutique (`pending`), publie `poro.order.order.created` et vide le panier,
+   seulement si le panier et les prix n'ont pas changé depuis le
+   récapitulatif (sinon 409 `preview_outdated`). Confirmer deux fois renvoie
+   les mêmes commandes ; l'adresse peut être enregistrée dans le carnet.
+5. Shop répond. `stock.reserved` fixe les prix qui font foi : paiement à la
    livraison → `confirmed`, sinon `awaiting_payment` pendant 30 minutes ;
    `order.placed` est publié. `stock.rejected` → `cancelled`.
-4. `payment.succeeded` → `paid`. Sans paiement à l'échéance → `cancelled`
+6. `payment.succeeded` → `paid`. Sans paiement à l'échéance → `cancelled`
    (`payment_timeout`).
-5. Le vendeur expédie (`shipped`, suivi en texte libre) ; l'acheteur confirme
+7. Le vendeur expédie (`shipped`, suivi en texte libre) ; l'acheteur confirme
    la réception, sinon la commande se clôt 7 jours après l'expédition
    (`completed`, publié pour shop et payment).
-6. Acheteur ou vendeur peuvent annuler tant que rien n'est expédié ;
+8. Acheteur ou vendeur peuvent annuler tant que rien n'est expédié ;
    `order.cancelled` porte `paid` pour que payment rembourse.
 
 Un paiement arrivé après l'annulation marque la commande payée et republie
@@ -48,7 +58,11 @@ de produit n'est jamais annulée par un instantané en retard.
 |---|---|
 | `GET`, `DELETE` | `/api/v1/cart` |
 | `PUT`, `DELETE` | `/api/v1/cart/items/:variantId` |
-| `POST` | `/api/v1/checkout` (en-tête `Idempotency-Key` facultatif) |
+| `GET` | `/api/v1/checkout/prefill` |
+| `POST` | `/api/v1/checkout/preview`, `/api/v1/checkout/confirm` |
+| `GET`, `POST` | `/api/v1/addresses` (10 adresses au plus) |
+| `PUT`, `DELETE` | `/api/v1/addresses/:addressId` |
+| `POST` | `/api/v1/addresses/:addressId/default` |
 | `GET` | `/api/v1/orders`, `/api/v1/orders/:orderId` |
 | `POST` | `/api/v1/orders/:orderId/cancel`, `/api/v1/orders/:orderId/confirm-receipt` |
 | `GET` | `/api/v1/seller/orders?status=`, `/api/v1/seller/orders/:orderId` |
@@ -61,9 +75,14 @@ propre boutique.
 
 ## Données personnelles
 
-Les coordonnées de livraison (nom, téléphone E.164, ville, adresse) ne sont
-visibles que par l'acheteur et le vendeur de la commande. Elles sont effacées
-`CONTACT_RETENTION_DAYS` (90) jours après la fin de la commande.
+Les coordonnées de livraison (nom, téléphone E.164, ville, adresse,
+indications, position GPS) ne sont visibles que par l'acheteur et le vendeur
+de la commande et ne partent dans aucun événement. Elles sont effacées
+`CONTACT_RETENTION_DAYS` (90) jours après la fin de la commande ; les
+récapitulatifs, qui les contiennent aussi, sont supprimés un jour après leur
+expiration. Le carnet d'adresses est conservé jusqu'à ce que l'acheteur
+supprime ses adresses. La position GPS n'est envoyée que si l'acheteur
+l'autorise dans l'app.
 
 ## Variables d'environnement
 
@@ -76,6 +95,9 @@ Voir [`.env.example`](.env.example). `PORT` 8091, base `poro_order`, Redis DB 9.
 | `AUTO_COMPLETE_DAYS` | `7` | Clôture automatique après expédition |
 | `CONTACT_RETENTION_DAYS` | `90` | Effacement des coordonnées |
 | `SCHEDULER_ENABLED`, `SCHEDULER_INTERVAL_MS` | `true`, `60000` | Tâches planifiées (`FOR UPDATE SKIP LOCKED`, sûres sur plusieurs réplicas) |
+| `AUTH_URL`, `USER_URL` | `http://localhost:8081`, `:8082` | Lecture du compte pour pré-remplir les coordonnées |
+| `ACCOUNT_LOOKUP_TIMEOUT_MS` | `2000` | Au-delà, le champ reste vide |
+| `PREVIEW_TTL_MINUTES` | `15` | Validité d'un récapitulatif |
 
 ## Tests
 
@@ -89,7 +111,8 @@ Postgres et Redpanda via testcontainers. Couverture minimale 70 %.
 
 ## Limites
 
-- Pas de frais de livraison ni de transporteur : suivi en texte libre.
+- Frais de livraison non calculés : le récapitulatif indique seulement
+  qu'ils sont payés au livreur. Pas de transporteur : suivi en texte libre.
 - Pas d'annulation après expédition, ni de litige ou de retour.
 - Les prix du panier sont indicatifs : le prix réservé fait foi et peut
   différer si le vendeur l'a changé entre-temps.

@@ -29,6 +29,10 @@ describe('loadConfig', () => {
       contactRetentionDays: 90,
       schedulerEnabled: true,
       schedulerIntervalMs: 60_000,
+      authUrl: 'http://localhost:8081',
+      userUrl: 'http://localhost:8082',
+      accountLookupTimeoutMs: 2_000,
+      previewTtlMinutes: 15,
     });
   });
 
@@ -58,6 +62,9 @@ describe('loadConfig', () => {
     [{ PAYMENT_METHODS: ' , ' }, 'at least one method'],
     [{ PAYMENT_TIMEOUT_MINUTES: '0' }, 'PAYMENT_TIMEOUT_MINUTES'],
     [{ AUTO_COMPLETE_DAYS: 'x' }, 'AUTO_COMPLETE_DAYS'],
+    [{ AUTH_URL: 'nope' }, 'AUTH_URL'],
+    [{ USER_URL: 'nope' }, 'USER_URL'],
+    [{ PREVIEW_TTL_MINUTES: '-1' }, 'PREVIEW_TTL_MINUTES'],
   ])('rejects %p', (override, message) => {
     expect(() => loadConfig({ ...prod, ...override })).toThrow(message);
   });
