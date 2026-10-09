@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -120,6 +121,14 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init creator consumer: %w", err)
 	}
+	businesses, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   consumer.BusinessRolesGroup,
+		Topics:  []string{events.TypeShopShopCreated},
+	}, consumer.NewShopCreated(pool, log), log)
+	if err != nil {
+		return fmt.Errorf("init business consumer: %w", err)
+	}
 
 	app := newApp(cfg, log, m)
 	routes.Register(app, routes.Dependencies{
@@ -135,10 +144,18 @@ func run() error {
 		Limiter: limiter,
 	})
 
+	var consumers sync.WaitGroup
+	for _, c := range []*kafka.Consumer{creators, businesses} {
+		consumers.Add(1)
+		go func() {
+			defer consumers.Done()
+			_ = c.Run(ctx)
+		}()
+	}
 	consumerDone := make(chan struct{})
 	go func() {
-		defer close(consumerDone)
-		_ = creators.Run(ctx)
+		consumers.Wait()
+		close(consumerDone)
 	}()
 
 	addr := ":" + cfg.AppPort

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.payment.refund.succeeded.v1.json",
+  "title": "poro.payment.refund.succeeded v1",
+  "description": "Published by payment once the provider confirmed a refund.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "version", "source", "subject", "occurred_at", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "const": "poro.payment.refund.succeeded" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "format": "uuid", "description": "refund id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["refund_id", "payment_id", "order_id", "buyer_id", "amount", "currency", "provider", "refunded_at"],
+      "properties": {
+        "refund_id": { "type": "string", "format": "uuid" },
+        "payment_id": { "type": "string", "format": "uuid" },
+        "order_id": { "type": "string", "format": "uuid" },
+        "buyer_id": { "type": "string", "format": "uuid" },
+        "amount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000000,
+          "description": "minor units: XOF and XAF have none, NGN is in kobo"
+        },
+        "currency": { "enum": ["XOF", "XAF", "NGN"], "description": "XOF for CI and SN, XAF for CM, NGN for NG" },
+        "provider": { "enum": ["wave", "simulated"] },
+        "refunded_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

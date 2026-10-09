@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.shop.product.updated.v1.json",
+  "title": "poro.shop.product.updated v1",
+  "description": "Full snapshot of a product after any change, stock excluded: availability is only a hint and the stock reservation decides. Keep the latest updated_at.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "version", "source", "subject", "occurred_at", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "const": "poro.shop.product.updated" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "format": "uuid", "description": "product id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product_id",
+        "shop_id",
+        "owner_id",
+        "title",
+        "description",
+        "currency",
+        "status",
+        "image_urls",
+        "variants",
+        "updated_at"
+      ],
+      "properties": {
+        "product_id": { "type": "string", "format": "uuid" },
+        "shop_id": { "type": "string", "format": "uuid" },
+        "owner_id": { "type": "string", "format": "uuid" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": { "type": ["string", "null"], "maxLength": 2000 },
+        "currency": { "enum": ["XOF", "XAF", "NGN"], "description": "XOF for CI and SN, XAF for CM, NGN for NG" },
+        "status": { "enum": ["draft", "active", "archived"] },
+        "image_urls": { "type": "array", "minItems": 0, "maxItems": 10, "items": { "type": "string", "format": "uri" } },
+        "variants": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["variant_id", "title", "price", "in_stock"],
+            "properties": {
+              "variant_id": { "type": "string", "format": "uuid" },
+              "title": { "type": "string", "minLength": 1, "maxLength": 60 },
+              "price": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000000000,
+                "description": "minor units: XOF and XAF have none, NGN is in kobo"
+              },
+              "in_stock": { "type": "boolean" }
+            }
+          }
+        },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

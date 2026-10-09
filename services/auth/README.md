@@ -61,7 +61,7 @@ En `dev`, les codes OTP sont écrits dans les logs (`dev sms otp`).
 | `AFRICASTALKING_API_KEY` | *(vide)* | Clé API, à fournir par le gestionnaire de secrets |
 | `AFRICASTALKING_SENDER_ID` | *(vide)* | Sender ID enregistré (ex. `PORO`) ; vide = expéditeur par défaut du compte |
 | `MIGRATIONS_PATH` | recherche de `migrations/` | Défini à `/app/migrations` dans l'image |
-| `KAFKA_BROKERS` | `localhost:9092` | Courtier pour le consommateur `poro.user.creator.activated` (hors ready) |
+| `KAFKA_BROKERS` | `localhost:9092` | Courtier des consommateurs de rôles `poro.user.creator.activated` et `poro.shop.shop.created` (hors ready) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | *(vide)* | URL OTLP HTTP ; vide = pas d'export |
 
 La configuration est validée au démarrage ; hors `dev`, `SMS_PROVIDER=log`, un secret OTP absent
@@ -89,8 +89,14 @@ simulateur Africa's Talking.
 Toutes les réponses JSON suivent `{data, error, meta}` avec `meta.request_id`.
 
 À la création d'un compte, `poro.auth.user.created` est écrit dans l'outbox (même transaction).
-Le consommateur `poro-auth-creator-roles` accorde CREATOR à la réception de
-`poro.user.creator.activated`. Kafka n'entre pas dans `/health/ready`.
+Deux consommateurs accordent des rôles, une fois par événement (inbox) :
+
+| Groupe | Topic | Rôle |
+|---|---|---|
+| `poro-auth-creator-roles` | `poro.user.creator.activated` | CREATOR |
+| `poro-auth-business-roles` | `poro.shop.shop.created` | BUSINESS (conservé si la boutique ferme) |
+
+Le rôle apparaît dans l'access token au refresh suivant. Kafka n'entre pas dans `/health/ready`.
 
 ## Tests
 

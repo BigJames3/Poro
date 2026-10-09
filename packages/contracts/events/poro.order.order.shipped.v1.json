@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.order.order.shipped.v1.json",
+  "title": "poro.order.order.shipped v1",
+  "description": "Published by order when the seller marks the order shipped.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "version", "source", "subject", "occurred_at", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "const": "poro.order.order.shipped" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "format": "uuid", "description": "order id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order_id", "buyer_id", "shop_id", "seller_id", "tracking", "shipped_at"],
+      "properties": {
+        "order_id": { "type": "string", "format": "uuid" },
+        "buyer_id": { "type": "string", "format": "uuid" },
+        "shop_id": { "type": "string", "format": "uuid" },
+        "seller_id": { "type": "string", "format": "uuid" },
+        "tracking": { "type": ["string", "null"], "maxLength": 200 },
+        "shipped_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
