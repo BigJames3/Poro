@@ -69,7 +69,7 @@ services:
     command:
       - |
         set -eu
-        for db in poro_auth poro_user poro_video poro_social poro_feed poro_notification poro_moderation poro_search; do
+        for db in poro_auth poro_user poro_video poro_social poro_feed poro_notification poro_moderation poro_search poro_shop; do
           if [ "$$(psql -tAc "SELECT 1 FROM pg_database WHERE datname = '$$db'")" != "1" ]; then
             psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE $$db OWNER poro"
           fi
@@ -130,7 +130,7 @@ services:
       - |
         set -eu
         until echo "cluster.check" | weed shell -master=seaweedfs:9333 >/dev/null 2>&1; do sleep 2; done
-        for b in poro-avatars poro-videos poro-quarantine; do
+        for b in poro-avatars poro-videos poro-quarantine poro-shop; do
           if ! echo "s3.bucket.list" | weed shell -master=seaweedfs:9333 2>/dev/null | grep -q "$$b"; then
             echo "s3.bucket.create -name $$b" | weed shell -master=seaweedfs:9333
           fi
@@ -791,6 +791,80 @@ services:
 # =============================================================
 # VOLUMES PERSISTANTS
 # =============================================================
+
+  # ─────────────────────────────────────────────
+  # SERVICE SHOP (boutiques, produits, stock)
+  # ─────────────────────────────────────────────
+
+  shop-migrate:
+    build:
+      context: ./services/shop
+      target: migrate
+    container_name: poro-shop-migrate
+    environment:
+      DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_shop?sslmode=disable
+    depends_on:
+      postgres-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: "no"
+
+  shop:
+    build:
+      context: ./services/shop
+      target: runtime
+    container_name: poro-shop
+    environment:
+      APP_ENV: dev
+      PORT: "8090"
+      LOG_LEVEL: debug
+      DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_shop?sslmode=disable
+      REDIS_URL: redis://redis:6379/8
+      JWKS_URL: http://auth:8081/.well-known/jwks.json
+      KAFKA_BROKERS: redpanda:29092
+      # Le service parle à SeaweedFS en interne ; les URLs signées pointent
+      # vers l'adresse joignable par le client (poste de dev).
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_BUCKET: poro-shop
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID must be set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY must be set in .env}
+      CORS_ORIGINS: ${SHOP_CORS_ORIGINS:-}
+    ports:
+      - "127.0.0.1:8090:8090"
+    depends_on:
+      shop-migrate:
+        condition: service_completed_successfully
+      auth:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+      seaweedfs-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  outbox-relay-shop:
+    build:
+      context: .
+      dockerfile: services/outbox-relay/Dockerfile
+    container_name: poro-outbox-relay-shop
+    environment:
+      <<: *relay-env
+      RELAY_SOURCE: shop
+      POSTGRES_DB: poro_shop
+    depends_on:
+      shop-migrate:
+        condition: service_completed_successfully
+      redpanda-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
 
 volumes:
   poro_postgres_data:

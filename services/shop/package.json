@@ -1,0 +1,133 @@
+{
+  "name": "@poro/shop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PORO shop service: shops, products, variants, photos and stock reservations",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "build": "prisma generate && nest build",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "migrate:deploy": "prisma migrate deploy",
+    "lint": "prisma generate && eslint \"{src,test}/**/*.ts\" --max-warnings 0",
+    "format": "prettier --write \"{src,test}/**/*.ts\"",
+    "format:check": "prettier --check \"{src,test}/**/*.ts\"",
+    "typecheck": "prisma generate && tsc --noEmit -p tsconfig.json",
+    "pretest": "prisma generate",
+    "test": "jest --runInBand",
+    "test:cov": "jest --runInBand --coverage"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": ".",
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/test"
+    ],
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "tsconfig": "tsconfig.jest.json"
+        }
+      ]
+    },
+    "testEnvironment": "node",
+    "testTimeout": 120000,
+    "collectCoverageFrom": [
+      "src/**/*.ts",
+      "!src/generated/**",
+      "!src/main.ts",
+      "!src/tracing.ts"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 70,
+        "lines": 70,
+        "statements": 70
+      }
+    },
+    "transformIgnorePatterns": [
+      "node_modules/(?!(jose)/)"
+    ],
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
+    "setupFiles": [
+      "<rootDir>/test/setup.ts"
+    ]
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1143.0",
+    "@aws-sdk/s3-presigned-post": "3.1143.0",
+    "@nest-lab/throttler-storage-redis": "1.2.0",
+    "@nestjs/common": "11.2.6",
+    "@nestjs/config": "4.0.4",
+    "@nestjs/core": "11.2.6",
+    "@nestjs/platform-express": "11.2.6",
+    "@nestjs/throttler": "6.7.1",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
+    "@opentelemetry/instrumentation-express": "0.70.0",
+    "@opentelemetry/instrumentation-http": "0.222.0",
+    "@opentelemetry/instrumentation-pg": "0.74.0",
+    "@opentelemetry/resources": "2.11.0",
+    "@opentelemetry/sdk-node": "0.222.0",
+    "@opentelemetry/semantic-conventions": "1.43.0",
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "@prometheus-io/client": "0.16.1",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.15.1",
+    "helmet": "8.3.0",
+    "ioredis": "6.0.0",
+    "jose": "6.2.12",
+    "kafkajs": "2.2.4",
+    "nestjs-pino": "5.2.1",
+    "pg": "8.23.0",
+    "pino": "10.3.1",
+    "pino-http": "11.0.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@nestjs/cli": "11.0.24",
+    "@nestjs/schematics": "11.1.0",
+    "@nestjs/testing": "11.2.6",
+    "@smithy/util-stream": "4.8.2",
+    "@testcontainers/postgresql": "12.2.0",
+    "@testcontainers/redpanda": "12.2.0",
+    "@types/express": "5.0.6",
+    "@types/http-errors": "2.0.5",
+    "@types/jest": "30.0.0",
+    "@types/node": "24.19.0",
+    "@types/pg": "8.23.1",
+    "@types/supertest": "7.2.1",
+    "aws-sdk-client-mock": "4.1.0",
+    "dotenv": "18.0.4",
+    "eslint": "10.11.0",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.12.0",
+    "http-errors": "2.0.1",
+    "jest": "30.5.2",
+    "prettier": "3.9.9",
+    "prisma": "7.10.0",
+    "supertest": "7.3.0",
+    "testcontainers": "12.2.0",
+    "ts-jest": "29.4.14",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0"
+  }
+}
