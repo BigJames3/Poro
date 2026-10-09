@@ -17,7 +17,8 @@ il est mis à jour à chaque jalon P0.
 | `services/outbox-relay` | Relais SQL → Redpanda (un processus par base). |
 | `services/moderation` (Python 3.13, FastAPI, port 8087) | Signalements, filtre automatique par règles (retrait immédiat des contenus bloquants), file des modérateurs ; outbox `poro.moderation.*`. |
 | `services/search` (Go 1.26, Fiber, port 8088) | Recherche vidéos, comptes, hashtags et autocomplétion en Postgres plein texte (français sans accents, trigrammes) ; projection par événements ([ADR-0011](adr/0011-search-postgres-v1.md)). |
-| Autres services (`chat`, `shop`, …) | Aucun code. Seulement listés dans `.cursor/rules/project.md`. |
+| Marketplace (`shop`, `order`, `payment`, `analytics`) | Contrats d'événements et rôle BUSINESS en place ; services à venir ([ADR-0012](adr/0012-marketplace-vague-3.md)). |
+| Autres services (`chat`, `reco`) | Aucun code. Seulement listés dans `.cursor/rules/project.md`. |
 | `packages/`, `infra/`, `data/`, `docs/` | Vides avant ce jalon. |
 | `apps/mobile-android` | Projet Android Studio (36 fichiers suivis), ne consomme encore aucune API. Non modifié. |
 | `docker-compose.yml` | Postgres 16 (`poro_auth`, `poro_user`, `poro_video`), Redis 7, SeaweedFS (avatars + videos), Redpanda, auth, user, video, media-worker, relais outbox. |

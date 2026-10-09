@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.shop.shop.created.v1.json",
+  "title": "poro.shop.shop.created v1",
+  "description": "Published by shop when an account opens its shop. A shop always belongs to one auth account, which holds at most one shop. Auth grants BUSINESS to owner_id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "version", "source", "subject", "occurred_at", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "const": "poro.shop.shop.created" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "format": "uuid", "description": "shop id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shop_id", "owner_id", "name", "handle", "country_code", "currency", "created_at"],
+      "properties": {
+        "shop_id": { "type": "string", "format": "uuid" },
+        "owner_id": { "type": "string", "format": "uuid", "description": "auth account that owns the shop" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "handle": { "type": "string", "pattern": "^[a-z0-9._]{3,30}$" },
+        "country_code": { "enum": ["CI", "SN", "CM", "NG"] },
+        "currency": { "enum": ["XOF", "XAF", "NGN"], "description": "XOF for CI and SN, XAF for CM, NGN for NG" },
+        "created_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

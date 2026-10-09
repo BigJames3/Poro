@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.shop.stock.reserved.v1.json",
+  "title": "poro.shop.stock.reserved v1",
+  "description": "Published by shop once the stock of every line is held for the order. Prices and titles are authoritative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "version", "source", "subject", "occurred_at", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "const": "poro.shop.stock.reserved" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "format": "uuid", "description": "order id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order_id", "shop_id", "currency", "items", "subtotal", "reserved_at"],
+      "properties": {
+        "order_id": { "type": "string", "format": "uuid" },
+        "shop_id": { "type": "string", "format": "uuid" },
+        "currency": { "enum": ["XOF", "XAF", "NGN"], "description": "XOF for CI and SN, XAF for CM, NGN for NG" },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["product_id", "variant_id", "quantity", "unit_price", "title"],
+            "properties": {
+              "product_id": { "type": "string", "format": "uuid" },
+              "variant_id": { "type": "string", "format": "uuid" },
+              "quantity": { "type": "integer", "minimum": 1, "maximum": 99 },
+              "unit_price": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000000000,
+                "description": "minor units: XOF and XAF have none, NGN is in kobo"
+              },
+              "title": { "type": "string", "minLength": 1, "maxLength": 200 }
+            }
+          }
+        },
+        "subtotal": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000000,
+          "description": "minor units: XOF and XAF have none, NGN is in kobo"
+        },
+        "reserved_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

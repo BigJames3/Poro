@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.payment.payment.failed.v1.json",
+  "title": "poro.payment.payment.failed v1",
+  "description": "Published by payment when an attempt fails. The buyer may retry until the order expires.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "version", "source", "subject", "occurred_at", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "const": "poro.payment.payment.failed" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "format": "uuid", "description": "payment id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["payment_id", "order_id", "buyer_id", "provider", "reason", "failed_at"],
+      "properties": {
+        "payment_id": { "type": "string", "format": "uuid" },
+        "order_id": { "type": "string", "format": "uuid" },
+        "buyer_id": { "type": "string", "format": "uuid" },
+        "provider": { "enum": ["wave", "simulated"] },
+        "reason": { "enum": ["declined", "expired", "cancelled", "provider_error"] },
+        "failed_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

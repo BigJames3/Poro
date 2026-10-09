@@ -27,7 +27,7 @@ func contractSamples() map[string]any {
 	ci := "CI"
 	username, display, avatar := "awa.kone", "Awa Koné", "https://cdn.poro.test/avatars/a.webp"
 	owner, other, parent := uuid.Must(uuid.NewV7()).String(), uuid.Must(uuid.NewV7()).String(), uuid.Must(uuid.NewV7()).String()
-	return map[string]any{
+	samples := map[string]any{
 		events.TypeAuthUserCreated: events.AuthUserCreatedV1{
 			UserID: user, SignupMethod: "phone", CountryCode: &ci, Language: "fr", CreatedAt: now,
 		},
@@ -83,6 +83,79 @@ func contractSamples() map[string]any {
 		},
 		events.TypeModerationContentRestored: events.ModerationContentRestoredV1{
 			CaseID: other, TargetType: events.ModerationTargetVideo, TargetID: id, OwnerID: owner, RestoredAt: now,
+		},
+	}
+	for typ, data := range marketplaceSamples(now) {
+		samples[typ] = data
+	}
+	return samples
+}
+
+func marketplaceSamples(now time.Time) map[string]any {
+	shop, product, variant := uuid.Must(uuid.NewV7()).String(), uuid.Must(uuid.NewV7()).String(), uuid.Must(uuid.NewV7()).String()
+	order, seller, buyer := uuid.Must(uuid.NewV7()).String(), uuid.Must(uuid.NewV7()).String(), uuid.Must(uuid.NewV7()).String()
+	payment, refund := uuid.Must(uuid.NewV7()).String(), uuid.Must(uuid.NewV7()).String()
+	desc, logo, tracking := "Pagnes tissés à la main", "https://cdn.poro.test/shops/logo.webp", "Colis remis à Yango"
+	expires := now.Add(30 * time.Minute)
+	return map[string]any{
+		events.TypeShopShopCreated: events.ShopShopCreatedV1{
+			ShopID: shop, OwnerID: seller, Name: "Pagnes d'Awa", Handle: "pagnes.awa", CountryCode: "CI",
+			Currency: events.CurrencyXOF, CreatedAt: now,
+		},
+		events.TypeShopShopUpdated: events.ShopShopUpdatedV1{
+			ShopID: shop, OwnerID: seller, Name: "Pagnes d'Awa", Handle: "pagnes.awa", Description: &desc, LogoURL: &logo,
+			CountryCode: "CI", Currency: events.CurrencyXOF, Status: events.ShopStatusActive, UpdatedAt: now,
+		},
+		events.TypeShopProductUpdated: events.ShopProductUpdatedV1{
+			ProductID: product, ShopID: shop, OwnerID: seller, Title: "Pagne wax 6 yards", Description: &desc,
+			Currency: events.CurrencyXOF, Status: events.ProductStatusActive,
+			ImageURLs: []string{"https://cdn.poro.test/products/p1.webp"},
+			Variants:  []events.ShopVariantV1{{VariantID: variant, Title: "Bleu", Price: 15000, InStock: true}},
+			UpdatedAt: now,
+		},
+		events.TypeShopProductDeleted: events.ShopProductDeletedV1{
+			ProductID: product, ShopID: shop, OwnerID: seller, DeletedAt: now,
+		},
+		events.TypeOrderOrderCreated: events.OrderOrderCreatedV1{
+			OrderID: order, BuyerID: buyer, ShopID: shop, SellerID: seller, Currency: events.CurrencyXOF,
+			PaymentMethod: events.PaymentMethodWave,
+			Items:         []events.OrderLineV1{{ProductID: product, VariantID: variant, Quantity: 2, UnitPrice: 15000}},
+			CreatedAt:     now,
+		},
+		events.TypeShopStockReserved: events.ShopStockReservedV1{
+			OrderID: order, ShopID: shop, Currency: events.CurrencyXOF,
+			Items:    []events.ShopReservedLineV1{{ProductID: product, VariantID: variant, Quantity: 2, UnitPrice: 15000, Title: "Pagne wax 6 yards — Bleu"}},
+			Subtotal: 30000, ReservedAt: now,
+		},
+		events.TypeShopStockRejected: events.ShopStockRejectedV1{
+			OrderID: order, ShopID: shop, Reason: events.StockRejectedOutOfStock, VariantIDs: []string{variant}, RejectedAt: now,
+		},
+		events.TypeOrderOrderPlaced: events.OrderOrderPlacedV1{
+			OrderID: order, BuyerID: buyer, ShopID: shop, SellerID: seller, Currency: events.CurrencyXOF, Total: 30000,
+			PaymentMethod: events.PaymentMethodWave, PlacedAt: now, ExpiresAt: &expires,
+		},
+		events.TypeOrderOrderCancelled: events.OrderOrderCancelledV1{
+			OrderID: order, BuyerID: buyer, ShopID: shop, SellerID: seller, Reason: events.OrderCancelledSellerCancelled,
+			Paid: true, CancelledAt: now,
+		},
+		events.TypeOrderOrderShipped: events.OrderOrderShippedV1{
+			OrderID: order, BuyerID: buyer, ShopID: shop, SellerID: seller, Tracking: &tracking, ShippedAt: now,
+		},
+		events.TypeOrderOrderCompleted: events.OrderOrderCompletedV1{
+			OrderID: order, BuyerID: buyer, ShopID: shop, SellerID: seller, Currency: events.CurrencyXOF, Total: 30000,
+			PaymentMethod: events.PaymentMethodWave, CompletedAt: now,
+		},
+		events.TypePaymentSucceeded: events.PaymentSucceededV1{
+			PaymentID: payment, OrderID: order, BuyerID: buyer, Amount: 30000, Currency: events.CurrencyXOF,
+			Provider: events.PaymentMethodWave, SucceededAt: now,
+		},
+		events.TypePaymentFailed: events.PaymentFailedV1{
+			PaymentID: payment, OrderID: order, BuyerID: buyer, Provider: events.PaymentMethodWave,
+			Reason: events.PaymentFailedDeclined, FailedAt: now,
+		},
+		events.TypePaymentRefundSucceeded: events.PaymentRefundSucceededV1{
+			RefundID: refund, PaymentID: payment, OrderID: order, BuyerID: buyer, Amount: 30000,
+			Currency: events.CurrencyXOF, Provider: events.PaymentMethodWave, RefundedAt: now,
 		},
 	}
 }
@@ -213,6 +286,66 @@ func TestSocialContractsRejectBadPayloads(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			schema := compileContract(t, tc.typ)
 			env, err := events.New(tc.typ, 1, "social", uuid.Must(uuid.NewV7()).String(), tc.data, time.Now())
+			require.NoError(t, err)
+			err = validate(t, schema, env)
+			if tc.valid {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestMarketplaceContractsRejectBadPayloads(t *testing.T) {
+	samples := contractSamples()
+	euros := samples[events.TypeOrderOrderCreated].(events.OrderOrderCreatedV1)
+	euros.Currency = "EUR"
+
+	emptyOrder := samples[events.TypeOrderOrderCreated].(events.OrderOrderCreatedV1)
+	emptyOrder.Items = nil
+
+	tooMany := samples[events.TypeOrderOrderCreated].(events.OrderOrderCreatedV1)
+	tooMany.Items = []events.OrderLineV1{{ProductID: tooMany.Items[0].ProductID, VariantID: tooMany.Items[0].VariantID, Quantity: 100}}
+
+	negative := samples[events.TypeShopStockReserved].(events.ShopStockReservedV1)
+	negative.Subtotal = -1
+
+	ghana := samples[events.TypeShopShopCreated].(events.ShopShopCreatedV1)
+	ghana.CountryCode = "GH"
+
+	noVariant := samples[events.TypeShopProductUpdated].(events.ShopProductUpdatedV1)
+	noVariant.Variants = nil
+
+	codProvider := samples[events.TypePaymentSucceeded].(events.PaymentSucceededV1)
+	codProvider.Provider = events.PaymentMethodCashOnDelivery
+
+	cod := samples[events.TypeOrderOrderPlaced].(events.OrderOrderPlacedV1)
+	cod.PaymentMethod, cod.ExpiresAt = events.PaymentMethodCashOnDelivery, nil
+
+	wholeShop := samples[events.TypeShopStockRejected].(events.ShopStockRejectedV1)
+	wholeShop.Reason, wholeShop.VariantIDs = events.StockRejectedShopUnavailable, []string{}
+
+	cases := []struct {
+		name  string
+		typ   string
+		data  any
+		valid bool
+	}{
+		{"unsupported currency", events.TypeOrderOrderCreated, euros, false},
+		{"order without lines", events.TypeOrderOrderCreated, emptyOrder, false},
+		{"quantity above 99", events.TypeOrderOrderCreated, tooMany, false},
+		{"negative amount", events.TypeShopStockReserved, negative, false},
+		{"country outside the launch list", events.TypeShopShopCreated, ghana, false},
+		{"product without variant", events.TypeShopProductUpdated, noVariant, false},
+		{"cash on delivery is not a payment provider", events.TypePaymentSucceeded, codProvider, false},
+		{"cash on delivery never expires", events.TypeOrderOrderPlaced, cod, true},
+		{"a whole-shop rejection names no variant", events.TypeShopStockRejected, wholeShop, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			schema := compileContract(t, tc.typ)
+			env, err := events.New(tc.typ, 1, "test", uuid.Must(uuid.NewV7()).String(), tc.data, time.Now())
 			require.NoError(t, err)
 			err = validate(t, schema, env)
 			if tc.valid {

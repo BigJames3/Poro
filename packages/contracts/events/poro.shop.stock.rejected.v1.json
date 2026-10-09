@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.shop.stock.rejected.v1.json",
+  "title": "poro.shop.stock.rejected v1",
+  "description": "Published by shop when an order cannot be reserved. Nothing is held.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "version", "source", "subject", "occurred_at", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "const": "poro.shop.stock.rejected" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "format": "uuid", "description": "order id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order_id", "shop_id", "reason", "variant_ids", "rejected_at"],
+      "properties": {
+        "order_id": { "type": "string", "format": "uuid" },
+        "shop_id": { "type": "string", "format": "uuid" },
+        "reason": { "enum": ["out_of_stock", "product_unavailable", "shop_unavailable", "currency_mismatch"] },
+        "variant_ids": { "type": "array", "minItems": 0, "maxItems": 50, "items": { "type": "string", "format": "uuid" } },
+        "rejected_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

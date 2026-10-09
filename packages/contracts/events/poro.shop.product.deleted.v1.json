@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poro.africa/events/poro.shop.product.deleted.v1.json",
+  "title": "poro.shop.product.deleted v1",
+  "description": "Published by shop when a product is deleted for good.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "version", "source", "subject", "occurred_at", "data"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "type": { "const": "poro.shop.product.deleted" },
+    "version": { "const": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "subject": { "type": "string", "format": "uuid", "description": "product id" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_id", "shop_id", "owner_id", "deleted_at"],
+      "properties": {
+        "product_id": { "type": "string", "format": "uuid" },
+        "shop_id": { "type": "string", "format": "uuid" },
+        "owner_id": { "type": "string", "format": "uuid", "description": "auth account that owns the shop" },
+        "deleted_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}
