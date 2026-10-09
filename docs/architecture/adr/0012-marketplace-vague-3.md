@@ -63,3 +63,17 @@ Wave ne couvre que la Côte d'Ivoire et le Sénégal.
   encaisser pour le compte de vendeurs peut exiger un agrément (BCEAO en zone
   XOF, COBAC en zone XAF, CBN au Nigeria) ou un agrégateur avec reversement
   séparé. Des accès sandbox Wave sont nécessaires pour tester l'intégration réelle.
+
+## Complément du 2026-10-09 — service order
+
+- Coordonnées de livraison (nom, téléphone, ville, adresse) visibles par
+  l'acheteur et le vendeur seulement, effacées 90 jours après la fin de la
+  commande.
+- Moyens de paiement activés par configuration (`PAYMENT_METHODS`) : paiement
+  à la livraison seul tant que le service payment n'existe pas.
+- Le prix réservé par shop fait foi ; l'acheteur peut annuler tant que rien
+  n'est expédié.
+- Pas d'achat dans sa propre boutique ; pas d'annulation après expédition en
+  v1 (litiges et retours plus tard).
+- Un paiement arrivé après l'annulation republie `order.cancelled` avec
+  `paid: true` pour déclencher le remboursement.
