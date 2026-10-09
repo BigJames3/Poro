@@ -31,7 +31,7 @@
       "properties": {
         "product_id": { "type": "string", "format": "uuid" },
         "shop_id": { "type": "string", "format": "uuid" },
-        "owner_id": { "type": "string", "format": "uuid" },
+        "owner_id": { "type": "string", "format": "uuid", "description": "auth account that owns the shop" },
         "title": { "type": "string", "minLength": 1, "maxLength": 120 },
         "description": { "type": ["string", "null"], "maxLength": 2000 },
         "currency": { "enum": ["XOF", "XAF", "NGN"], "description": "XOF for CI and SN, XAF for CM, NGN for NG" },

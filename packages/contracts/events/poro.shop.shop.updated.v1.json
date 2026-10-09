@@ -30,7 +30,7 @@
       ],
       "properties": {
         "shop_id": { "type": "string", "format": "uuid" },
-        "owner_id": { "type": "string", "format": "uuid" },
+        "owner_id": { "type": "string", "format": "uuid", "description": "auth account that owns the shop" },
         "name": { "type": "string", "minLength": 1, "maxLength": 60 },
         "handle": { "type": "string", "pattern": "^[a-z0-9._]{3,30}$" },
         "description": { "type": ["string", "null"], "maxLength": 500 },

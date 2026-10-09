@@ -20,7 +20,7 @@
       "properties": {
         "product_id": { "type": "string", "format": "uuid" },
         "shop_id": { "type": "string", "format": "uuid" },
-        "owner_id": { "type": "string", "format": "uuid" },
+        "owner_id": { "type": "string", "format": "uuid", "description": "auth account that owns the shop" },
         "deleted_at": { "type": "string", "format": "date-time" }
       }
     }

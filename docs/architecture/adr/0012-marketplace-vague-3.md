@@ -42,8 +42,12 @@ Wave ne couvre que la Côte d'Ivoire et le Sénégal.
    nigérian viendront derrière la même interface `PaymentProvider`.
 5. **payment en Go seul** (au lieu de Go + NestJS) : un seul langage pour le
    service le plus sensible, avec le socle partagé (outbox, JWT, observabilité).
-6. **Rôle BUSINESS** accordé par auth à la réception de
-   `poro.shop.shop.created`, comme CREATOR. Une boutique par compte en v1.
+6. **Boutique liée à un compte** : une boutique appartient toujours à un
+   compte auth (`owner_id`, le `sub` du JWT de celui qui l'ouvre) et un compte
+   possède au plus une boutique en v1. Il n'existe pas de compte boutique
+   séparé : le vendeur se connecte avec son compte habituel. Auth accorde le
+   rôle BUSINESS à ce compte à la réception de `poro.shop.shop.created`, comme
+   CREATOR, et le conserve si la boutique ferme.
 7. **Reversement aux vendeurs** : journal des montants dus ; virements faits
    à la main par un admin en v1.
 8. **Analytics** : v1 minimale en fin de vague (ventes vendeurs, engagement

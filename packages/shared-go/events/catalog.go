@@ -286,8 +286,9 @@ const (
 	PaymentFailedProviderError = "provider_error"
 )
 
-// ShopShopCreatedV1 is published by shop when an account opens its shop.
-// Auth grants BUSINESS to OwnerID. The subject is ShopID.
+// ShopShopCreatedV1 is published by shop when an account opens its shop. A
+// shop always belongs to one auth account (OwnerID), which holds at most one
+// shop. Auth grants BUSINESS to OwnerID. The subject is ShopID.
 type ShopShopCreatedV1 struct {
 	ShopID      string    `json:"shop_id"`
 	OwnerID     string    `json:"owner_id"`
