@@ -100,13 +100,22 @@ describe('order saga over Kafka', () => {
       return res.status === 200 ? res : undefined;
     });
 
-    const checkout = await request(server)
-      .post('/api/v1/checkout')
+    const recap = await request(server)
+      .post('/api/v1/checkout/preview')
       .set('Authorization', auth)
       .send({
-        payment_method: 'cash_on_delivery',
-        delivery: { name: 'Moussa', phone: '+221770000000', city: 'Dakar', address: 'Plateau' },
+        delivery: {
+          full_name: 'Moussa',
+          phone: '+221770000000',
+          city: 'Dakar',
+          address: 'Plateau',
+        },
       });
+    expect(recap.status).toBe(201);
+    const checkout = await request(server)
+      .post('/api/v1/checkout/confirm')
+      .set('Authorization', auth)
+      .send({ preview_id: recap.body.data.preview_id as string, confirmed: true });
     expect(checkout.status).toBe(201);
     const orderId = checkout.body.data.orders[0].order_id as string;
 

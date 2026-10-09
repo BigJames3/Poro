@@ -17,11 +17,13 @@ import { outboxEvents } from './support/outbox';
 import { TestDatabase, startDatabase } from './support/postgres';
 
 const DELIVERY = {
-  name: 'Awa Koné',
+  full_name: 'Awa Koné',
   phone: '+2250700000000',
   city: 'Abidjan',
   address: 'Cocody, rue des Jardins',
+  landmark: 'Portail vert après la pharmacie',
 };
+const DELIVERY_VIEW = { ...DELIVERY, location: null };
 
 interface OrderBody {
   order_id: string;
@@ -29,7 +31,7 @@ interface OrderBody {
   total: number | null;
   paid: boolean;
   items: { variant_id: string; unit_price: number; unit_price_seen: number; title: string }[];
-  delivery: Record<string, string> | null;
+  delivery: Record<string, unknown> | null;
   [key: string]: unknown;
 }
 
@@ -90,16 +92,31 @@ describe('order service', () => {
       .send({ quantity });
   }
 
-  async function checkout(
+  async function preview(
     auth: string,
     method = 'cash_on_delivery',
-    idempotencyKey?: string,
+    delivery: Record<string, unknown> = DELIVERY,
   ): Promise<request.Response> {
-    const req = request(server).post('/api/v1/checkout').set('Authorization', auth);
-    if (idempotencyKey) {
-      void req.set('Idempotency-Key', idempotencyKey);
+    return request(server)
+      .post('/api/v1/checkout/preview')
+      .set('Authorization', auth)
+      .send({ payment_method: method, delivery });
+  }
+
+  async function confirm(auth: string, previewId: string): Promise<request.Response> {
+    return request(server)
+      .post('/api/v1/checkout/confirm')
+      .set('Authorization', auth)
+      .send({ preview_id: previewId, confirmed: true });
+  }
+
+  /** Reviews the recap then confirms it; returns the failing response if any. */
+  async function checkout(auth: string, method = 'cash_on_delivery'): Promise<request.Response> {
+    const recap = await preview(auth, method);
+    if (recap.status !== 201) {
+      return recap;
     }
-    return req.send({ payment_method: method, delivery: DELIVERY });
+    return confirm(auth, recap.body.data.preview_id as string);
   }
 
   /** A buyer with one pending order of listing; returns the order. */
@@ -228,7 +245,9 @@ describe('order service', () => {
     const auth = await bearer(buyerId);
     await addToCart(auth, a.variants[0], 2);
     await addToCart(auth, b.variants[0], 1);
-    const res = await checkout(auth, 'wave', 'checkout-key-0001');
+    const recap = await preview(auth, 'wave');
+    expect(recap.status).toBe(201);
+    const res = await confirm(auth, recap.body.data.preview_id as string);
     expect(res.status).toBe(201);
     const orders = res.body.data.orders as OrderBody[];
     expect(orders.map((o) => o.shop)).toEqual(
@@ -246,7 +265,7 @@ describe('order service', () => {
       payment_method: 'wave',
       subtotal_seen: 30000,
       total: null,
-      delivery: DELIVERY,
+      delivery: DELIVERY_VIEW,
     });
     expect(await outboxEvents(pg, 'poro.order.order.created', first?.order_id ?? '')).toEqual([
       expect.objectContaining({
@@ -261,11 +280,10 @@ describe('order service', () => {
     const cart = await request(server).get('/api/v1/cart').set('Authorization', auth);
     expect(cart.body.data.item_count).toBe(0);
 
-    const replay = await checkout(auth, 'wave', 'checkout-key-0001');
+    const replay = await confirm(auth, recap.body.data.preview_id as string);
     expect(replay.status).toBe(201);
     expect(replay.body.data.checkout_id).toBe(res.body.data.checkout_id);
-    const reused = await checkout(auth, 'cash_on_delivery', 'checkout-key-0001');
-    expect([reused.status, reused.body.error.code]).toEqual([409, 'idempotency_key_reused']);
+    expect(replay.body.data.orders).toHaveLength(2);
   });
 
   it('validates the checkout', async () => {
@@ -279,18 +297,12 @@ describe('order service', () => {
       422,
       'payment_method_unavailable',
     ]);
-    const badKey = await checkout(auth, 'wave', 'short');
-    expect([badKey.status, badKey.body.error.code]).toEqual([400, 'invalid_idempotency_key']);
-    const badPhone = await request(server)
-      .post('/api/v1/checkout')
-      .set('Authorization', auth)
-      .send({ payment_method: 'wave', delivery: { ...DELIVERY, phone: '0700000000' } });
+    const badPhone = await preview(auth, 'wave', { ...DELIVERY, phone: '0700000000' });
     expect(badPhone.status).toBe(400);
-    const blankAddress = await request(server)
-      .post('/api/v1/checkout')
-      .set('Authorization', auth)
-      .send({ payment_method: 'wave', delivery: { ...DELIVERY, address: '   ' } });
-    expect(blankAddress.body.error.code).toBe('delivery_invalid');
+    const blankName = await preview(auth, 'wave', { ...DELIVERY, full_name: '   ' });
+    expect(blankName.body.error.code).toBe('delivery_invalid');
+    const nowhere = await preview(auth, 'wave', { ...DELIVERY, address: '   ' });
+    expect([nowhere.status, nowhere.body.error.code]).toEqual([422, 'delivery_location_required']);
     await catalog.handle(productUpdated(listing, [15000, 9000], { status: 'draft' }));
     const gone = await checkout(auth);
     expect([gone.status, gone.body.error.code]).toEqual([422, 'cart_unavailable']);
@@ -325,7 +337,7 @@ describe('order service', () => {
     const sellerView = await request(server)
       .get(`/api/v1/seller/orders/${order.order_id}`)
       .set('Authorization', seller);
-    expect(sellerView.body.data.delivery).toEqual(DELIVERY);
+    expect(sellerView.body.data.delivery).toEqual(DELIVERY_VIEW);
 
     expect(
       (

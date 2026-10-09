@@ -899,6 +899,9 @@ services:
       KAFKA_BROKERS: redpanda:29092
       # Wave sera activé avec le service payment.
       PAYMENT_METHODS: cash_on_delivery
+      # Pré-remplissage des coordonnées depuis le compte de l'acheteur.
+      AUTH_URL: http://auth:8081
+      USER_URL: http://user:8082
       CORS_ORIGINS: ${ORDER_CORS_ORIGINS:-}
     ports:
       - "127.0.0.1:8091:8091"

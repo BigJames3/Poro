@@ -8,22 +8,28 @@ info:
     integers in minor units of the order currency (XOF and XAF have none,
     NGN is in kobo).
 
-    Checkout splits the cart into one order per shop. Each order starts
+    Checkout has two steps: a recap (preview) then an explicit
+    confirmation; orders only exist after the confirmation. Checkout splits
+    the cart into one order per shop. Each order starts
     `pending` until the shop reserves the stock; the reserved price is
     authoritative and may differ from the cart price. Cash on delivery goes
     to `confirmed`, other methods to `awaiting_payment` for 30 minutes.
 
     Error codes besides the generic ones: `variant_unavailable`, `own_shop`,
     `cart_full`, `cart_empty`, `cart_unavailable`, `too_many_lines`,
-    `payment_method_unavailable`, `delivery_invalid`, `tracking_invalid`
-    (422); `invalid_idempotency_key`, `invalid_cursor` (400);
-    `idempotency_key_reused`, `order_status_conflict` (409);
+    `payment_method_unavailable`, `delivery_invalid`,
+    `delivery_location_required`, `confirmation_required`,
+    `address_book_full`, `address_label_invalid`, `tracking_invalid` (422);
+    `invalid_cursor` (400); `preview_outdated`, `preview_expired`,
+    `order_status_conflict` (409); `preview_not_found`, `address_not_found`,
     `order_not_found` (404).
 servers:
   - url: http://localhost:8091
     description: Local development
 tags:
   - name: cart
+  - name: checkout
+  - name: addresses
   - name: orders
   - name: seller
   - name: platform
@@ -85,16 +91,50 @@ paths:
       summary: Remove a variant from the cart
       responses:
         "200": { $ref: "#/components/responses/Cart" }
-  /api/v1/checkout:
+  /api/v1/checkout/prefill:
+    get:
+      tags: [checkout]
+      summary: The delivery contact to start from
+      description: |
+        The default saved address, else the name (user service) and phone
+        (auth service) of the account, read with the caller's token. A slow
+        or failing service only leaves its field empty.
+      responses:
+        "200":
+          description: Prefilled contact
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      source: { enum: [address_book, account, empty] }
+                      address_id: { type: ["string", "null"], format: uuid }
+                      delivery:
+                        type: object
+                        properties:
+                          full_name: { type: ["string", "null"] }
+                          phone: { type: ["string", "null"] }
+                          city: { type: ["string", "null"] }
+                          address: { type: ["string", "null"] }
+                          landmark: { type: ["string", "null"] }
+                          location:
+                            oneOf:
+                              - { $ref: "#/components/schemas/Location" }
+                              - { type: "null" }
+                      account_lookup: { enum: [ok, partial, unavailable, skipped] }
+                  error: { type: "null" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+  /api/v1/checkout/preview:
     post:
-      tags: [orders]
-      summary: Turn the cart into one order per shop
-      parameters:
-        - name: Idempotency-Key
-          in: header
-          required: false
-          description: 8 to 100 of [A-Za-z0-9_-]. A replay returns the first result; a different body with the same key is 409.
-          schema: { type: string }
+      tags: [checkout]
+      summary: The full recap to review; nothing is ordered yet
+      description: |
+        Validates the cart and the delivery and returns items, quantities,
+        totals per currency, contact, address, payment method and the
+        delivery fee notice. Valid 15 minutes.
       requestBody:
         required: true
         content:
@@ -102,10 +142,44 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [payment_method, delivery]
+              required: [delivery]
               properties:
-                payment_method: { enum: [cash_on_delivery, wave, simulated], description: Only the methods enabled on the server are accepted }
-                delivery: { $ref: "#/components/schemas/Delivery" }
+                delivery: { $ref: "#/components/schemas/DeliveryInput" }
+                payment_method: { enum: [cash_on_delivery, wave, simulated], default: cash_on_delivery }
+                save_address: { type: boolean, description: Add the delivery to the address book once confirmed }
+                address_label: { type: ["string", "null"], maxLength: 40 }
+      responses:
+        "201":
+          description: The recap
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Preview" }
+                  error: { type: "null" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "400": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/checkout/confirm:
+    post:
+      tags: [checkout]
+      summary: Place the orders of a reviewed recap
+      description: |
+        Requires `confirmed: true`. Creates one order per shop only while
+        the cart and its prices still match the recap. Confirming the same
+        recap again returns the same orders.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [preview_id, confirmed]
+              properties:
+                preview_id: { type: string, format: uuid }
+                confirmed: { type: boolean }
       responses:
         "201":
           description: The orders created
@@ -119,12 +193,58 @@ paths:
                     properties:
                       checkout_id: { type: string, format: uuid }
                       orders: { type: array, items: { $ref: "#/components/schemas/Order" } }
+                      address_saved: { type: boolean }
                   error: { type: "null" }
                   meta: { $ref: "#/components/schemas/Meta" }
-        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
-        "429": { $ref: "#/components/responses/Error" }
+  /api/v1/addresses:
+    get:
+      tags: [addresses]
+      summary: Saved delivery addresses, default first
+      responses:
+        "200":
+          description: The address book
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Address" } }
+                  error: { type: "null" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+    post:
+      tags: [addresses]
+      summary: Save an address (10 at most); the first one becomes the default
+      requestBody: { $ref: "#/components/requestBodies/AddressInput" }
+      responses:
+        "201": { $ref: "#/components/responses/Address" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/addresses/{addressId}:
+    parameters: [{ $ref: "#/components/parameters/AddressId" }]
+    put:
+      tags: [addresses]
+      summary: Replace an address
+      requestBody: { $ref: "#/components/requestBodies/AddressInput" }
+      responses:
+        "200": { $ref: "#/components/responses/Address" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [addresses]
+      summary: Delete an address; the most recent one becomes the default
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/Error" }
+  /api/v1/addresses/{addressId}/default:
+    parameters: [{ $ref: "#/components/parameters/AddressId" }]
+    post:
+      tags: [addresses]
+      summary: Make an address the default
+      responses:
+        "200": { $ref: "#/components/responses/Address" }
+        "404": { $ref: "#/components/responses/Error" }
   /api/v1/orders:
     get:
       tags: [orders]
@@ -210,7 +330,24 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  requestBodies:
+    AddressInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            allOf:
+              - { $ref: "#/components/schemas/DeliveryInput" }
+              - type: object
+                properties:
+                  label: { type: ["string", "null"], maxLength: 40, examples: [Maison] }
+                  is_default: { type: boolean }
   parameters:
+    AddressId:
+      name: addressId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     OrderId:
       name: orderId
       in: path
@@ -255,6 +392,16 @@ components:
               data: { $ref: "#/components/schemas/Order" }
               error: { type: "null" }
               meta: { $ref: "#/components/schemas/Meta" }
+    Address:
+      description: The address
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/Address" }
+              error: { type: "null" }
+              meta: { $ref: "#/components/schemas/Meta" }
     OrderPage:
       description: A page of orders
       content:
@@ -287,15 +434,94 @@ components:
             message: { type: string }
         meta: { $ref: "#/components/schemas/Meta" }
     OrderStatus: { enum: [pending, awaiting_payment, confirmed, paid, shipped, completed, cancelled] }
-    Delivery:
+    Location:
       type: object
-      additionalProperties: false
-      required: [name, phone, city, address]
+      description: GPS position shared by the device, only when the buyer allows it
+      required: [latitude, longitude]
       properties:
-        name: { type: string, description: 1 to 80 characters }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        accuracy_m: { type: ["integer", "null"], minimum: 0, maximum: 100000 }
+    DeliveryInput:
+      type: object
+      description: Name, phone and city are required, plus a location or an address
+      required: [full_name, phone, city]
+      properties:
+        full_name: { type: string, description: "Nom et prénom, 1 to 80 characters" }
         phone: { type: string, pattern: "^\\+[1-9]\\d{7,14}$", examples: ["+2250700000000"] }
         city: { type: string, description: 1 to 80 characters }
-        address: { type: string, description: "1 to 300 characters, 3 lines at most" }
+        address: { type: ["string", "null"], description: "Street or neighbourhood, 300 characters and 3 lines at most" }
+        landmark: { type: ["string", "null"], description: "Directions to find the place, optional" }
+        location:
+          oneOf:
+            - { $ref: "#/components/schemas/Location" }
+            - { type: "null" }
+    Delivery:
+      type: object
+      properties:
+        full_name: { type: string }
+        phone: { type: string }
+        city: { type: string }
+        address: { type: ["string", "null"] }
+        landmark: { type: ["string", "null"] }
+        location:
+          oneOf:
+            - { $ref: "#/components/schemas/Location" }
+            - { type: "null" }
+    Address:
+      allOf:
+        - { $ref: "#/components/schemas/Delivery" }
+        - type: object
+          properties:
+            address_id: { type: string, format: uuid }
+            label: { type: ["string", "null"] }
+            is_default: { type: boolean }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    Preview:
+      type: object
+      properties:
+        preview_id: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+        shops:
+          type: array
+          items:
+            type: object
+            properties:
+              shop:
+                type: object
+                properties:
+                  shop_id: { type: string, format: uuid }
+                  name: { type: string }
+                  handle: { type: string }
+              currency: { enum: [XOF, XAF, NGN] }
+              items:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    product_id: { type: string, format: uuid }
+                    variant_id: { type: string, format: uuid }
+                    title: { type: string }
+                    variant_title: { type: string }
+                    image_url: { type: ["string", "null"], format: uri }
+                    quantity: { type: integer }
+                    unit_price: { type: integer }
+                    line_total: { type: integer }
+              subtotal: { type: integer }
+        totals:
+          type: array
+          description: Total of the items per currency; delivery fees are not included
+          items:
+            type: object
+            properties:
+              currency: { enum: [XOF, XAF, NGN] }
+              amount: { type: integer }
+        item_count: { type: integer }
+        delivery: { $ref: "#/components/schemas/Delivery" }
+        payment_method: { enum: [cash_on_delivery, wave, simulated] }
+        payment_method_label: { type: string, examples: [Paiement à la livraison] }
+        delivery_fee_notice: { type: string, examples: ["Frais de livraison à régler au livreur, non inclus dans le total."] }
     CartLine:
       type: object
       properties:
@@ -343,6 +569,7 @@ components:
         seller_id: { type: string, format: uuid }
         currency: { enum: [XOF, XAF, NGN] }
         payment_method: { enum: [cash_on_delivery, wave, simulated] }
+        payment_method_label: { type: string, examples: [Paiement à la livraison] }
         items:
           type: array
           items:

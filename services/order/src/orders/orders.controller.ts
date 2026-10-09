@@ -15,12 +15,15 @@ import { CurrentUser } from '../auth/auth.guard';
 import type { AuthUser } from '../common/request';
 import { CheckoutService } from './checkout.service';
 import {
-  CheckoutDto,
+  ConfirmDto,
   OrderListQueryDto,
+  PreviewDto,
   ShipDto,
   type CheckoutView,
   type OrderView,
   type Page,
+  type PrefillView,
+  type PreviewView,
 } from './order.dto';
 import { OrdersService } from './orders.service';
 
@@ -33,16 +36,29 @@ export class OrdersController {
     private readonly orders: OrdersService,
   ) {}
 
-  /** Replaying the same Idempotency-Key returns the orders of the first call. */
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  @Post('checkout')
-  @HttpCode(201)
-  checkout(
+  /** The delivery contact to start from: a saved address, else the account. */
+  @Get('checkout/prefill')
+  prefill(
     @CurrentUser() user: AuthUser,
-    @Body() dto: CheckoutDto,
-    @Headers('idempotency-key') idempotencyKey: string | undefined,
-  ): Promise<CheckoutView> {
-    return this.checkouts.checkout(user.userId, dto, idempotencyKey);
+    @Headers('authorization') authorization: string,
+  ): Promise<PrefillView> {
+    return this.checkouts.prefill(user.userId, authorization);
+  }
+
+  /** The recap to review. Nothing is ordered until it is confirmed. */
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Post('checkout/preview')
+  @HttpCode(201)
+  preview(@CurrentUser() user: AuthUser, @Body() dto: PreviewDto): Promise<PreviewView> {
+    return this.checkouts.preview(user.userId, dto);
+  }
+
+  /** Places the orders of a reviewed recap; confirming twice returns the same orders. */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('checkout/confirm')
+  @HttpCode(201)
+  confirm(@CurrentUser() user: AuthUser, @Body() dto: ConfirmDto): Promise<CheckoutView> {
+    return this.checkouts.confirm(user.userId, dto);
   }
 
   @Get('orders')

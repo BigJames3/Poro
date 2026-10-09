@@ -102,6 +102,12 @@ model Order {
   contactPhone      String?     @map("contact_phone") @db.VarChar(16)
   city              String?     @db.VarChar(80)
   address           String?     @db.VarChar(300)
+  // Directions to find the place: landmark, gate colour… Optional.
+  landmark          String?     @db.VarChar(300)
+  // GPS position shared by the buyer, if they allowed it.
+  latitude          Float?
+  longitude         Float?
+  locationAccuracyM Int?        @map("location_accuracy_m")
   contactErasedAt   DateTime?   @map("contact_erased_at") @db.Timestamptz(6)
   tracking          String?     @db.VarChar(200)
   cancelReason      String?     @map("cancel_reason") @db.VarChar(32)
@@ -141,6 +147,45 @@ model OrderLine {
 
   @@id([orderId, position])
   @@map("order_lines")
+}
+
+// Delivery address book of an account. At most one default per account.
+model Address {
+  id                String   @id @db.Uuid
+  buyerId           String   @map("buyer_id") @db.Uuid
+  label             String?  @db.VarChar(40)
+  fullName          String   @map("full_name") @db.VarChar(80)
+  phone             String   @db.VarChar(16)
+  city              String   @db.VarChar(80)
+  address           String?  @db.VarChar(300)
+  landmark          String?  @db.VarChar(300)
+  latitude          Float?
+  longitude         Float?
+  locationAccuracyM Int?     @map("location_accuracy_m")
+  isDefault         Boolean  @default(false) @map("is_default")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([buyerId, createdAt])
+  @@map("addresses")
+}
+
+// The recap shown before the buyer confirms. Orders are only created from a
+// preview, and only while the cart still matches it.
+model CheckoutPreview {
+  id          String    @id @db.Uuid
+  buyerId     String    @map("buyer_id") @db.Uuid
+  cartHash    String    @map("cart_hash") @db.Char(64)
+  // The delivery details and options the buyer reviewed.
+  request     Json
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  checkoutId  String?   @map("checkout_id") @db.Uuid
+  confirmedAt DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([buyerId, createdAt])
+  @@index([expiresAt])
+  @@map("checkout_previews")
 }
 
 // Transactional outbox relayed by services/outbox-relay. The relay owns the
