@@ -83,7 +83,7 @@ func (s *africasTalkingSender) SendOTP(ctx context.Context, phone, code string, 
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return fmt.Errorf("%w: africastalking: build request: %v", ErrSMSUnavailable, err)
+		return fmt.Errorf("%w: africastalking: build request: %w", ErrSMSUnavailable, err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
@@ -91,12 +91,12 @@ func (s *africasTalkingSender) SendOTP(ctx context.Context, phone, code string, 
 
 	res, err := s.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("%w: africastalking: %v", ErrSMSUnavailable, err)
+		return fmt.Errorf("%w: africastalking: %w", ErrSMSUnavailable, err)
 	}
 	defer res.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(res.Body, maxProviderResponseBytes))
 	if err != nil {
-		return fmt.Errorf("%w: africastalking: read response: %v", ErrSMSUnavailable, err)
+		return fmt.Errorf("%w: africastalking: read response: %w", ErrSMSUnavailable, err)
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return fmt.Errorf("%w: africastalking: http %d", ErrSMSUnavailable, res.StatusCode)
@@ -104,7 +104,7 @@ func (s *africasTalkingSender) SendOTP(ctx context.Context, phone, code string, 
 
 	var parsed africasTalkingResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
-		return fmt.Errorf("%w: africastalking: decode response: %v", ErrSMSUnavailable, err)
+		return fmt.Errorf("%w: africastalking: decode response: %w", ErrSMSUnavailable, err)
 	}
 	recipients := parsed.SMSMessageData.Recipients
 	if len(recipients) != 1 {

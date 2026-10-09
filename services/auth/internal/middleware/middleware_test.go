@@ -56,6 +56,7 @@ func TestNewAuth(t *testing.T) {
 			resp, err := app.Test(req, -1)
 			require.NoError(t, err)
 			require.Equal(t, tc.status, resp.StatusCode)
+			require.NoError(t, resp.Body.Close())
 		})
 	}
 	require.Equal(t, "jti", tokens.checkedID, "the blacklist is keyed by jti")

@@ -87,7 +87,7 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 	defer func() { _ = os.RemoveAll(work) }()
 
 	srcPath := filepath.Join(work, "source")
-	srcFile, err := os.Create(srcPath)
+	srcFile, err := os.Create(filepath.Clean(srcPath))
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 	}
 
 	outDir := filepath.Join(work, "out")
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
+	if err := os.MkdirAll(outDir, 0o750); err != nil {
 		return err
 	}
 	out, err := h.ffmpeg.Transcode(ctx, srcPath, outDir, userID.String(), videoID.String())
@@ -185,7 +185,7 @@ func (h *Handler) HideIfWithdrawn(ctx context.Context, videoID uuid.UUID) error 
 func (h *Handler) uploadOutput(ctx context.Context, outDir, userID, videoID string, out *transcode.Output) error {
 	for _, f := range out.Files {
 		path := filepath.Join(outDir, filepath.FromSlash(f.Rel))
-		raw, err := os.ReadFile(path)
+		raw, err := os.ReadFile(filepath.Clean(path))
 		if err != nil {
 			return err
 		}

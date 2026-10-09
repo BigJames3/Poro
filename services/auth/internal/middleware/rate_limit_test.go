@@ -63,5 +63,6 @@ func get(t *testing.T, app *fiber.App) int {
 	t.Helper()
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/", nil), -1)
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 	return resp.StatusCode
 }

@@ -104,8 +104,11 @@ func (v *Verifier) Verify(ctx context.Context, token string) (*Claims, error) {
 	if errors.Is(keyErr, ErrKeysUnavailable) {
 		return nil, keyErr
 	}
-	if err != nil || !parsed.Valid {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidToken, err)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidToken, err)
+	}
+	if !parsed.Valid {
+		return nil, ErrInvalidToken
 	}
 	c := parsed.Claims.(*accessClaims)
 	userID, err := uuid.Parse(c.Subject)

@@ -19,12 +19,14 @@ func TestMetricsRecordRouteTemplates(t *testing.T) {
 	app.Get("/users/:username", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
 
 	for _, name := range []string{"ada", "grace", "linus"} {
-		_, err := app.Test(httptest.NewRequest(http.MethodGet, "/users/"+name, nil), -1)
+		resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/users/"+name, nil), -1)
 		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
 	}
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/metrics", nil), -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)

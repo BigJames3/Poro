@@ -130,7 +130,7 @@ func (s *Videos) Complete(ctx context.Context, userID, videoID uuid.UUID, req dt
 	seen := map[int32]struct{}{}
 	parts := make([]storage.CompletedPart, 0, len(req.Parts))
 	for _, p := range req.Parts {
-		if p.PartNumber < 1 || p.PartNumber > int32(want) || strings.TrimSpace(p.ETag) == "" {
+		if p.PartNumber < 1 || int(p.PartNumber) > want || strings.TrimSpace(p.ETag) == "" {
 			return nil, errIncomplete
 		}
 		if _, dup := seen[p.PartNumber]; dup {

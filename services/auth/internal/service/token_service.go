@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -25,7 +26,7 @@ import (
 
 const (
 	// TokenIssuer is the iss claim of every access token.
-	TokenIssuer = "poro-auth"
+	TokenIssuer = "poro-auth" //nolint:gosec // G101: the public iss claim, not a credential
 	// TokenAudience is the aud claim every Poro API must require.
 	TokenAudience = "poro-api"
 
@@ -246,7 +247,7 @@ func newJWK(key *rsa.PublicKey) JWK {
 }
 
 func loadRSAPrivateKey(path string) (*rsa.PrivateKey, error) {
-	pemBytes, err := os.ReadFile(path)
+	pemBytes, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("read private key: %w", err)
 	}
@@ -269,7 +270,7 @@ func loadRSAPrivateKey(path string) (*rsa.PrivateKey, error) {
 }
 
 func loadRSAPublicKey(path string) (*rsa.PublicKey, error) {
-	pemBytes, err := os.ReadFile(path)
+	pemBytes, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("read public key: %w", err)
 	}

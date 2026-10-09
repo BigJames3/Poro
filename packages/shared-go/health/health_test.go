@@ -23,6 +23,7 @@ func TestProbes(t *testing.T) {
 	get := func(path string) (int, map[string]any) {
 		resp, err := app.Test(httptest.NewRequest(http.MethodGet, path, nil), -1)
 		require.NoError(t, err)
+		defer resp.Body.Close()
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 		return resp.StatusCode, body

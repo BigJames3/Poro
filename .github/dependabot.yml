@@ -1,0 +1,102 @@
+# Weekly dependency updates, grouped so minor and patch bumps arrive as one PR
+# per ecosystem. Nothing is merged automatically: every PR goes through CI and
+# review. Out of scope on purpose:
+# - docker-compose.yml: its images are pinned by digest and changed by hand;
+# - apps/mobile-android: owned by the mobile team.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - "/"
+      - "/.github/actions/trivy-image"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Abidjan
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        update-types: [minor, patch]
+
+  - package-ecosystem: gomod
+    directories:
+      - "/packages/shared-go"
+      - "/services/auth"
+      - "/services/feed"
+      - "/services/outbox-relay"
+      - "/services/search"
+      - "/services/social"
+      - "/services/video"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Abidjan
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      go-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directories:
+      - "/services/user"
+      - "/services/notification"
+      - "/services/shop"
+      - "/services/order"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Abidjan
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: uv
+    directory: "/services/moderation"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Abidjan
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+
+  # Base images of the Dockerfiles only.
+  - package-ecosystem: docker
+    directories:
+      - "/services/auth"
+      - "/services/feed"
+      - "/services/moderation"
+      - "/services/notification"
+      - "/services/order"
+      - "/services/outbox-relay"
+      - "/services/search"
+      - "/services/shop"
+      - "/services/social"
+      - "/services/user"
+      - "/services/video"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Africa/Abidjan
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(docker)"
+    groups:
+      base-images:
+        update-types: [minor, patch]

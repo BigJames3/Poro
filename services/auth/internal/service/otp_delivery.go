@@ -41,12 +41,13 @@ func NewRedisOTPThrottle(cfg *config.Config, rdb *redis.Client) (OTPThrottle, er
 
 func (t *redisOTPThrottle) Allow(ctx context.Context, phone string) error {
 	cooldownKey := otpCooldownKeyPrefix + phone
-	set, err := t.rdb.SetNX(ctx, cooldownKey, "1", t.cooldown).Result()
+	// SET NX answers nil when the key already exists: a code was sent recently.
+	err := t.rdb.SetArgs(ctx, cooldownKey, "1", redis.SetArgs{Mode: "NX", TTL: t.cooldown}).Err()
+	if errors.Is(err, redis.Nil) {
+		return &ThrottledError{RetryAfter: t.ttl(ctx, cooldownKey, t.cooldown)}
+	}
 	if err != nil {
 		return fmt.Errorf("otp throttle: %w", err)
-	}
-	if !set {
-		return &ThrottledError{RetryAfter: t.ttl(ctx, cooldownKey, t.cooldown)}
 	}
 
 	hourlyKey := otpHourlyKeyPrefix + phone
