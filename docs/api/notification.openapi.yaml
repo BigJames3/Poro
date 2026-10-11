@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: |
     In-app notifications, FCM device registration and notification preferences.
-    Notifications are written from social, video and user events; this API only
+    Notifications are written from social, video, user, shop and order events; this API only
     reads them, marks them read and manages devices and preferences.
     Every JSON response uses the envelope `{data, error, meta}`; `meta.request_id`
     echoes the `X-Request-ID` header. Clients must branch on `error.code`, never on `error.message`.
@@ -206,6 +206,7 @@ paths:
       description: |
         Omitted fields are unchanged. A disabled type creates neither the in-app notification
         nor the push; `push_enabled: false` keeps in-app notifications. Replies follow `comments`.
+        `orders: false` only mutes the push of order notifications: they always stay in-app.
       requestBody:
         required: true
         content:
@@ -219,6 +220,7 @@ paths:
                 comments: { type: boolean }
                 follows: { type: boolean }
                 video_ready: { type: boolean }
+                orders: { type: boolean }
       responses:
         "200":
           description: Preferences after the change
@@ -316,20 +318,31 @@ components:
         [id, type, title, body, data, actor, actor_count, entity_type, entity_id, read, read_at, created_at, last_activity_at]
       properties:
         id: { type: string, format: uuid }
-        type: { type: string, enum: [like, comment, reply, follow, video_ready] }
+        type:
+          type: string
+          enum:
+            [like, comment, reply, follow, video_ready, order_new, order_confirmed, order_shipped, order_cancelled, order_completed]
+          description: |
+            `order_new`, `order_completed` and `order_cancelled` with `data.role: seller` go to the seller;
+            `order_confirmed`, `order_shipped` and `order_cancelled` with `data.role: buyer` go to the buyer.
         title: { type: string, example: "Nouveaux j’aime" }
         body: { type: string, example: "Awa et 12 autres personnes ont aimé ta vidéo" }
         data:
           type: object
           description: Navigation target; also sent as the FCM data payload with `notification_id` and `type`.
           properties:
+            order_id: { type: string, format: uuid }
+            role:
+              type: string
+              enum: [buyer, seller]
+              description: Order notifications; the buyer reads the order with `GET /api/v1/orders/{order_id}` on order, the seller with `GET /api/v1/seller/orders/{order_id}`.
             video_id: { type: string, format: uuid }
             comment_id: { type: string, format: uuid }
             parent_id: { type: string, format: uuid }
             user_id: { type: string, format: uuid }
           additionalProperties: { type: string }
         actor:
-          description: Newest actor, with current profile fields; null for video_ready.
+          description: Newest actor, with current profile fields; the buyer for seller order notifications; null for video_ready and buyer order notifications.
           oneOf:
             - type: "null"
             - type: object
@@ -340,7 +353,7 @@ components:
                 display_name: { type: ["string", "null"] }
                 avatar_url: { type: ["string", "null"], format: uri }
         actor_count: { type: integer, minimum: 1, description: Distinct actors of a like group; 1 otherwise. }
-        entity_type: { type: string, enum: [video, comment, user] }
+        entity_type: { type: string, enum: [video, comment, user, order] }
         entity_id: { type: string, format: uuid }
         read: { type: boolean }
         read_at: { type: ["string", "null"], format: date-time }
@@ -356,13 +369,14 @@ components:
         updated_at: { type: string, format: date-time }
     Preferences:
       type: object
-      required: [push_enabled, likes, comments, follows, video_ready]
+      required: [push_enabled, likes, comments, follows, video_ready, orders]
       properties:
         push_enabled: { type: boolean }
         likes: { type: boolean }
         comments: { type: boolean }
         follows: { type: boolean }
         video_ready: { type: boolean }
+        orders: { type: boolean, description: Push of order notifications; they always stay in-app. }
   responses:
     InvalidRequest:
       description: "`invalid_json` or `invalid_request`"

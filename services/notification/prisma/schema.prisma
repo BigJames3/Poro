@@ -71,7 +71,9 @@ model NotificationActor {
 }
 
 // Per-account settings. No row means every default (all true).
-// A disabled type creates neither the in-app notification nor the push.
+// A disabled type creates neither the in-app notification nor the push,
+// except orders: order notifications are transactional, the switch only
+// governs their push.
 model Preference {
   userId      String   @id @map("user_id") @db.Uuid
   pushEnabled Boolean  @default(true) @map("push_enabled")
@@ -79,6 +81,7 @@ model Preference {
   comments    Boolean  @default(true)
   follows     Boolean  @default(true)
   videoReady  Boolean  @default(true) @map("video_ready")
+  orders      Boolean  @default(true)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("preferences")
@@ -94,6 +97,16 @@ model UserProjection {
   updatedAt   DateTime @map("updated_at") @db.Timestamptz(6)
 
   @@map("user_projections")
+}
+
+// Public fields of every shop, fed by shop.updated. The newest updated_at wins.
+model ShopProjection {
+  shopId    String   @id @map("shop_id") @db.Uuid
+  name      String   @db.VarChar(60)
+  handle    String   @db.VarChar(30)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@map("shop_projections")
 }
 
 // Consumer idempotency: one row per (consumer group, event) already applied.

@@ -2,7 +2,7 @@
 
 Notifications PORO : in-app et push FCM. Email et SMS sont hors périmètre.
 Le service ne publie aucun événement : il consomme ceux de social, video,
-auth et user, et sert la boîte de notifications de chaque compte.
+auth, user, shop et order, et sert la boîte de notifications de chaque compte.
 
 - Contrat HTTP : [`docs/api/notification.openapi.yaml`](../../docs/api/notification.openapi.yaml)
 - Exploitation : [`docs/runbooks/notification.md`](../../docs/runbooks/notification.md)
@@ -25,11 +25,39 @@ n'a aucun effet. Un événement invalide part en DLQ (`<topic>.dlq`).
 | `poro.video.deleted` | — | Supprime les notifications de cette vidéo. |
 | `poro.moderation.content.removed` | — | Supprime les notifications de la vidéo ou du commentaire retiré ; une restauration ne les recrée pas. |
 | `poro.auth.user.created`, `poro.user.profile.updated` | — | Projection `user_projections` (nom, username, avatar des acteurs) ; le snapshot le plus récent gagne. |
+| `poro.shop.shop.updated` | — | Projection `shop_projections` (nom, handle) ; le snapshot le plus récent gagne. |
+| `poro.order.order.placed` | `seller_id` et `buyer_id` | Paiement à la livraison seulement. Vendeur : « Nouvelle commande » (acheteur et montant) ; acheteur : « Commande confirmée » (boutique et montant). |
+| `poro.order.order.shipped` | `buyer_id` | « Commande expédiée », avec le suivi s'il est renseigné. |
+| `poro.order.order.cancelled` | selon `reason` | `buyer_cancelled` : le vendeur seulement. `seller_cancelled`, `stock_rejected`, `payment_timeout` : l'acheteur seulement, avec « Ton remboursement est en cours. » si `paid`. |
+| `poro.order.order.completed` | `seller_id` | « Commande terminée » (acheteur et montant). |
+
+## Notifications de commande
+
+([ADR-0012](../../docs/architecture/adr/0012-marketplace-vague-3.md))
+
+- Le vendeur est prévenu à `order.placed`, quand le stock est retenu, jamais à
+  `order.created` : une commande refusée faute de stock ne lui parvient pas.
+- Celui qui agit n'est jamais notifié : l'acheteur qui annule, le vendeur qui
+  annule ou expédie.
+- Une notification par destinataire et par étape (`group_key`
+  `order:<order_id>:<étape>`) : un événement republié n'en crée pas d'autre.
+- Elles sont transactionnelles : la préférence `orders` coupe seulement leur
+  push, l'in-app est toujours écrit.
+- Montants en unités mineures, écrits en français : `12 500 FCFA` (XOF, XAF),
+  `12 500 ₦` ou `12 500,50 ₦` (NGN, en kobo).
+- Le texte nomme l'acheteur (projection des profils, « Quelqu'un » sinon) côté
+  vendeur et la boutique (« la boutique » sinon) côté acheteur. Aucune
+  coordonnée de livraison n'y figure, ni dans le push.
+- `data` porte `order_id` et `role` (`buyer` ou `seller`) pour ouvrir la bonne
+  commande.
+- Une commande payée en ligne n'est pas notifiée à `order.placed` : elle le
+  sera au paiement, quand le service payment existera.
 
 Règles :
 
 - l'acteur n'est jamais notifié de sa propre action ;
-- un type désactivé dans les préférences ne crée ni notification ni push ;
+- un type désactivé dans les préférences ne crée ni notification ni push, sauf
+  les commandes (push coupé seulement) ;
   `push_enabled: false` garde l'in-app et coupe le push ;
 - le texte est rendu à l'écriture depuis la projection (« Quelqu'un » si le
   profil n'est pas encore arrivé). Tous les textes français sont dans
