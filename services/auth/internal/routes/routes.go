@@ -16,6 +16,7 @@ import (
 type Dependencies struct {
 	Auth    *handler.AuthHandler
 	Account *handler.AccountHandler
+	Email   *handler.EmailHandler
 	Health  *health.Handler
 	Metrics fiber.Handler
 	JWKS    *handler.JWKSHandler
@@ -36,6 +37,9 @@ func Register(app *fiber.App, deps Dependencies) {
 	auth.Post("/email/register", middleware.LoginLimit(deps.Limiter), deps.Auth.RegisterEmail)
 	auth.Post("/email/login", middleware.LoginLimit(deps.Limiter), deps.Auth.LoginEmail)
 	auth.Post("/refresh", deps.Auth.Refresh)
+	// Both send or check a code for an address: limited like a sign-in.
+	auth.Post("/email/password/forgot", middleware.LoginLimit(deps.Limiter), deps.Email.ForgotPassword)
+	auth.Post("/email/password/reset", middleware.LoginLimit(deps.Limiter), deps.Email.ResetPassword)
 
 	protected := auth.Group("", middleware.NewAuth(deps.Tokens))
 	protected.Post("/logout", deps.Auth.Logout)
@@ -46,4 +50,6 @@ func Register(app *fiber.App, deps Dependencies) {
 	// The deletion checks a password or an OTP code: limited like a sign-in.
 	protected.Post("/me/delete", middleware.LoginLimit(deps.Limiter), deps.Account.DeleteAccount)
 	protected.Post("/me/delete/cancel", deps.Account.CancelDeletion)
+	protected.Post("/email/verification/request", middleware.LoginLimit(deps.Limiter), deps.Email.RequestVerification)
+	protected.Post("/email/verification/confirm", middleware.LoginLimit(deps.Limiter), deps.Email.ConfirmVerification)
 }

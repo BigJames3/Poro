@@ -460,6 +460,7 @@ func toUserResponse(user *model.User) dto.UserResponse {
 	}
 	return dto.UserResponse{
 		DeletionScheduledAt: deletion,
+		EmailVerified:       user.EmailVerifiedAt != nil,
 		ID:                  user.ID.String(),
 		Phone:               user.Phone,
 		Email:               user.Email,

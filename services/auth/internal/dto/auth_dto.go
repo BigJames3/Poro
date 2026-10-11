@@ -55,6 +55,8 @@ type UserResponse struct {
 	CountryCode *string  `json:"country_code,omitempty"`
 	Language    string   `json:"language"`
 	CreatedAt   string   `json:"created_at"`
+	// EmailVerified is true once the owner proved they read Email.
+	EmailVerified bool `json:"email_verified"`
 	// DeletionScheduledAt is when the account will be erased; null when no deletion is pending.
 	DeletionScheduledAt *string `json:"deletion_scheduled_at"`
 }
@@ -99,4 +101,26 @@ type SessionResponse struct {
 // RevokeSessionsResponse tells how many other devices were signed out.
 type RevokeSessionsResponse struct {
 	Revoked int64 `json:"revoked"`
+}
+
+// ConfirmEmailRequest is the body of POST /api/v1/auth/email/verification/confirm.
+type ConfirmEmailRequest struct {
+	Code string `json:"code" validate:"required,len=6,numeric"`
+}
+
+// CodeSentResponse is returned once a code is on its way.
+type CodeSentResponse struct {
+	ExpiresIn int `json:"expires_in"`
+}
+
+// ForgotPasswordRequest is the body of POST /api/v1/auth/email/password/forgot.
+type ForgotPasswordRequest struct {
+	Email string `json:"email" validate:"required,email,max=254"`
+}
+
+// ResetPasswordRequest is the body of POST /api/v1/auth/email/password/reset.
+type ResetPasswordRequest struct {
+	Email       string `json:"email" validate:"required,email,max=254"`
+	Code        string `json:"code" validate:"required,len=6,numeric"`
+	NewPassword string `json:"new_password" validate:"required,min=8,max=128"`
 }

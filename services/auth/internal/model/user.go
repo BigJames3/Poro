@@ -41,6 +41,8 @@ type User struct {
 	CountryCode  *string    `json:"country_code,omitempty" db:"country_code"`
 	Language     string     `json:"language" db:"language"`
 	LastLoginAt  *time.Time `json:"last_login_at,omitempty" db:"last_login_at"`
+	// EmailVerifiedAt is when the owner proved they read Email.
+	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty" db:"email_verified_at"`
 	// DeletionScheduledAt is when the account will be erased, if its owner asked for it.
 	DeletionScheduledAt *time.Time `json:"deletion_scheduled_at,omitempty" db:"deletion_scheduled_at"`
 	CreatedAt           time.Time  `json:"created_at" db:"created_at"`

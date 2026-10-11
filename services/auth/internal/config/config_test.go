@@ -18,12 +18,20 @@ func TestValidate(t *testing.T) {
 
 			AccountDeletionGrace: "720h",
 			AccountPurgeInterval: "1h",
+
+			EmailProvider:        EmailProviderSMTP,
+			EmailFrom:            "PORO <no-reply@poro.test>",
+			EmailCodeTTL:         "15m",
+			EmailCodeMaxAttempts: 5,
+			SMTPHost:             "smtp.poro.test",
+			SMTPPort:             587,
 		}
 	}
 
 	require.NoError(t, (&Config{
 		AppEnv: EnvDev, SMSProvider: SMSProviderLog, PostgresSSLMode: "disable", KafkaBrokers: []string{"localhost:9092"},
 		AccountDeletionGrace: "720h", AccountPurgeInterval: "1h",
+		EmailProvider: EmailProviderLog, EmailCodeTTL: "15m", EmailCodeMaxAttempts: 5,
 	}).Validate())
 
 	valid := prod()
@@ -58,6 +66,13 @@ func TestValidate(t *testing.T) {
 		{name: "no deletion grace", mutate: func(c *Config) { c.AccountDeletionGrace = "" }, want: "ACCOUNT_DELETION_GRACE"},
 		{name: "negative deletion grace", mutate: func(c *Config) { c.AccountDeletionGrace = "-1h" }, want: "ACCOUNT_DELETION_GRACE"},
 		{name: "bad purge interval", mutate: func(c *Config) { c.AccountPurgeInterval = "hourly" }, want: "ACCOUNT_PURGE_INTERVAL"},
+		{name: "log email outside dev", mutate: func(c *Config) { c.EmailProvider = EmailProviderLog }, want: "EMAIL_PROVIDER=log"},
+		{name: "unsupported email", mutate: func(c *Config) { c.EmailProvider = "sendmail" }, want: "EMAIL_PROVIDER"},
+		{name: "smtp without host", mutate: func(c *Config) { c.SMTPHost = "" }, want: "SMTP_HOST"},
+		{name: "smtp without sender", mutate: func(c *Config) { c.EmailFrom = "" }, want: "EMAIL_FROM"},
+		{name: "smtp bad port", mutate: func(c *Config) { c.SMTPPort = 0 }, want: "SMTP_PORT"},
+		{name: "bad email code ttl", mutate: func(c *Config) { c.EmailCodeTTL = "soon" }, want: "EMAIL_CODE_TTL"},
+		{name: "no email attempts", mutate: func(c *Config) { c.EmailCodeMaxAttempts = 0 }, want: "EMAIL_CODE_MAX_ATTEMPTS"},
 		{name: "bad calling code", mutate: func(c *Config) { c.OtpAllowedCallingCodes = []string{"+225", "225"} }, want: "OTP_ALLOWED_CALLING_CODES"},
 	}
 	for _, tc := range cases {
@@ -84,6 +99,10 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	require.Equal(t, 7, cfg.OtpMaxRequestsPerHour)
 	require.Equal(t, "30s", cfg.JWTRefreshReuseGrace)
 	require.Equal(t, "720h", cfg.AccountDeletionGrace)
+	require.Equal(t, EmailProviderLog, cfg.EmailProvider)
+	require.Equal(t, "15m", cfg.EmailCodeTTL)
+	require.Equal(t, 5, cfg.EmailCodeMaxAttempts)
+	require.Equal(t, 587, cfg.SMTPPort)
 	require.Equal(t, "1h", cfg.AccountPurgeInterval)
 	require.Equal(t, []string{"localhost:9092"}, cfg.KafkaBrokers)
 	require.Equal(t, []string{"+225", "+221", "+237", "+234"}, cfg.OtpAllowedCallingCodes)

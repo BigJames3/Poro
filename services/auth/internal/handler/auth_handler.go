@@ -2,12 +2,16 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/poro/shared-go/httpx"
 
@@ -16,15 +20,30 @@ import (
 	"github.com/poro/auth/internal/service"
 )
 
+// signupEmailTimeout bounds the verification email sent after a sign-up.
+const signupEmailTimeout = 30 * time.Second
+
 // AuthHandler adapts the auth service to HTTP.
 type AuthHandler struct {
 	auth     service.AuthService
 	validate *validator.Validate
+	// afterSignup runs in the background once an email account is created.
+	afterSignup func(ctx context.Context, userID uuid.UUID)
 }
 
 // NewAuthHandler returns an auth handler with a shared validator.
 func NewAuthHandler(auth service.AuthService) *AuthHandler {
 	return &AuthHandler{auth: auth, validate: validator.New()}
+}
+
+// SendVerificationOnSignup emails a verification code after each email
+// sign-up, in the background: a slow or failing relay never delays or fails
+// the sign-up itself.
+func (h *AuthHandler) SendVerificationOnSignup(emails service.EmailService, log *zap.Logger) *AuthHandler {
+	h.afterSignup = func(ctx context.Context, userID uuid.UUID) {
+		service.SendVerificationAfterSignup(ctx, emails, userID, log)
+	}
+	return h
 }
 
 // RequestOTP handles POST /api/v1/auth/otp/request.
@@ -66,6 +85,15 @@ func (h *AuthHandler) RegisterEmail(c *fiber.Ctx) error {
 	res, err := h.auth.RegisterEmail(c.UserContext(), req, c.Get(fiber.HeaderUserAgent), c.IP())
 	if err != nil {
 		return mapAuthError(err)
+	}
+	if h.afterSignup != nil {
+		if userID, err := uuid.Parse(res.User.ID); err == nil {
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(c.UserContext()), signupEmailTimeout)
+			go func() {
+				defer cancel()
+				h.afterSignup(ctx, userID)
+			}()
+		}
 	}
 	return writeData(c, fiber.StatusCreated, res)
 }

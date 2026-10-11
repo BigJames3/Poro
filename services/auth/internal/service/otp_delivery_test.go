@@ -91,3 +91,22 @@ func TestNewSMSSender(t *testing.T) {
 	_, err = NewSMSSender(&config.Config{AppEnv: config.EnvDev, SMSProvider: "carrier-pigeon"}, zap.NewNop())
 	require.Error(t, err)
 }
+
+func TestRedisEmailThrottleIsSeparateFromSMS(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	cfg := &config.Config{OtpRequestCooldown: "60s", OtpMaxRequestsPerHour: 2}
+	sms, err := NewRedisOTPThrottle(cfg, rdb)
+	require.NoError(t, err)
+	email, err := NewRedisEmailThrottle(cfg, rdb)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	require.NoError(t, email.Allow(ctx, "awa@poro.test"))
+	var throttled *ThrottledError
+	require.ErrorAs(t, email.Allow(ctx, "awa@poro.test"), &throttled)
+	require.NoError(t, sms.Allow(ctx, "awa@poro.test"), "SMS and email counters do not mix")
+	require.True(t, mr.Exists("auth:email:cooldown:awa@poro.test"))
+	require.NoError(t, email.Release(ctx, "awa@poro.test"))
+	require.NoError(t, email.Allow(ctx, "awa@poro.test"))
+}

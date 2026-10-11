@@ -28,10 +28,10 @@ var (
 )
 
 const (
-	userColumns = `id, phone, email, password_hash, status, country_code, language, last_login_at, created_at, updated_at, deleted_at, deletion_scheduled_at`
+	userColumns = `id, phone, email, password_hash, status, country_code, language, last_login_at, created_at, updated_at, deleted_at, deletion_scheduled_at, email_verified_at`
 	userSelect  = `
 		SELECT u.id, u.phone, u.email, u.password_hash, u.status, u.country_code, u.language,
-			u.last_login_at, u.created_at, u.updated_at, u.deleted_at, u.deletion_scheduled_at,
+			u.last_login_at, u.created_at, u.updated_at, u.deleted_at, u.deletion_scheduled_at, u.email_verified_at,
 			COALESCE((SELECT array_agg(r.role ORDER BY r.granted_at, r.role) FROM user_roles r WHERE r.user_id = u.id), '{}')
 		FROM users u`
 )
@@ -79,11 +79,11 @@ func (r *userRepository) Create(ctx context.Context, user *model.User) error {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	const insertUser = `INSERT INTO users (` + userColumns + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+	const insertUser = `INSERT INTO users (` + userColumns + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
 	if _, err := tx.Exec(ctx, insertUser,
 		user.ID, user.Phone, user.Email, user.PasswordHash, user.Status,
 		user.CountryCode, user.Language, user.LastLoginAt, user.CreatedAt, user.UpdatedAt, user.DeletedAt,
-		user.DeletionScheduledAt,
+		user.DeletionScheduledAt, user.EmailVerifiedAt,
 	); err != nil {
 		return mapUserWriteErr("create user", err)
 	}
@@ -295,7 +295,7 @@ func scanUser(row pgx.Row) (*model.User, error) {
 	err := row.Scan(
 		&user.ID, &user.Phone, &user.Email, &user.PasswordHash, &user.Status,
 		&user.CountryCode, &user.Language, &user.LastLoginAt, &user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
-		&user.DeletionScheduledAt, &roles,
+		&user.DeletionScheduledAt, &user.EmailVerifiedAt, &roles,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/modules/redpanda"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -19,8 +18,6 @@ import (
 	"github.com/poro/shared-go/kafka"
 	"github.com/poro/shared-go/outbox"
 
-	"github.com/poro/auth/internal/config"
-	"github.com/poro/auth/internal/database"
 	"github.com/poro/auth/internal/model"
 	"github.com/poro/auth/internal/repository"
 	"github.com/poro/auth/internal/service"
@@ -30,29 +27,7 @@ func TestErasedAccountReachesKafka(t *testing.T) {
 	ctx := context.Background()
 	log := zap.NewNop()
 
-	pg, err := postgres.Run(ctx, "postgres:16-alpine",
-		postgres.WithDatabase("poro_auth"),
-		postgres.WithUsername("poro"),
-		postgres.WithPassword("poro_dev_password"),
-		postgres.BasicWaitStrategies(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pg.Terminate(context.Background()) })
-	host, err := pg.Host(ctx)
-	require.NoError(t, err)
-	if host == "localhost" {
-		host = "127.0.0.1"
-	}
-	port, err := pg.MappedPort(ctx, "5432/tcp")
-	require.NoError(t, err)
-	cfg := &config.Config{
-		PostgresHost: host, PostgresPort: port.Port(), PostgresUser: "poro",
-		PostgresPassword: "poro_dev_password", PostgresDB: "poro_auth", PostgresSSLMode: "disable",
-	}
-	require.NoError(t, database.RunMigrations(ctx, cfg, log))
-	pool, err := database.NewPostgresPool(ctx, cfg, log)
-	require.NoError(t, err)
-	t.Cleanup(pool.Close)
+	pool := startPostgres(t)
 
 	rp, err := redpanda.Run(ctx, "redpandadata/redpanda:v24.2.7")
 	require.NoError(t, err)
@@ -75,7 +50,7 @@ func TestErasedAccountReachesKafka(t *testing.T) {
 	_, err = users.ScheduleDeletion(ctx, user.ID, time.Now().UTC().Add(-time.Minute))
 	require.NoError(t, err)
 
-	job, err := service.NewAccountPurgeJob(repository.NewAccountPurger(pool), time.Hour, log)
+	job, err := service.NewAccountPurgeJob(repository.NewAccountPurger(pool), repository.NewEmailCodeRepository(pool), time.Hour, log)
 	require.NoError(t, err)
 	erased, err := job.RunOnce(ctx)
 	require.NoError(t, err)

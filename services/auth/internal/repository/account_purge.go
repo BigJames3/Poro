@@ -36,7 +36,7 @@ func NewAccountPurger(pool *pgxpool.Pool) AccountPurger {
 //
 // The row and its id stay, without any identifier: phone and email become free
 // again, and the account can never sign in. Roles, sessions and pending OTP
-// codes are deleted, and poro.auth.user.deleted tells the other services.
+// and email codes are deleted, and poro.auth.user.deleted tells the other services.
 func (p *accountPurger) PurgeDue(ctx context.Context, now time.Time, limit int) ([]uuid.UUID, error) {
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
@@ -83,7 +83,7 @@ func (p *accountPurger) PurgeDue(ctx context.Context, now time.Time, limit int) 
 func erase(ctx context.Context, tx pgx.Tx, id uuid.UUID, phone *string, now time.Time) error {
 	const anonymize = `
 		UPDATE users SET
-			phone = NULL, email = NULL, password_hash = NULL, country_code = NULL,
+			phone = NULL, email = NULL, password_hash = NULL, country_code = NULL, email_verified_at = NULL,
 			status = $2, deleted_at = $3, updated_at = $3, deletion_scheduled_at = NULL
 		WHERE id = $1`
 	if _, err := tx.Exec(ctx, anonymize, id, model.StatusDeleted, now); err != nil {
@@ -94,6 +94,9 @@ func erase(ctx context.Context, tx pgx.Tx, id uuid.UUID, phone *string, now time
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM refresh_tokens WHERE user_id = $1`, id); err != nil {
 		return fmt.Errorf("delete sessions: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM email_codes WHERE user_id = $1`, id); err != nil {
+		return fmt.Errorf("delete email codes: %w", err)
 	}
 	if phone != nil {
 		if _, err := tx.Exec(ctx, `DELETE FROM otp_codes WHERE phone = $1`, *phone); err != nil {

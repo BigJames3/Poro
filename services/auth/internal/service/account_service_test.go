@@ -326,7 +326,8 @@ func TestCleanDeviceName(t *testing.T) {
 
 func TestAccountPurgeJob(t *testing.T) {
 	purger := &fakePurger{batches: [][]uuid.UUID{ids(purgeBatchSize), ids(3)}}
-	job, err := NewAccountPurgeJob(purger, time.Hour, zap.NewNop())
+	codes := &fakeExpiredCodes{deleted: 4}
+	job, err := NewAccountPurgeJob(purger, codes, time.Hour, zap.NewNop())
 	require.NoError(t, err)
 
 	erased, err := job.RunOnce(context.Background())
@@ -341,8 +342,14 @@ func TestAccountPurgeJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	job.Run(ctx)
+	require.Equal(t, 1, codes.calls, "a pass also cleans expired email codes")
+	require.WithinDuration(t, time.Now().Add(-expiredCodeRetention), codes.before, time.Minute)
 
-	_, err = NewAccountPurgeJob(purger, 0, zap.NewNop())
+	codes.err = errors.New("db down")
+	job.Run(ctx)
+	require.Equal(t, 2, codes.calls, "a failed cleanup does not stop the job")
+
+	_, err = NewAccountPurgeJob(purger, codes, 0, zap.NewNop())
 	require.Error(t, err)
 }
 
@@ -383,4 +390,20 @@ func longText(n int) string {
 		runes[i] = 'é'
 	}
 	return string(runes)
+}
+
+type fakeExpiredCodes struct {
+	deleted int64
+	calls   int
+	before  time.Time
+	err     error
+}
+
+func (f *fakeExpiredCodes) DeleteExpired(_ context.Context, before time.Time) (int64, error) {
+	f.calls++
+	f.before = before
+	if f.err != nil {
+		return 0, f.err
+	}
+	return f.deleted, nil
 }

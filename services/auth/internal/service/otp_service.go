@@ -48,12 +48,13 @@ func (e *ThrottledError) Error() string {
 // Is makes errors.Is(err, ErrOTPThrottled) true.
 func (e *ThrottledError) Is(target error) bool { return target == ErrOTPThrottled }
 
-// OTPThrottle limits how often one phone number can receive a code.
-// Allow returns a *ThrottledError when the phone must wait. Release lifts the
-// cooldown after a failed delivery; the hourly cap still counts the attempt.
+// OTPThrottle limits how often one recipient (a phone number, or an email
+// address) can receive a code. Allow returns a *ThrottledError when the
+// recipient must wait. Release lifts the cooldown after a failed delivery; the
+// hourly cap still counts the attempt.
 type OTPThrottle interface {
-	Allow(ctx context.Context, phone string) error
-	Release(ctx context.Context, phone string) error
+	Allow(ctx context.Context, recipient string) error
+	Release(ctx context.Context, recipient string) error
 }
 
 // SMSSender delivers a code to a phone number.
