@@ -14,18 +14,32 @@ import (
 )
 
 const (
-	otpCooldownKeyPrefix = "auth:otp:cooldown:"
-	otpHourlyKeyPrefix   = "auth:otp:hourly:"
+	otpCooldownKeyPrefix   = "auth:otp:cooldown:"
+	otpHourlyKeyPrefix     = "auth:otp:hourly:"
+	emailCooldownKeyPrefix = "auth:email:cooldown:"
+	emailHourlyKeyPrefix   = "auth:email:hourly:"
 )
 
 type redisOTPThrottle struct {
-	rdb        *redis.Client
-	cooldown   time.Duration
-	maxPerHour int
+	rdb            *redis.Client
+	cooldown       time.Duration
+	maxPerHour     int
+	cooldownPrefix string
+	hourlyPrefix   string
 }
 
 // NewRedisOTPThrottle enforces a cooldown between two codes and an hourly cap per phone.
 func NewRedisOTPThrottle(cfg *config.Config, rdb *redis.Client) (OTPThrottle, error) {
+	return newRedisThrottle(cfg, rdb, otpCooldownKeyPrefix, otpHourlyKeyPrefix)
+}
+
+// NewRedisEmailThrottle applies the same cooldown and hourly cap per email
+// address, for verification and reset codes together.
+func NewRedisEmailThrottle(cfg *config.Config, rdb *redis.Client) (OTPThrottle, error) {
+	return newRedisThrottle(cfg, rdb, emailCooldownKeyPrefix, emailHourlyKeyPrefix)
+}
+
+func newRedisThrottle(cfg *config.Config, rdb *redis.Client, cooldownPrefix, hourlyPrefix string) (OTPThrottle, error) {
 	if rdb == nil {
 		return nil, fmt.Errorf("otp throttle: redis is required")
 	}
@@ -36,11 +50,14 @@ func NewRedisOTPThrottle(cfg *config.Config, rdb *redis.Client) (OTPThrottle, er
 	if cooldown <= 0 || cfg.OtpMaxRequestsPerHour <= 0 {
 		return nil, fmt.Errorf("otp throttle: cooldown and hourly cap must be positive")
 	}
-	return &redisOTPThrottle{rdb: rdb, cooldown: cooldown, maxPerHour: cfg.OtpMaxRequestsPerHour}, nil
+	return &redisOTPThrottle{
+		rdb: rdb, cooldown: cooldown, maxPerHour: cfg.OtpMaxRequestsPerHour,
+		cooldownPrefix: cooldownPrefix, hourlyPrefix: hourlyPrefix,
+	}, nil
 }
 
 func (t *redisOTPThrottle) Allow(ctx context.Context, phone string) error {
-	cooldownKey := otpCooldownKeyPrefix + phone
+	cooldownKey := t.cooldownPrefix + phone
 	// SET NX answers nil when the key already exists: a code was sent recently.
 	err := t.rdb.SetArgs(ctx, cooldownKey, "1", redis.SetArgs{Mode: "NX", TTL: t.cooldown}).Err()
 	if errors.Is(err, redis.Nil) {
@@ -50,7 +67,7 @@ func (t *redisOTPThrottle) Allow(ctx context.Context, phone string) error {
 		return fmt.Errorf("otp throttle: %w", err)
 	}
 
-	hourlyKey := otpHourlyKeyPrefix + phone
+	hourlyKey := t.hourlyPrefix + phone
 	var count *redis.IntCmd
 	_, err = t.rdb.TxPipelined(ctx, func(p redis.Pipeliner) error {
 		p.SetNX(ctx, hourlyKey, 0, time.Hour)
@@ -67,7 +84,7 @@ func (t *redisOTPThrottle) Allow(ctx context.Context, phone string) error {
 }
 
 func (t *redisOTPThrottle) Release(ctx context.Context, phone string) error {
-	if err := t.rdb.Del(ctx, otpCooldownKeyPrefix+phone).Err(); err != nil {
+	if err := t.rdb.Del(ctx, t.cooldownPrefix+phone).Err(); err != nil {
 		return fmt.Errorf("otp throttle release: %w", err)
 	}
 	return nil

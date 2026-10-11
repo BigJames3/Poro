@@ -1,8 +1,8 @@
 # Auth Service
 
-Service d'identité de PORO : connexion par OTP SMS ou email/mot de passe, comptes à rôles
-multiples, sessions par appareil, suppression de compte, émission de JWT RS256 et publication
-des clés (JWKS).
+Service d'identité de PORO : connexion par OTP SMS ou email/mot de passe, vérification de
+l'email, mot de passe oublié, comptes à rôles multiples, sessions par appareil, suppression de
+compte, émission de JWT RS256 et publication des clés (JWKS).
 
 - Contrat HTTP : [`docs/api/auth.openapi.yaml`](../../docs/api/auth.openapi.yaml)
 - Exploitation : [`docs/runbooks/auth.md`](../../docs/runbooks/auth.md)
@@ -35,7 +35,8 @@ go run ./cmd/server
 Au démarrage, le service se connecte à Postgres, applique les migrations, se connecte à Redis et
 charge les clés. **Si l'une de ces étapes échoue, le processus s'arrête** : pas de mode dégradé.
 
-En `dev`, les codes OTP sont écrits dans les logs (`dev sms otp`).
+En `dev`, les codes OTP sont écrits dans les logs (`dev sms otp`), comme les codes envoyés par
+email (`dev email`).
 
 ## Configuration
 
@@ -63,6 +64,12 @@ En `dev`, les codes OTP sont écrits dans les logs (`dev sms otp`).
 | `AFRICASTALKING_API_KEY` | *(vide)* | Clé API, à fournir par le gestionnaire de secrets |
 | `AFRICASTALKING_SENDER_ID` | *(vide)* | Sender ID enregistré (ex. `PORO`) ; vide = expéditeur par défaut du compte |
 | `MIGRATIONS_PATH` | recherche de `migrations/` | Défini à `/app/migrations` dans l'image |
+| `EMAIL_PROVIDER` | `log` | `log` (dev uniquement, codes dans les logs) ou `smtp` |
+| `EMAIL_FROM` | *(vide)* | Expéditeur, ex. `PORO <no-reply@poro.africa>` ; obligatoire avec `smtp` |
+| `SMTP_HOST` / `SMTP_PORT` | *(vide)* / `587` | Relais SMTP (Brevo, SES…) ; `465` = TLS implicite, sinon STARTTLS obligatoire |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | *(vide)* | Identifiants du relais, à fournir par le gestionnaire de secrets |
+| `EMAIL_CODE_TTL` | `15m` | Validité d'un code envoyé par email |
+| `EMAIL_CODE_MAX_ATTEMPTS` | `5` | Essais par code |
 | `ACCOUNT_DELETION_GRACE` | `720h` | Délai entre la demande de suppression et l'effacement (30 jours) |
 | `ACCOUNT_PURGE_INTERVAL` | `1h` | Fréquence d'effacement des comptes arrivés à échéance |
 | `KAFKA_BROKERS` | `localhost:9092` | Courtier des consommateurs de rôles `poro.user.creator.activated` et `poro.shop.shop.created` (hors ready) |
@@ -84,6 +91,8 @@ simulateur Africa's Talking.
 | `POST` | `/api/v1/auth/email/register` | — | 10/min |
 | `POST` | `/api/v1/auth/email/login` | — | 10/min |
 | `POST` | `/api/v1/auth/refresh` | — | 100/min |
+| `POST` | `/api/v1/auth/email/password/forgot` | — | 10/min |
+| `POST` | `/api/v1/auth/email/password/reset` | — | 10/min |
 | `POST` | `/api/v1/auth/logout` | Bearer | 100/min |
 | `GET` | `/api/v1/auth/me` | Bearer | 100/min |
 | `GET` | `/api/v1/auth/sessions` | Bearer | 100/min |
@@ -91,11 +100,29 @@ simulateur Africa's Talking.
 | `POST` | `/api/v1/auth/sessions/revoke-others` | Bearer | 100/min |
 | `POST` | `/api/v1/auth/me/delete` | Bearer | 10/min |
 | `POST` | `/api/v1/auth/me/delete/cancel` | Bearer | 100/min |
+| `POST` | `/api/v1/auth/email/verification/request` | Bearer | 10/min |
+| `POST` | `/api/v1/auth/email/verification/confirm` | Bearer | 10/min |
 | `GET` | `/.well-known/jwks.json` | — | — |
 | `GET` | `/health/live`, `/health/ready` (`/health` = ready) | — | — |
 | `GET` | `/metrics` | — | — (ne pas exposer sur l'ingress public) |
 
 Toutes les réponses JSON suivent `{data, error, meta}` avec `meta.request_id`.
+
+### Email : vérification et mot de passe oublié
+
+Les codes font 6 chiffres, valent 15 minutes et 5 essais ; seul un HMAC lié au compte, à
+l'adresse et à l'usage est stocké (un code de vérification ne réinitialise rien). Une adresse
+reçoit au plus un email par minute et 5 par heure, vérification et réinitialisation confondues.
+
+- À l'inscription par email, un code de vérification part en arrière-plan ; un échec d'envoi
+  ne fait jamais échouer l'inscription. `POST /email/verification/request` en renvoie un,
+  `POST /email/verification/confirm` le valide ; `GET /me` expose `email_verified`. Une adresse
+  non vérifiée n'empêche pas de se connecter.
+- `POST /email/password/forgot` répond toujours `202`, que l'adresse ait un compte ou non, et
+  même si l'envoi échoue : la réponse ne révèle aucun compte. `POST /email/password/reset`
+  change le mot de passe, marque l'adresse vérifiée et déconnecte tous les appareils.
+- Envoi : `EMAIL_PROVIDER=smtp` vers n'importe quel relais, TLS obligatoire (TLS implicite sur
+  465, STARTTLS exigé sinon). Les codes expirés sont supprimés après un jour par la tâche horaire.
 
 ### Sessions par appareil
 

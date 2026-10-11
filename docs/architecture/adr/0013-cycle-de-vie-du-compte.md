@@ -36,6 +36,13 @@ hors ligne avec le JWKS.
    contact, part par l'outbox dans la même transaction. Chaque service l'appliquera dans sa
    propre PR (profil, vidéos, social, notifications, boutique et commandes).
 
+7. **Email** (complément du 2026-10-12) : codes à 6 chiffres envoyés par email plutôt que
+   des liens (pas de lien profond à gérer sur mobile), 15 minutes, 5 essais, HMAC lié au compte,
+   à l'adresse et à l'usage. Vérification envoyée à l'inscription en arrière-plan ; une adresse
+   non vérifiée n'empêche pas la connexion. Le mot de passe oublié répond toujours `202` ; la
+   réinitialisation vérifie l'adresse et révoque toutes les sessions. Envoi par SMTP générique
+   en TLS obligatoire, `log` en dev seulement.
+
 ## Conséquences
 
 - Pendant les 30 jours, le compte reste visible dans les autres services : seul auth sait
@@ -43,6 +50,8 @@ hors ligne avec le JWKS.
 - Un vendeur qui supprime son compte garde sa boutique tant que shop ne consomme pas
   `poro.auth.user.deleted` ; les commandes en cours seront traitées dans cette PR de shop.
 - Après l'effacement, rien n'est récupérable ni restaurable par le support.
+- Il faut un fournisseur SMTP (Brevo, SES…) et un domaine expéditeur configuré (SPF, DKIM,
+  DMARC) avant d'ouvrir staging et production.
 
 ## Alternatives écartées
 

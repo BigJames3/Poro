@@ -54,6 +54,21 @@ UPDATE refresh_tokens SET revoked_at = now() WHERE revoked_at IS NULL;
 - **Pic de `otp_throttled` / coût SMS** : ajuster `OTP_REQUEST_COOLDOWN` et
   `OTP_MAX_REQUESTS_PER_HOUR` ; les compteurs sont dans Redis (`auth:otp:*`).
 
+## Emails (vérification, mot de passe oublié)
+
+- Logs : `email code sent` (`user_id`, `purpose`), `password reset email failed`,
+  `verification email after sign-up failed`. Le client reçoit `email_unavailable` (503) pour une
+  vérification ; pour un mot de passe oublié il reçoit toujours `202`, l'échec n'est que dans les
+  logs.
+- Causes fréquentes : identifiants SMTP invalides (`auth: 535`), relais sans STARTTLS
+  (`relay does not offer STARTTLS` : utiliser le port 587 ou 465 du fournisseur), certificat
+  refusé (nom d'hôte `SMTP_HOST` différent du certificat), expéditeur non validé chez le
+  fournisseur (`mail from: 5xx`).
+- Un utilisateur ne reçoit rien : vérifier les spams, puis
+  `SELECT purpose, created_at, attempts, consumed_at FROM email_codes WHERE user_id = '<uuid>' ORDER BY created_at DESC LIMIT 5;`
+  et la limite `auth:email:*` dans Redis (1 email/min, 5/h par adresse).
+- Délivrabilité : configurer SPF, DKIM et DMARC du domaine de `EMAIL_FROM` chez le fournisseur.
+
 ## Suppression de compte
 
 - Comptes en attente : `SELECT id, deletion_scheduled_at FROM users WHERE deletion_scheduled_at IS NOT NULL AND deleted_at IS NULL ORDER BY deletion_scheduled_at;`
@@ -67,6 +82,8 @@ UPDATE refresh_tokens SET revoked_at = now() WHERE revoked_at IS NULL;
   `UPDATE users SET deletion_scheduled_at = NULL WHERE id = '<uuid>' AND deleted_at IS NULL;`
   Après l'effacement, rien n'est récupérable : le compte n'a plus d'identifiant.
 - Un utilisateur qui se reconnecte pendant les 30 jours annule sa suppression sans intervention.
+- L'effacement supprime aussi ses codes email ; la même tâche horaire supprime les codes expirés
+  depuis plus d'un jour.
 
 ## SMS (Africa's Talking)
 

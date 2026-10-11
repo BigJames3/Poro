@@ -13,22 +13,34 @@ import (
 // purgeBatchSize bounds one purge transaction.
 const purgeBatchSize = 100
 
+// expiredCodeRetention keeps expired email codes one day for investigation:
+// they hold addresses, so they do not stay longer.
+const expiredCodeRetention = 24 * time.Hour
+
+// ExpiredCodes deletes codes that expired before a date.
+type ExpiredCodes interface {
+	DeleteExpired(ctx context.Context, before time.Time) (int64, error)
+}
+
 // AccountPurgeJob erases the accounts whose deletion date has passed, on
 // every replica: SKIP LOCKED keeps them from erasing the same account.
 type AccountPurgeJob struct {
 	purger   repository.AccountPurger
+	codes    ExpiredCodes
 	interval time.Duration
 	log      *zap.Logger
 	now      func() time.Time
 }
 
-// NewAccountPurgeJob returns a job that runs every interval.
-func NewAccountPurgeJob(purger repository.AccountPurger, interval time.Duration, log *zap.Logger) (*AccountPurgeJob, error) {
+// NewAccountPurgeJob returns a job that runs every interval. It also deletes
+// the email codes expired for more than a day.
+func NewAccountPurgeJob(purger repository.AccountPurger, codes ExpiredCodes, interval time.Duration, log *zap.Logger) (*AccountPurgeJob, error) {
 	if interval <= 0 {
 		return nil, fmt.Errorf("account purge interval must be positive, got %s", interval)
 	}
 	return &AccountPurgeJob{
 		purger:   purger,
+		codes:    codes,
 		interval: interval,
 		log:      log,
 		now:      func() time.Time { return time.Now().UTC() },
@@ -45,6 +57,11 @@ func (j *AccountPurgeJob) Run(ctx context.Context) {
 			j.log.Error("account purge failed", zap.Error(err))
 		} else if erased > 0 {
 			j.log.Info("accounts erased", zap.Int("count", erased))
+		}
+		if deleted, err := j.codes.DeleteExpired(ctx, j.now().Add(-expiredCodeRetention)); err != nil {
+			j.log.Error("expired email code cleanup failed", zap.Error(err))
+		} else if deleted > 0 {
+			j.log.Info("expired email codes deleted", zap.Int64("count", deleted))
 		}
 		select {
 		case <-ctx.Done():

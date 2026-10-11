@@ -26,6 +26,11 @@ const (
 	// AfricasTalkingSandboxUser selects the Africa's Talking sandbox, which never reaches real phones.
 	AfricasTalkingSandboxUser = "sandbox"
 
+	// EmailProviderLog writes email codes to the log instead of sending them. Dev only.
+	EmailProviderLog = "log"
+	// EmailProviderSMTP sends email through an SMTP relay (Brevo, SES, ...) over TLS.
+	EmailProviderSMTP = "smtp"
+
 	minOTPSecretLen = 32
 )
 
@@ -73,6 +78,16 @@ type Config struct {
 	AfricasTalkingUsername string // "sandbox" selects the sandbox
 	AfricasTalkingAPIKey   string
 	AfricasTalkingSenderID string // optional registered alphanumeric sender
+
+	// Email
+	EmailProvider        string // log, smtp
+	EmailFrom            string // "PORO <no-reply@poro.africa>"
+	EmailCodeTTL         string // 15m
+	EmailCodeMaxAttempts int    // 5
+	SMTPHost             string
+	SMTPPort             int // 587 (STARTTLS) or 465 (implicit TLS)
+	SMTPUsername         string
+	SMTPPassword         string
 
 	// Account lifecycle
 	AccountDeletionGrace string // 720h: delay before a requested deletion erases the account
@@ -128,7 +143,23 @@ func (c *Config) Validate() error {
 	default:
 		errs = append(errs, fmt.Errorf("SMS_PROVIDER %q is not supported", c.SMSProvider))
 	}
+	switch c.EmailProvider {
+	case EmailProviderLog:
+	case EmailProviderSMTP:
+		if c.SMTPHost == "" || c.EmailFrom == "" {
+			errs = append(errs, errors.New("SMTP_HOST and EMAIL_FROM are required with EMAIL_PROVIDER=smtp"))
+		}
+		if c.SMTPPort <= 0 || c.SMTPPort > 65535 {
+			errs = append(errs, fmt.Errorf("SMTP_PORT must be a TCP port, got %d", c.SMTPPort))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("EMAIL_PROVIDER %q is not supported", c.EmailProvider))
+	}
+	if c.EmailCodeMaxAttempts <= 0 {
+		errs = append(errs, errors.New("EMAIL_CODE_MAX_ATTEMPTS must be positive"))
+	}
 	for name, value := range map[string]string{
+		"EMAIL_CODE_TTL":         c.EmailCodeTTL,
 		"ACCOUNT_DELETION_GRACE": c.AccountDeletionGrace,
 		"ACCOUNT_PURGE_INTERVAL": c.AccountPurgeInterval,
 	} {
@@ -150,6 +181,9 @@ func (c *Config) Validate() error {
 		}
 		if c.SMSProvider == SMSProviderLog {
 			errs = append(errs, errors.New("SMS_PROVIDER=log is only allowed in dev"))
+		}
+		if c.EmailProvider == EmailProviderLog {
+			errs = append(errs, errors.New("EMAIL_PROVIDER=log is only allowed in dev"))
 		}
 		switch c.PostgresSSLMode {
 		case "require", "verify-ca", "verify-full":
@@ -217,6 +251,15 @@ func Load() (*Config, error) {
 		AfricasTalkingAPIKey:   v.GetString("AFRICASTALKING_API_KEY"),
 		AfricasTalkingSenderID: v.GetString("AFRICASTALKING_SENDER_ID"),
 
+		EmailProvider:        v.GetString("EMAIL_PROVIDER"),
+		EmailFrom:            v.GetString("EMAIL_FROM"),
+		EmailCodeTTL:         v.GetString("EMAIL_CODE_TTL"),
+		EmailCodeMaxAttempts: v.GetInt("EMAIL_CODE_MAX_ATTEMPTS"),
+		SMTPHost:             v.GetString("SMTP_HOST"),
+		SMTPPort:             v.GetInt("SMTP_PORT"),
+		SMTPUsername:         v.GetString("SMTP_USERNAME"),
+		SMTPPassword:         v.GetString("SMTP_PASSWORD"),
+
 		AccountDeletionGrace: v.GetString("ACCOUNT_DELETION_GRACE"),
 		AccountPurgeInterval: v.GetString("ACCOUNT_PURGE_INTERVAL"),
 
@@ -265,6 +308,15 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("AFRICASTALKING_USERNAME", "")
 	v.SetDefault("AFRICASTALKING_API_KEY", "")
 	v.SetDefault("AFRICASTALKING_SENDER_ID", "")
+
+	v.SetDefault("EMAIL_PROVIDER", EmailProviderLog)
+	v.SetDefault("EMAIL_FROM", "")
+	v.SetDefault("EMAIL_CODE_TTL", "15m")
+	v.SetDefault("EMAIL_CODE_MAX_ATTEMPTS", 5)
+	v.SetDefault("SMTP_HOST", "")
+	v.SetDefault("SMTP_PORT", 587)
+	v.SetDefault("SMTP_USERNAME", "")
+	v.SetDefault("SMTP_PASSWORD", "")
 
 	v.SetDefault("ACCOUNT_DELETION_GRACE", "720h")
 	v.SetDefault("ACCOUNT_PURGE_INTERVAL", "1h")

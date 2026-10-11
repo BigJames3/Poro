@@ -110,7 +110,20 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init account service: %w", err)
 	}
-	purgeJob, err := service.NewAccountPurgeJob(repository.NewAccountPurger(pool), purgeInterval, log)
+	emailThrottle, err := service.NewRedisEmailThrottle(cfg, rdb)
+	if err != nil {
+		return fmt.Errorf("init email throttle: %w", err)
+	}
+	emailSender, err := service.NewEmailSender(cfg, log)
+	if err != nil {
+		return fmt.Errorf("init email sender: %w", err)
+	}
+	emailCodes := repository.NewEmailCodeRepository(pool)
+	emailSvc, err := service.NewEmailService(cfg, users, emailCodes, emailThrottle, emailSender, log)
+	if err != nil {
+		return fmt.Errorf("init email service: %w", err)
+	}
+	purgeJob, err := service.NewAccountPurgeJob(repository.NewAccountPurger(pool), emailCodes, purgeInterval, log)
 	if err != nil {
 		return fmt.Errorf("init account purge: %w", err)
 	}
@@ -138,7 +151,8 @@ func run() error {
 
 	app := newApp(cfg, log, m)
 	routes.Register(app, routes.Dependencies{
-		Auth:    handler.NewAuthHandler(authSvc),
+		Auth:    handler.NewAuthHandler(authSvc).SendVerificationOnSignup(emailSvc, log),
+		Email:   handler.NewEmailHandler(emailSvc),
 		Account: handler.NewAccountHandler(accountSvc),
 		// Kafka is left out: sign-in keeps working while the broker is down.
 		Health: health.New("auth", version, map[string]health.Check{

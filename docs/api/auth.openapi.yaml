@@ -95,7 +95,9 @@ paths:
       tags: [email]
       security: []
       summary: Create an account with email and password
-      description: The email is trimmed and lowercased. 10 requests/min per IP.
+      description: |
+        The email is trimmed and lowercased. 10 requests/min per IP. A verification code is
+        emailed in the background; a delivery failure never fails the sign-up.
       requestBody:
         required: true
         content:
@@ -139,6 +141,105 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "403": { $ref: "#/components/responses/Blocked" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/auth/email/verification/request:
+    post:
+      tags: [email]
+      summary: Email a verification code to the account's address
+      description: |
+        Six digits, valid 15 minutes, 5 attempts. One email per address every 60 s and 5 per hour,
+        verification and reset codes together. A new code voids the previous one. 10 requests/min per IP.
+      security: [{ bearer: [] }]
+      responses:
+        "202": { $ref: "#/components/responses/CodeSent" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Blocked" }
+        "409":
+          description: "`email_already_verified`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: "`email_missing`: the account signs in by phone"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/EmailThrottled" }
+        "503":
+          description: "`email_unavailable`: the relay refused or could not be reached; retry"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /api/v1/auth/email/verification/confirm:
+    post:
+      tags: [email]
+      summary: Verify the address with the emailed code
+      description: Confirming an address already verified returns the account unchanged.
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          description: Account, `email_verified` true
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "422": { $ref: "#/components/responses/CodeRejected" }
+        "429": { $ref: "#/components/responses/CodeTooManyAttempts" }
+  /api/v1/auth/email/password/forgot:
+    post:
+      tags: [email]
+      security: []
+      summary: Email a password reset code
+      description: |
+        Always `202` with the same body, whether or not an account uses the address, and even if the
+        email could not be sent: the answer reveals no account. Same code rules and limits as the
+        verification. 10 requests/min per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+      responses:
+        "202": { $ref: "#/components/responses/CodeSent" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "429": { $ref: "#/components/responses/EmailThrottled" }
+  /api/v1/auth/email/password/reset:
+    post:
+      tags: [email]
+      security: []
+      summary: Choose a new password with the emailed code
+      description: |
+        Sets the password, marks the address verified and signs every device out (all refresh
+        tokens revoked). An unknown address fails like a wrong code. 10 requests/min per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, new_password]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+                new_password: { type: string, minLength: 8, maxLength: 128 }
+      responses:
+        "204": { description: Password changed, every session ended }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "403": { $ref: "#/components/responses/Blocked" }
+        "422": { $ref: "#/components/responses/CodeRejected" }
+        "429": { $ref: "#/components/responses/CodeTooManyAttempts" }
   /api/v1/auth/refresh:
     post:
       tags: [session]
@@ -414,6 +515,13 @@ components:
                 - session_revoked
                 - session_not_found
                 - reauth_required
+                - email_missing
+                - email_already_verified
+                - email_throttled
+                - email_unavailable
+                - code_invalid
+                - code_expired
+                - code_too_many_attempts
                 - internal_error
             message: { type: string }
         meta:
@@ -442,6 +550,7 @@ components:
         country_code: { type: string }
         language: { type: string }
         created_at: { type: string, format: date-time }
+        email_verified: { type: boolean, description: True once the owner proved they read the address. }
         deletion_scheduled_at:
           type: ["string", "null"]
           format: date-time
@@ -483,6 +592,30 @@ components:
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
     Blocked:
       description: "`account_blocked`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    CodeSent:
+      description: Code on its way
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      expires_in: { type: integer, description: code lifetime in seconds }
+    EmailThrottled:
+      description: "`email_throttled` (header `Retry-After` in seconds) or `rate_limited`"
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    CodeRejected:
+      description: "`code_invalid` (wrong, used or unknown) or `code_expired`: ask for a new code"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    CodeTooManyAttempts:
+      description: "`code_too_many_attempts`: ask for a new code; or `rate_limited`"
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
     RateLimited:
       description: "`rate_limited`"

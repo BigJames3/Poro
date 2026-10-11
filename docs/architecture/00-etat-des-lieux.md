@@ -121,8 +121,8 @@ reste acceptable hors auth jusqu'à 15 min ([ADR-0005](adr/0005-evenements-json-
 ### P1 — important
 Marketplace (boutique, produits, variantes, stock, panier, checkout), abstraction `PaymentProvider`
 et premier fournisseur, livraison, ~~liste et révocation des sessions par appareil, suppression de
-compte~~ (faits, [ADR-0013](adr/0013-cycle-de-vie-du-compte.md)), vérification d'email,
-réinitialisation du mot de passe, tests de charge k6, DAST (ZAP),
+compte, vérification d'email, réinitialisation du mot de passe~~ (faits,
+[ADR-0013](adr/0013-cycle-de-vie-du-compte.md)), tests de charge k6, DAST (ZAP),
 signature d'image (cosign), ArgoCD, intégration Auth côté Android (Android Studio), squelette iOS.
 
 ### P2 — amélioration
