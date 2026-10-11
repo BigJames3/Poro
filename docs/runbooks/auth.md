@@ -46,12 +46,27 @@ UPDATE refresh_tokens SET revoked_at = now() WHERE revoked_at IS NULL;
 
 - **Compte compromis** : révoquer ses sessions
   `UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = '<uuid>' AND revoked_at IS NULL;`
-  (les access tokens expirent en 15 min au plus).
+  (les access tokens expirent en 15 min au plus). L'utilisateur peut aussi le faire lui-même
+  depuis l'app (`POST /sessions/revoke-others`).
 - **Pic de `session_revoked`** : réutilisation de refresh tokens détectée. Soit un vol, soit un
   client qui envoie des refresh en parallèle. Vérifier la version de l'application ; le client
   doit sérialiser ses refresh (voir ADR-0002).
 - **Pic de `otp_throttled` / coût SMS** : ajuster `OTP_REQUEST_COOLDOWN` et
   `OTP_MAX_REQUESTS_PER_HOUR` ; les compteurs sont dans Redis (`auth:otp:*`).
+
+## Suppression de compte
+
+- Comptes en attente : `SELECT id, deletion_scheduled_at FROM users WHERE deletion_scheduled_at IS NOT NULL AND deleted_at IS NULL ORDER BY deletion_scheduled_at;`
+- La tâche d'effacement tourne au démarrage puis toutes les `ACCOUNT_PURGE_INTERVAL` sur chaque
+  réplica. Logs : `account erased` (un par compte, `user_id`), `account purge failed` (la passe
+  suivante réessaie). Un compte en retard de plus d'une heure sur sa date signale une tâche
+  bloquée.
+- Vérifier la publication : `SELECT published_at, last_error FROM outbox_events WHERE topic = 'poro.auth.user.deleted' AND event_key = '<uuid>';`
+  (`published_at` vide : voir le runbook outbox-relay).
+- **Annuler à la demande du support** (avant l'échéance seulement) :
+  `UPDATE users SET deletion_scheduled_at = NULL WHERE id = '<uuid>' AND deleted_at IS NULL;`
+  Après l'effacement, rien n'est récupérable : le compte n'a plus d'identifiant.
+- Un utilisateur qui se reconnecte pendant les 30 jours annule sa suppression sans intervention.
 
 ## SMS (Africa's Talking)
 

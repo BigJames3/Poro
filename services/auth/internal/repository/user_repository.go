@@ -28,10 +28,10 @@ var (
 )
 
 const (
-	userColumns = `id, phone, email, password_hash, status, country_code, language, last_login_at, created_at, updated_at, deleted_at`
+	userColumns = `id, phone, email, password_hash, status, country_code, language, last_login_at, created_at, updated_at, deleted_at, deletion_scheduled_at`
 	userSelect  = `
 		SELECT u.id, u.phone, u.email, u.password_hash, u.status, u.country_code, u.language,
-			u.last_login_at, u.created_at, u.updated_at, u.deleted_at,
+			u.last_login_at, u.created_at, u.updated_at, u.deleted_at, u.deletion_scheduled_at,
 			COALESCE((SELECT array_agg(r.role ORDER BY r.granted_at, r.role) FROM user_roles r WHERE r.user_id = u.id), '{}')
 		FROM users u`
 )
@@ -47,6 +47,11 @@ type UserRepository interface {
 	SoftDelete(ctx context.Context, id uuid.UUID) error
 	ExistsByPhone(ctx context.Context, phone string) (bool, error)
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
+	// ScheduleDeletion sets the erasure date unless one is already set, and
+	// returns the date in force.
+	ScheduleDeletion(ctx context.Context, id uuid.UUID, at time.Time) (time.Time, error)
+	// CancelDeletion clears the erasure date and reports whether one was set.
+	CancelDeletion(ctx context.Context, id uuid.UUID) (bool, error)
 }
 
 type userRepository struct {
@@ -74,10 +79,11 @@ func (r *userRepository) Create(ctx context.Context, user *model.User) error {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	const insertUser = `INSERT INTO users (` + userColumns + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+	const insertUser = `INSERT INTO users (` + userColumns + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 	if _, err := tx.Exec(ctx, insertUser,
 		user.ID, user.Phone, user.Email, user.PasswordHash, user.Status,
 		user.CountryCode, user.Language, user.LastLoginAt, user.CreatedAt, user.UpdatedAt, user.DeletedAt,
+		user.DeletionScheduledAt,
 	); err != nil {
 		return mapUserWriteErr("create user", err)
 	}
@@ -185,6 +191,33 @@ func (r *userRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (r *userRepository) ScheduleDeletion(ctx context.Context, id uuid.UUID, at time.Time) (time.Time, error) {
+	const q = `
+		UPDATE users SET deletion_scheduled_at = COALESCE(deletion_scheduled_at, $2), updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING deletion_scheduled_at`
+	var scheduled time.Time
+	err := r.pool.QueryRow(ctx, q, id, at).Scan(&scheduled)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return time.Time{}, fmt.Errorf("schedule deletion: %w", ErrUserNotFound)
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("schedule deletion: %w", err)
+	}
+	return scheduled, nil
+}
+
+func (r *userRepository) CancelDeletion(ctx context.Context, id uuid.UUID) (bool, error) {
+	const q = `
+		UPDATE users SET deletion_scheduled_at = NULL, updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL AND deletion_scheduled_at IS NOT NULL`
+	tag, err := r.pool.Exec(ctx, q, id)
+	if err != nil {
+		return false, fmt.Errorf("cancel deletion: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
 func (r *userRepository) ExistsByPhone(ctx context.Context, phone string) (bool, error) {
 	return r.exists(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE phone = $1 AND deleted_at IS NULL)`, phone, "phone")
 }
@@ -262,7 +295,7 @@ func scanUser(row pgx.Row) (*model.User, error) {
 	err := row.Scan(
 		&user.ID, &user.Phone, &user.Email, &user.PasswordHash, &user.Status,
 		&user.CountryCode, &user.Language, &user.LastLoginAt, &user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
-		&roles,
+		&user.DeletionScheduledAt, &roles,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrUserNotFound

@@ -5,6 +5,7 @@ import "time"
 // Event types. The JSON Schema of each lives in packages/contracts/events.
 const (
 	TypeAuthUserCreated      = "poro.auth.user.created"
+	TypeAuthUserDeleted      = "poro.auth.user.deleted"
 	TypeUserCreatorActivated = "poro.user.creator.activated"
 	TypeUserProfileUpdated   = "poro.user.profile.updated"
 	TypeVideoUploaded        = "poro.video.uploaded"
@@ -48,6 +49,13 @@ type AuthUserCreatedV1 struct {
 	CountryCode  *string   `json:"country_code"`
 	Language     string    `json:"language"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+// AuthUserDeletedV1 is published by auth when an account is erased, at the end
+// of its grace period. Every service forgets or anonymizes what it holds about it.
+type AuthUserDeletedV1 struct {
+	UserID    string    `json:"user_id"`
+	DeletedAt time.Time `json:"deleted_at"`
 }
 
 // UserCreatorActivatedV1 is published by the user service when a profile becomes a creator.

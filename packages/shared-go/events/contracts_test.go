@@ -31,6 +31,9 @@ func contractSamples() map[string]any {
 		events.TypeAuthUserCreated: events.AuthUserCreatedV1{
 			UserID: user, SignupMethod: "phone", CountryCode: &ci, Language: "fr", CreatedAt: now,
 		},
+		events.TypeAuthUserDeleted: events.AuthUserDeletedV1{
+			UserID: user, DeletedAt: now,
+		},
 		events.TypeUserCreatorActivated: events.UserCreatorActivatedV1{
 			UserID: user, Username: "awa_k", ActivatedAt: now,
 		},

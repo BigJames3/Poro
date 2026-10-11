@@ -167,6 +167,10 @@ func mapAuthError(err error) error {
 		return httpx.NewAPIError(fiber.StatusUnauthorized, "session_revoked", "session revoked, sign in again")
 	case errors.Is(err, service.ErrRefreshTokenInvalid):
 		return httpx.NewAPIError(fiber.StatusUnauthorized, "refresh_token_invalid", "invalid refresh token")
+	case errors.Is(err, service.ErrSessionNotFound):
+		return httpx.NewAPIError(fiber.StatusNotFound, "session_not_found", "session not found")
+	case errors.Is(err, service.ErrReauthRequired):
+		return httpx.NewAPIError(fiber.StatusUnprocessableEntity, "reauth_required", "confirm with your password or a new code")
 	case errors.Is(err, service.ErrInvalidToken):
 		return httpx.NewAPIError(fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	default:

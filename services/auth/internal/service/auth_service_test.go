@@ -547,6 +547,8 @@ func hashPassword(t *testing.T) string {
 
 type fakeUsers struct {
 	byID                   map[uuid.UUID]*model.User
+	scheduleErr            error
+	cancelErr              error
 	createErr              error
 	getByPhoneErr          error
 	getByEmailErr          error
@@ -647,6 +649,32 @@ func (f *fakeUsers) UpdateLastLogin(_ context.Context, id uuid.UUID) error {
 }
 
 func (f *fakeUsers) SoftDelete(context.Context, uuid.UUID) error { return nil }
+
+func (f *fakeUsers) ScheduleDeletion(_ context.Context, id uuid.UUID, at time.Time) (time.Time, error) {
+	if f.scheduleErr != nil {
+		return time.Time{}, f.scheduleErr
+	}
+	user, ok := f.byID[id]
+	if !ok {
+		return time.Time{}, repository.ErrUserNotFound
+	}
+	if user.DeletionScheduledAt == nil {
+		user.DeletionScheduledAt = &at
+	}
+	return *user.DeletionScheduledAt, nil
+}
+
+func (f *fakeUsers) CancelDeletion(_ context.Context, id uuid.UUID) (bool, error) {
+	if f.cancelErr != nil {
+		return false, f.cancelErr
+	}
+	user, ok := f.byID[id]
+	if !ok || user.DeletionScheduledAt == nil {
+		return false, nil
+	}
+	user.DeletionScheduledAt = nil
+	return true, nil
+}
 
 func (f *fakeUsers) ExistsByPhone(ctx context.Context, phone string) (bool, error) {
 	_, err := f.GetByPhone(ctx, phone)
@@ -799,7 +827,32 @@ func (f *fakeRefresh) RevokeFamily(_ context.Context, userID, familyID uuid.UUID
 	}, time.Now().UTC())
 }
 
-func (f *fakeRefresh) RevokeAllForUser(context.Context, uuid.UUID) error { return nil }
+func (f *fakeRefresh) RevokeAllForUser(_ context.Context, userID uuid.UUID) error {
+	_, err := f.revokeWhere(func(t *model.RefreshToken) bool { return t.UserID == userID }, time.Now().UTC())
+	return err
+}
+
+func (f *fakeRefresh) ActiveSessions(_ context.Context, userID uuid.UUID) ([]model.Session, error) {
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+	var sessions []model.Session
+	for _, token := range f.items {
+		if token.UserID == userID && token.RevokedAt == nil && token.ExpiresAt.After(time.Now()) {
+			sessions = append(sessions, model.Session{
+				ID: token.FamilyID, DeviceName: token.DeviceName, UserAgent: token.UserAgent,
+				IPAddress: token.IPAddress, CreatedAt: token.CreatedAt, LastActiveAt: token.CreatedAt,
+			})
+		}
+	}
+	return sessions, nil
+}
+
+func (f *fakeRefresh) RevokeOtherFamilies(_ context.Context, userID, keep uuid.UUID) (int64, error) {
+	return f.revokeWhere(func(t *model.RefreshToken) bool {
+		return t.UserID == userID && t.FamilyID != keep
+	}, time.Now().UTC())
+}
 
 func (f *fakeRefresh) DeleteExpired(context.Context) (int64, error) { return 0, nil }
 

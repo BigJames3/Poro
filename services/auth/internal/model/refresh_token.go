@@ -19,5 +19,6 @@ type RefreshToken struct {
 	ReplacedBy *uuid.UUID `json:"replaced_by,omitempty" db:"replaced_by"`
 	UserAgent  *string    `json:"user_agent,omitempty" db:"user_agent"`
 	IPAddress  *string    `json:"ip_address,omitempty" db:"ip_address"`
+	DeviceName *string    `json:"device_name,omitempty" db:"device_name"`
 	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
 }

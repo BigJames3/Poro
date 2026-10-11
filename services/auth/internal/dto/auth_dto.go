@@ -8,22 +8,25 @@ type RequestOTPRequest struct {
 
 // VerifyOTPRequest is the body of POST /api/v1/auth/otp/verify.
 type VerifyOTPRequest struct {
-	Phone string `json:"phone" validate:"required,e164"`
-	Code  string `json:"code" validate:"required,len=6,numeric"`
+	Phone      string `json:"phone" validate:"required,e164"`
+	Code       string `json:"code" validate:"required,len=6,numeric"`
+	DeviceName string `json:"device_name" validate:"max=60"`
 }
 
 // RegisterEmailRequest is the body of POST /api/v1/auth/email/register.
 // FullName is validated and not stored: the profile belongs to the User service.
 type RegisterEmailRequest struct {
-	Email    string `json:"email" validate:"required,email,max=254"`
-	Password string `json:"password" validate:"required,min=8,max=128"`
-	FullName string `json:"full_name" validate:"required,min=2,max=100"`
+	Email      string `json:"email" validate:"required,email,max=254"`
+	Password   string `json:"password" validate:"required,min=8,max=128"`
+	FullName   string `json:"full_name" validate:"required,min=2,max=100"`
+	DeviceName string `json:"device_name" validate:"max=60"`
 }
 
 // LoginEmailRequest is the body of POST /api/v1/auth/email/login.
 type LoginEmailRequest struct {
-	Email    string `json:"email" validate:"required,email,max=254"`
-	Password string `json:"password" validate:"required,max=128"`
+	Email      string `json:"email" validate:"required,email,max=254"`
+	Password   string `json:"password" validate:"required,max=128"`
+	DeviceName string `json:"device_name" validate:"max=60"`
 }
 
 // RefreshRequest is the body of POST /api/v1/auth/refresh.
@@ -38,6 +41,8 @@ type AuthResponse struct {
 	RefreshToken string       `json:"refresh_token"`
 	ExpiresIn    int          `json:"expires_in"`
 	TokenType    string       `json:"token_type"`
+	// DeletionCancelled is true when this sign-in cancelled a scheduled deletion.
+	DeletionCancelled bool `json:"deletion_cancelled,omitempty"`
 }
 
 // UserResponse is the public view of an auth account.
@@ -50,6 +55,8 @@ type UserResponse struct {
 	CountryCode *string  `json:"country_code,omitempty"`
 	Language    string   `json:"language"`
 	CreatedAt   string   `json:"created_at"`
+	// DeletionScheduledAt is when the account will be erased; null when no deletion is pending.
+	DeletionScheduledAt *string `json:"deletion_scheduled_at"`
 }
 
 // RequestOTPResponse is returned after an OTP is issued.
@@ -64,4 +71,32 @@ type RefreshResponse struct {
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int    `json:"expires_in"`
 	TokenType    string `json:"token_type"`
+}
+
+// DeleteAccountRequest is the body of POST /api/v1/auth/me/delete. The owner
+// proves it again: password for an email account, a fresh OTP code (from
+// POST /otp/request) for a phone account.
+type DeleteAccountRequest struct {
+	Password string `json:"password" validate:"max=128"`
+	OTPCode  string `json:"otp_code" validate:"omitempty,len=6,numeric"`
+}
+
+// DeletionResponse is returned once the deletion is scheduled.
+type DeletionResponse struct {
+	DeletionScheduledAt string `json:"deletion_scheduled_at"`
+}
+
+// SessionResponse is a signed-in device of the account.
+type SessionResponse struct {
+	ID           string  `json:"id"`
+	Device       *string `json:"device"`
+	IPAddress    *string `json:"ip_address"`
+	CreatedAt    string  `json:"created_at"`
+	LastActiveAt string  `json:"last_active_at"`
+	Current      bool    `json:"current"`
+}
+
+// RevokeSessionsResponse tells how many other devices were signed out.
+type RevokeSessionsResponse struct {
+	Revoked int64 `json:"revoked"`
 }

@@ -97,16 +97,22 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init otp service: %w", err)
 	}
-	authSvc, err := service.NewAuthService(
-		cfg,
-		repository.NewUserRepository(pool),
-		repository.NewRefreshTokenRepository(pool),
-		otp,
-		tokens,
-		log,
-	)
+	users := repository.NewUserRepository(pool)
+	refresh := repository.NewRefreshTokenRepository(pool)
+	authSvc, err := service.NewAuthService(cfg, users, refresh, otp, tokens, log)
 	if err != nil {
 		return fmt.Errorf("init auth service: %w", err)
+	}
+	// Config.Validate already checked both durations.
+	grace, _ := time.ParseDuration(cfg.AccountDeletionGrace)
+	purgeInterval, _ := time.ParseDuration(cfg.AccountPurgeInterval)
+	accountSvc, err := service.NewAccountService(users, refresh, otp, tokens, grace, log)
+	if err != nil {
+		return fmt.Errorf("init account service: %w", err)
+	}
+	purgeJob, err := service.NewAccountPurgeJob(repository.NewAccountPurger(pool), purgeInterval, log)
+	if err != nil {
+		return fmt.Errorf("init account purge: %w", err)
 	}
 	limiter, err := middleware.NewRedisStorage(cfg)
 	if err != nil {
@@ -132,7 +138,8 @@ func run() error {
 
 	app := newApp(cfg, log, m)
 	routes.Register(app, routes.Dependencies{
-		Auth: handler.NewAuthHandler(authSvc),
+		Auth:    handler.NewAuthHandler(authSvc),
+		Account: handler.NewAccountHandler(accountSvc),
 		// Kafka is left out: sign-in keeps working while the broker is down.
 		Health: health.New("auth", version, map[string]health.Check{
 			"postgres": pool.Ping,
@@ -152,6 +159,11 @@ func run() error {
 			_ = c.Run(ctx)
 		}()
 	}
+	consumers.Add(1)
+	go func() {
+		defer consumers.Done()
+		purgeJob.Run(ctx)
+	}()
 	consumerDone := make(chan struct{})
 	go func() {
 		consumers.Wait()
