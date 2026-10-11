@@ -84,10 +84,8 @@ func TestAuthHandlerValidation(t *testing.T) {
 
 	resp = do(t, app, http.MethodPost, "/email/register", `{"email":"not-an-email","password":"x","full_name":"A"}`, nil)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	raw, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.NotContains(t, string(raw), "not-an-email")
-	require.NotContains(t, string(raw), `"password"`)
+	require.NotContains(t, string(resp.Body), "not-an-email")
+	require.NotContains(t, string(resp.Body), `"password"`)
 
 	resp = do(t, app, http.MethodPost, "/refresh", `{"refresh_token":"`+strings.Repeat("a", 300)+`"}`, nil)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -213,7 +211,14 @@ func authApp(auth service.AuthService) *fiber.App {
 	return app
 }
 
-func do(t *testing.T, app *fiber.App, method, path, payload string, headers map[string]string) *http.Response {
+// testResponse is a response read and closed by do, so callers cannot leak a body.
+type testResponse struct {
+	StatusCode int
+	Header     http.Header
+	Body       []byte
+}
+
+func do(t *testing.T, app *fiber.App, method, path, payload string, headers map[string]string) *testResponse {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(payload))
 	req.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
@@ -222,18 +227,20 @@ func do(t *testing.T, app *fiber.App, method, path, payload string, headers map[
 	}
 	resp, err := app.Test(req, -1)
 	require.NoError(t, err)
-	return resp
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return &testResponse{StatusCode: resp.StatusCode, Header: resp.Header, Body: body}
 }
 
-func decodeBody(t *testing.T, resp *http.Response) map[string]any {
+func decodeBody(t *testing.T, resp *testResponse) map[string]any {
 	t.Helper()
-	defer resp.Body.Close()
 	var body map[string]any
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.NoError(t, json.Unmarshal(resp.Body, &body))
 	return body
 }
 
-func errorCode(t *testing.T, resp *http.Response) string {
+func errorCode(t *testing.T, resp *testResponse) string {
 	t.Helper()
 	return decodeBody(t, resp)["error"].(map[string]any)["code"].(string)
 }

@@ -104,7 +104,7 @@ func (f *FFmpeg) Transcode(ctx context.Context, srcPath, workDir, userID, videoI
 	}
 
 	hlsDir := filepath.Join(workDir, "hls")
-	if err := os.MkdirAll(hlsDir, 0o755); err != nil {
+	if err := os.MkdirAll(hlsDir, 0o750); err != nil {
 		return nil, err
 	}
 
@@ -128,7 +128,7 @@ func (f *FFmpeg) Transcode(ctx context.Context, srcPath, workDir, userID, videoI
 			width = 2
 		}
 		rungDir := filepath.Join(hlsDir, r.name)
-		if err := os.MkdirAll(rungDir, 0o755); err != nil {
+		if err := os.MkdirAll(rungDir, 0o750); err != nil {
 			return nil, err
 		}
 		playlist := filepath.Join(rungDir, "index.m3u8")
@@ -148,7 +148,7 @@ func (f *FFmpeg) Transcode(ctx context.Context, srcPath, workDir, userID, videoI
 		}
 		args = append(args, playlist)
 		if err := run(ctx, f.ffmpeg, args...); err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrTranscode, err)
+			return nil, fmt.Errorf("%w: %w", ErrTranscode, err)
 		}
 		bw := r.vBitrate
 		if hasAudio {
@@ -177,7 +177,7 @@ func (f *FFmpeg) Transcode(ctx context.Context, srcPath, workDir, userID, videoI
 		return nil, ErrInvalid
 	}
 	masterPath := filepath.Join(hlsDir, "master.m3u8")
-	if err := os.WriteFile(masterPath, master.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile(masterPath, master.Bytes(), 0o600); err != nil {
 		return nil, err
 	}
 	out.Files = append(out.Files, File{Rel: "hls/master.m3u8", ContentType: "application/vnd.apple.mpegurl"})
@@ -188,7 +188,7 @@ func (f *FFmpeg) Transcode(ctx context.Context, srcPath, workDir, userID, videoI
 	}
 	thumb := filepath.Join(workDir, "thumb.jpg")
 	if err := run(ctx, f.ffmpeg, "-y", "-ss", ss, "-i", srcPath, "-frames:v", "1", "-vf", "scale=640:-2", "-q:v", "4", thumb); err != nil {
-		return nil, fmt.Errorf("%w: thumbnail: %v", ErrTranscode, err)
+		return nil, fmt.Errorf("%w: thumbnail: %w", ErrTranscode, err)
 	}
 	out.Files = append(out.Files, File{Rel: "thumb.jpg", ContentType: "image/jpeg"})
 	return out, nil
@@ -196,11 +196,13 @@ func (f *FFmpeg) Transcode(ctx context.Context, srcPath, workDir, userID, videoI
 
 func (f *FFmpeg) probe(ctx context.Context, src string) (probeJSON, error) {
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, f.ffprobe, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", src)
+	// The binary comes from configuration and src is a file this worker wrote:
+	// arguments are passed without a shell.
+	cmd := exec.CommandContext(ctx, f.ffprobe, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", src) //nolint:gosec // G204: configured binary, local file
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return probeJSON{}, fmt.Errorf("%w: ffprobe: %v", ErrInvalid, err)
+		return probeJSON{}, fmt.Errorf("%w: ffprobe: %w", ErrInvalid, err)
 	}
 	var p probeJSON
 	if err := json.Unmarshal(stdout.Bytes(), &p); err != nil {
@@ -209,9 +211,11 @@ func (f *FFmpeg) probe(ctx context.Context, src string) (probeJSON, error) {
 	return p, nil
 }
 
+// run executes the configured ffmpeg binary with arguments built by this
+// package from paths under the worker's own directory, never through a shell.
 func run(ctx context.Context, bin string, args ...string) error {
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // G204: configured binary, arguments built here
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		msg := strings.TrimSpace(stderr.String())

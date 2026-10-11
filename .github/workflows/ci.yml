@@ -31,68 +31,101 @@ jobs:
       order: ${{ steps.filter.outputs.order }}
       mobile: ${{ steps.filter.outputs.mobile }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
         id: filter
         with:
           filters: |
             shared-go:
               - 'packages/shared-go/**'
               - 'packages/contracts/events/**'
+              - '.golangci.yml'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             auth:
               - 'services/auth/**'
               - 'packages/shared-go/**'
+              - '.golangci.yml'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             relay:
               - 'services/outbox-relay/**'
               - 'packages/shared-go/**'
+              - '.golangci.yml'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             user:
               - 'services/user/**'
               - 'packages/contracts/events/**'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             video:
               - 'services/video/**'
               - 'packages/shared-go/**'
               - 'packages/contracts/events/**'
+              - '.golangci.yml'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             social:
               - 'services/social/**'
               - 'packages/shared-go/**'
               - 'packages/contracts/events/**'
               - '.golangci.yml'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             feed:
               - 'services/feed/**'
               - 'packages/shared-go/**'
               - 'packages/contracts/events/**'
               - '.golangci.yml'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             notification:
               - 'services/notification/**'
               - 'packages/contracts/events/**'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             moderation:
               - 'services/moderation/**'
               - 'packages/contracts/events/**'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             search:
               - 'services/search/**'
               - 'packages/shared-go/**'
               - 'packages/contracts/events/**'
               - '.golangci.yml'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             shop:
               - 'services/shop/**'
               - 'packages/contracts/events/**'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             order:
               - 'services/order/**'
               - 'packages/contracts/events/**'
               - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             mobile:
               - 'apps/mobile-android/**'
+
+  security:
+    # Runs on every change: a secret can land in any file.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Trivy repository scan (secrets, misconfigurations)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.75.0
+          scan-type: fs
+          scan-ref: .
+          scanners: secret,misconfig
+          severity: HIGH,CRITICAL
+          skip-dirs: "**/node_modules,**/.venv"
+          exit-code: "1"
+          format: table
 
   shared-go:
     needs: detect-changes
@@ -102,8 +135,8 @@ jobs:
       run:
         working-directory: packages/shared-go
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: packages/shared-go/go.mod
           cache-dependency-path: packages/shared-go/go.sum
@@ -113,8 +146,18 @@ jobs:
           if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
       - name: go vet
         run: go vet ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
+        with:
+          version: v2.14.0
+          working-directory: packages/shared-go
+          args: --config ../../.golangci.yml
+
       - name: Tests
         run: go test ./... -count=1 -cover
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
   outbox-relay:
     needs: detect-changes
@@ -124,8 +167,8 @@ jobs:
       run:
         working-directory: services/outbox-relay
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: services/outbox-relay/go.mod
           cache-dependency-path: |
@@ -137,11 +180,25 @@ jobs:
           if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
       - name: go vet
         run: go vet ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
+        with:
+          version: v2.14.0
+          working-directory: services/outbox-relay
+          args: --config ../../.golangci.yml
+
       - name: Tests
         run: go test ./... -count=1 -cover
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
       - name: Docker build
         working-directory: .
         run: docker build -f services/outbox-relay/Dockerfile -t poro-outbox-relay:${{ github.sha }} .
+      - name: Trivy image scan (poro-outbox-relay)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-outbox-relay:${{ github.sha }}
 
   auth:
     needs: detect-changes
@@ -151,8 +208,8 @@ jobs:
       run:
         working-directory: services/auth
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: services/auth/go.mod
           cache-dependency-path: |
@@ -167,15 +224,26 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
+        with:
+          version: v2.14.0
+          working-directory: services/auth
+          args: --config ../../.golangci.yml
+
       - name: Unit and integration tests
         run: go test ./... -count=1 -race -coverprofile=coverage.out
 
       - name: govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
       - name: Docker build
         working-directory: .
         run: docker build -f services/auth/Dockerfile -t poro-auth:${{ github.sha }} .
+      - name: Trivy image scan (poro-auth)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-auth:${{ github.sha }}
 
   user:
     needs: detect-changes
@@ -189,14 +257,16 @@ jobs:
       # the e2e tests start their own Postgres container.
       DATABASE_URL: postgresql://ci@localhost:5432/ci
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: services/user/package-lock.json
       - name: Install
         run: npm ci --no-audit --no-fund
+      - name: npm audit (production, high and critical)
+        run: npm audit --omit=dev --audit-level=high
       - name: Format
         run: npm run format:check
       - name: Lint
@@ -207,6 +277,10 @@ jobs:
         run: npm run test:cov
       - name: Docker build
         run: docker build -t poro-user:${{ github.sha }} .
+      - name: Trivy image scan (poro-user)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-user:${{ github.sha }}
 
   shop:
     needs: detect-changes
@@ -220,14 +294,16 @@ jobs:
       # the e2e tests start their own Postgres container.
       DATABASE_URL: postgresql://ci@localhost:5432/ci
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: services/shop/package-lock.json
       - name: Install
         run: npm ci --no-audit --no-fund
+      - name: npm audit (production, high and critical)
+        run: npm audit --omit=dev --audit-level=high
       - name: Format
         run: npm run format:check
       - name: Lint
@@ -238,6 +314,10 @@ jobs:
         run: npm run test:cov
       - name: Docker build
         run: docker build -t poro-shop:${{ github.sha }} .
+      - name: Trivy image scan (poro-shop)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-shop:${{ github.sha }}
 
   order:
     needs: detect-changes
@@ -251,14 +331,16 @@ jobs:
       # the e2e tests start their own Postgres container.
       DATABASE_URL: postgresql://ci@localhost:5432/ci
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: services/order/package-lock.json
       - name: Install
         run: npm ci --no-audit --no-fund
+      - name: npm audit (production, high and critical)
+        run: npm audit --omit=dev --audit-level=high
       - name: Format
         run: npm run format:check
       - name: Lint
@@ -269,6 +351,10 @@ jobs:
         run: npm run test:cov
       - name: Docker build
         run: docker build -t poro-order:${{ github.sha }} .
+      - name: Trivy image scan (poro-order)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-order:${{ github.sha }}
 
   notification:
     needs: detect-changes
@@ -282,14 +368,16 @@ jobs:
       # the e2e tests start their own Postgres container.
       DATABASE_URL: postgresql://ci@localhost:5432/ci
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: services/notification/package-lock.json
       - name: Install
         run: npm ci --no-audit --no-fund
+      - name: npm audit (production, high and critical)
+        run: npm audit --omit=dev --audit-level=high
       - name: Format
         run: npm run format:check
       - name: Lint
@@ -300,6 +388,10 @@ jobs:
         run: npm run test:cov
       - name: Docker build
         run: docker build -t poro-notification:${{ github.sha }} .
+      - name: Trivy image scan (poro-notification)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-notification:${{ github.sha }}
 
   moderation:
     needs: detect-changes
@@ -309,8 +401,8 @@ jobs:
       run:
         working-directory: services/moderation
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.13"
       - name: Install uv
@@ -329,6 +421,10 @@ jobs:
         run: uv run pip-audit --skip-editable
       - name: Docker build
         run: docker build -t poro-moderation:${{ github.sha }} .
+      - name: Trivy image scan (poro-moderation)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-moderation:${{ github.sha }}
 
   video:
     needs: detect-changes
@@ -338,8 +434,8 @@ jobs:
       run:
         working-directory: services/video
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: services/video/go.mod
           cache-dependency-path: |
@@ -353,13 +449,31 @@ jobs:
           if [ -n "$unformatted" ]; then echo "$unformatted"; exit 1; fi
       - name: go vet
         run: go vet ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
+        with:
+          version: v2.14.0
+          working-directory: services/video
+          args: --config ../../.golangci.yml
+
       - name: Tests
         run: go test ./... -count=1 -coverprofile=coverage.out
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
       - name: Docker build
         working-directory: .
         run: |
           docker build -f services/video/Dockerfile -t poro-video:${{ github.sha }} .
           docker build -f services/video/Dockerfile.worker -t poro-media-worker:${{ github.sha }} .
+      - name: Trivy image scan (poro-video)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-video:${{ github.sha }}
+      - name: Trivy image scan (poro-media-worker)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-media-worker:${{ github.sha }}
 
   social:
     needs: detect-changes
@@ -369,8 +483,8 @@ jobs:
       run:
         working-directory: services/social
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: services/social/go.mod
           cache-dependency-path: |
@@ -383,7 +497,7 @@ jobs:
       - name: go vet
         run: go vet ./...
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
         with:
           version: v2.14.0
           working-directory: services/social
@@ -396,10 +510,14 @@ jobs:
           echo "coverage: ${total}%"
           awk -v t="$total" 'BEGIN { exit (t < 70) }'
       - name: govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - name: Docker build
         working-directory: .
         run: docker build -f services/social/Dockerfile -t poro-social:${{ github.sha }} .
+      - name: Trivy image scan (poro-social)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-social:${{ github.sha }}
 
   feed:
     needs: detect-changes
@@ -409,8 +527,8 @@ jobs:
       run:
         working-directory: services/feed
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: services/feed/go.mod
           cache-dependency-path: |
@@ -423,7 +541,7 @@ jobs:
       - name: go vet
         run: go vet ./...
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
         with:
           version: v2.14.0
           working-directory: services/feed
@@ -436,10 +554,14 @@ jobs:
           echo "coverage: ${total}%"
           awk -v t="$total" 'BEGIN { exit (t < 70) }'
       - name: govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - name: Docker build
         working-directory: .
         run: docker build -f services/feed/Dockerfile -t poro-feed:${{ github.sha }} .
+      - name: Trivy image scan (poro-feed)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-feed:${{ github.sha }}
 
   search:
     needs: detect-changes
@@ -449,8 +571,8 @@ jobs:
       run:
         working-directory: services/search
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: services/search/go.mod
           cache-dependency-path: |
@@ -463,7 +585,7 @@ jobs:
       - name: go vet
         run: go vet ./...
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
         with:
           version: v2.14.0
           working-directory: services/search
@@ -476,17 +598,21 @@ jobs:
           echo "coverage: ${total}%"
           awk -v t="$total" 'BEGIN { exit (t < 70) }'
       - name: govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - name: Docker build
         working-directory: .
         run: docker build -f services/search/Dockerfile -t poro-search:${{ github.sha }} .
+      - name: Trivy image scan (poro-search)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-search:${{ github.sha }}
 
   mobile-build:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.mobile == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with: { distribution: "temurin", java-version: "17" }
       - run: echo "Build Android � configurer"

@@ -40,6 +40,7 @@ func TestRequestID(t *testing.T) {
 			}
 			resp, err := app.Test(req, -1)
 			require.NoError(t, err)
+			defer resp.Body.Close()
 			got := resp.Header.Get(HeaderRequestID)
 			body, _ := io.ReadAll(resp.Body)
 			require.Equal(t, got, string(body), "handlers see the echoed ID")
@@ -83,6 +84,7 @@ func TestAccessLogAndErrorHandler(t *testing.T) {
 	for _, tc := range cases {
 		resp, err := app.Test(httptest.NewRequest(http.MethodGet, tc.path, nil), -1)
 		require.NoError(t, err)
+		defer resp.Body.Close()
 		require.Equal(t, tc.status, resp.StatusCode, tc.path)
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
@@ -97,10 +99,12 @@ func TestAccessLogAndErrorHandler(t *testing.T) {
 		require.Equal(t, tc.code, apiErr["code"], tc.path)
 		require.NotContains(t, apiErr["message"], "secret", "internal details never reach the client")
 	}
-	_, err := app.Test(httptest.NewRequest(http.MethodGet, "/health/live", nil), -1)
+	live, err := app.Test(httptest.NewRequest(http.MethodGet, "/health/live", nil), -1)
 	require.NoError(t, err)
-	_, err = app.Test(httptest.NewRequest(http.MethodGet, "/traced", nil), -1)
+	require.NoError(t, live.Body.Close())
+	traced, err := app.Test(httptest.NewRequest(http.MethodGet, "/traced", nil), -1)
 	require.NoError(t, err)
+	require.NoError(t, traced.Body.Close())
 
 	var statuses []int64
 	for _, entry := range logs.FilterMessage("http request").All() {
@@ -121,6 +125,7 @@ func TestAPIErrorCause(t *testing.T) {
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/sms", nil), -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)

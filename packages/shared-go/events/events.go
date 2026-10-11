@@ -85,7 +85,7 @@ func (e Envelope) Topic() string { return e.Type }
 func Decode(value []byte) (Envelope, error) {
 	var env Envelope
 	if err := json.Unmarshal(value, &env); err != nil {
-		return Envelope{}, fmt.Errorf("%w: %v", ErrInvalidEnvelope, err)
+		return Envelope{}, fmt.Errorf("%w: %w", ErrInvalidEnvelope, err)
 	}
 	if err := env.Validate(); err != nil {
 		return Envelope{}, err

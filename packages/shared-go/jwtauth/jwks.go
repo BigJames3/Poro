@@ -60,7 +60,7 @@ func (s *keySet) key(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 		if err == nil {
 			s.keys, s.fetched = keys, now
 		} else if s.keys == nil {
-			return nil, fmt.Errorf("%w: %v", ErrKeysUnavailable, err)
+			return nil, fmt.Errorf("%w: %w", ErrKeysUnavailable, err)
 		}
 	}
 	if s.keys == nil {

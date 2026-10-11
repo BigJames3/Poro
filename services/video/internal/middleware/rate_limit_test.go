@@ -18,10 +18,12 @@ func TestInitLimit(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/", nil), -1)
 		require.NoError(t, err)
+		defer resp.Body.Close()
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 	}
 	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/", nil), -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
 }
 
@@ -31,8 +33,10 @@ func TestCompleteAndGeneralLimit(t *testing.T) {
 	app.Get("/g", GeneralLimit(nil), func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/c", nil), -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp, err = app.Test(httptest.NewRequest(http.MethodGet, "/g", nil), -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }

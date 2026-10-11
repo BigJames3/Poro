@@ -11,7 +11,9 @@ COPY src ./src
 RUN uv sync --frozen --no-dev --no-editable
 
 FROM python:3.13-slim AS base
-RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin moderation
+# pip is not needed at runtime and ships vendored libraries with known CVEs.
+RUN python -m pip uninstall --yes --root-user-action=ignore pip \
+  && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin moderation
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1

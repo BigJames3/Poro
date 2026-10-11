@@ -292,6 +292,7 @@ func TestMiddleware(t *testing.T) {
 		}
 		resp, err := app.Test(req, -1)
 		require.NoError(t, err)
+		defer resp.Body.Close()
 		return resp.StatusCode
 	}
 	require.Equal(t, http.StatusOK, call(app, "/me", "Bearer "+valid))
@@ -312,11 +313,13 @@ func TestMiddleware(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/pub", nil)
 	resp, err := opt.Test(req, -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	req = httptest.NewRequest(http.MethodGet, "/pub", nil)
 	req.Header.Set("Authorization", "Bearer "+valid)
 	resp, err = opt.Test(req, -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, http.StatusForbidden, call(app, "/admin", "Bearer "+valid))
 	require.Equal(t, http.StatusOK, call(app, "/studio", "Bearer "+valid))
@@ -326,5 +329,6 @@ func TestMiddleware(t *testing.T) {
 	bare.Get("/", RequireRole("ADMIN"), func(c *fiber.Ctx) error { return nil })
 	resp, err = bare.Test(httptest.NewRequest(http.MethodGet, "/", nil), -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusForbidden, resp.StatusCode, "RequireRole without claims refuses")
 }

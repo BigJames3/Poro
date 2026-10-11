@@ -31,12 +31,14 @@ func TestVideosHandlerInitAndGet(t *testing.T) {
 
 	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/uploads", strings.NewReader(`{"title":"c","content_type":"video/mp4","size_bytes":10}`)), -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	body, _ := io.ReadAll(resp.Body)
 	require.Contains(t, string(body), vid.String())
 
 	resp, err = app.Test(httptest.NewRequest(http.MethodGet, "/"+vid.String(), nil), -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
@@ -47,6 +49,7 @@ func TestParseID(t *testing.T) {
 	app.Get("/:id", h.Get)
 	resp, err := app.Test(httptest.NewRequest(http.MethodGet, "/not-a-uuid", nil), -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -57,5 +60,6 @@ func TestRequireUser(t *testing.T) {
 	app.Post("/uploads", h.Init)
 	resp, err := app.Test(httptest.NewRequest(http.MethodPost, "/uploads", strings.NewReader(`{}`)), -1)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

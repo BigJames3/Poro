@@ -114,7 +114,7 @@ reste acceptable hors auth jusqu'à 15 min ([ADR-0005](adr/0005-evenements-json-
 | P0-8 | Notifications push FCM | **Fait** — in-app + FCM ; [runbook](../runbooks/notification.md) |
 | P0-9 | Modération de base : signalement, filtre texte, actions ADMIN/MODERATOR | **Fait** — [ADR-0010](adr/0010-moderation-v1-vague-2.md) ; médias des vidéos retirées ou supprimées en quarantaine (bucket privé) |
 | P0-10 | Fournisseur SMS réel (Africa's Talking), liste des pays autorisés, anti-SMS pumping | **Fait** — [ADR-0004](adr/0004-decisions-produit-lancement.md) ; reste : compte, Sender ID, tarifs |
-| P0-11 | CI : golangci-lint, gosec, Trivy (actions épinglées par SHA), Dependabot | À faire |
+| P0-11 | CI : golangci-lint, gosec, Trivy (actions épinglées par SHA), Dependabot | **Fait** — [SECURITY.md](../../SECURITY.md) ; reste : protection de branche dans les réglages GitHub |
 | P0-12 | Staging : Terraform + k3s + Helm + ingress, sauvegardes Postgres (après vérification des prix actuels) | À faire |
 | P0-13 | Observabilité minimale : Prometheus, Grafana, Loki, Tempo | À faire |
 

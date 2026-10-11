@@ -54,7 +54,7 @@ func Run(m *testing.M) int {
 		return 1
 	}
 
-	cfg := &config.Config{
+	cfg := &config.Config{ //nolint:gosec // throwaway testcontainer credentials
 		PostgresHost:     host,
 		PostgresPort:     port.Port(),
 		PostgresUser:     "poro",

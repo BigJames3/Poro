@@ -46,8 +46,9 @@ func TestMiddlewareContinuesIncomingTrace(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/users/42", nil)
 	req.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-	_, err = app.Test(req, -1)
+	resp, err := app.Test(req, -1)
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 
 	require.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", seen.TraceID().String(), "the handler joins the caller's trace")
 	spans := recorder.Ended()
