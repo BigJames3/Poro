@@ -16,7 +16,10 @@ COPY scripts/prune-runtime-deps.mjs ./scripts/
 RUN npm prune --omit=dev --no-audit --no-fund && node scripts/prune-runtime-deps.mjs
 
 FROM node:24-alpine AS migrate
-RUN apk add --no-cache openssl
+# The bundled npm and corepack are not used at runtime and carry known CVEs.
+RUN apk add --no-cache openssl \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+  /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
 COPY package.json prisma.config.ts ./
@@ -25,7 +28,10 @@ USER node
 ENTRYPOINT ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
 
 FROM node:24-alpine AS runtime
-RUN apk add --no-cache wget
+# The bundled npm and corepack are not used at runtime and carry known CVEs.
+RUN apk add --no-cache wget \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+  /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=prod-deps /app/node_modules ./node_modules
