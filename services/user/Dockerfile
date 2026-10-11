@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build context: services/user. Targets: runtime (default) and migrate.
 
-FROM node:24-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -15,7 +15,7 @@ FROM build AS prod-deps
 COPY scripts/prune-runtime-deps.mjs ./scripts/
 RUN npm prune --omit=dev --no-audit --no-fund && node scripts/prune-runtime-deps.mjs
 
-FROM node:24-alpine AS migrate
+FROM node:25-alpine AS migrate
 # The bundled npm and corepack are not used at runtime and carry known CVEs.
 RUN apk add --no-cache openssl \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
@@ -27,7 +27,7 @@ COPY prisma ./prisma
 USER node
 ENTRYPOINT ["node", "node_modules/prisma/build/index.js", "migrate", "deploy"]
 
-FROM node:24-alpine AS runtime
+FROM node:25-alpine AS runtime
 # The bundled npm and corepack are not used at runtime and carry known CVEs.
 RUN apk add --no-cache wget \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
