@@ -90,3 +90,18 @@ Wave ne couvre que la Côte d'Ivoire et le Sénégal.
 - Un seul champ « Nom et prénom ». Obligatoires : nom, téléphone, ville, et
   position GPS ou adresse ; indications facultatives.
 - Frais de livraison : seulement mentionnés comme payés au livreur.
+
+## Complément du 2026-10-11 — notifications marketplace
+
+- Notification consomme `order.placed`, `.shipped`, `.cancelled`,
+  `.completed` et projette `shop.shop.updated` (nom de boutique) : aucun
+  contrat nouveau, aucun appel à order ni à shop.
+- Le vendeur est prévenu à `order.placed` (stock retenu), jamais à
+  `order.created`. Celui qui agit n'est jamais notifié.
+- Notifications transactionnelles : la préférence `orders` coupe le push,
+  jamais l'in-app.
+- Une notification par destinataire et par étape : le `order.cancelled`
+  republié avec `paid: true` après un paiement tardif n'en crée pas de
+  seconde ; le remboursement sera annoncé par payment.
+- Paiement en ligne : pas de notification à `order.placed` tant que payment
+  n'existe pas.

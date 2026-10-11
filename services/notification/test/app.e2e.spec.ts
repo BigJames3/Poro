@@ -318,6 +318,7 @@ describe('notification service HTTP API', () => {
       comments: true,
       follows: true,
       video_ready: true,
+      orders: true,
     });
 
     const patch = (body: object) =>
@@ -325,7 +326,7 @@ describe('notification service HTTP API', () => {
         .patch('/api/v1/notifications/preferences')
         .set('Authorization', me.auth)
         .send(body);
-    const first = await patch({ likes: false, push_enabled: false });
+    const first = await patch({ likes: false, push_enabled: false, orders: false });
     expect(first.status).toBe(200);
     expect(first.body.data).toEqual({
       push_enabled: false,
@@ -333,6 +334,7 @@ describe('notification service HTTP API', () => {
       comments: true,
       follows: true,
       video_ready: true,
+      orders: false,
     });
     const second = await patch({ likes: true });
     expect(second.body.data).toMatchObject({ push_enabled: false, likes: true });

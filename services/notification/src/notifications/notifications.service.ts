@@ -29,6 +29,7 @@ function preferencesView(prefs: Preferences): PreferencesView {
     comments: prefs.comments,
     follows: prefs.follows,
     video_ready: prefs.videoReady,
+    orders: prefs.orders,
   };
 }
 
@@ -190,6 +191,7 @@ export class NotificationsService {
       comments: dto.comments,
       follows: dto.follows,
       videoReady: dto.video_ready,
+      orders: dto.orders,
     };
     const row = await this.prisma.preference.upsert({
       where: { userId },

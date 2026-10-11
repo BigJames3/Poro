@@ -68,6 +68,11 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   video_ready?: boolean;
+
+  /** Mutes the push of order notifications; they always stay in-app. */
+  @IsOptional()
+  @IsBoolean()
+  orders?: boolean;
 }
 
 export interface ActorView {
@@ -111,4 +116,5 @@ export interface PreferencesView {
   comments: boolean;
   follows: boolean;
   video_ready: boolean;
+  orders: boolean;
 }

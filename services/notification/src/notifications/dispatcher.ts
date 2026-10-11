@@ -10,8 +10,14 @@ import { isUuid, uuidv7 } from '../common/uuid';
 import { appConfig, type AppConfigType } from '../config/app.config';
 import {
   CONSUMED_TYPES,
+  type Currency,
   TYPE_AUTH_USER_CREATED,
   TYPE_MODERATION_CONTENT_REMOVED,
+  TYPE_ORDER_CANCELLED,
+  TYPE_ORDER_COMPLETED,
+  TYPE_ORDER_PLACED,
+  TYPE_ORDER_SHIPPED,
+  TYPE_SHOP_UPDATED,
   TYPE_SOCIAL_COMMENT_CREATED,
   TYPE_SOCIAL_COMMENT_DELETED,
   TYPE_SOCIAL_FOLLOW_CREATED,
@@ -28,8 +34,13 @@ import { MetricsService } from '../metrics/metrics';
 import { PrismaService } from '../prisma/prisma.service';
 import type { PushMessage } from '../push/push.sender';
 import { PushService } from '../push/push.service';
-import { actorName, messages, type Message } from './messages.fr';
-import { DEFAULT_PREFERENCES, type NotificationType, PREFERENCE_OF } from './notification.types';
+import { actorName, formatAmount, messages, UNKNOWN_SHOP, type Message } from './messages.fr';
+import {
+  DEFAULT_PREFERENCES,
+  type NotificationType,
+  PREFERENCE_OF,
+  PUSH_ONLY_PREFERENCES,
+} from './notification.types';
 
 export const DISPATCHER_GROUP = 'poro-notification-dispatcher';
 
@@ -41,7 +52,7 @@ interface Draft {
   userId: string;
   type: NotificationType;
   actorId: string | null;
-  entityType: 'video' | 'comment' | 'user';
+  entityType: 'video' | 'comment' | 'user' | 'order';
   entityId: string;
   videoId: string | null;
   groupKey: string;
@@ -90,14 +101,90 @@ function optionalString(data: Data, field: string, max: number): string | null {
   return value;
 }
 
+function requiredString(data: Data, field: string, max: number): string {
+  const value = optionalString(data, field, max);
+  if (value === null || value.trim() === '') {
+    throw new PermanentError(`${field} must be a non-empty string`);
+  }
+  return value;
+}
+
+const CURRENCIES: readonly Currency[] = ['XOF', 'XAF', 'NGN'];
+
+function currencyField(data: Data, field: string): Currency {
+  const value = data[field];
+  if (!CURRENCIES.includes(value as Currency)) {
+    throw new PermanentError(`${field} must be one of ${CURRENCIES.join(', ')}`);
+  }
+  return value as Currency;
+}
+
+/** A total in minor units: a non-negative safe integer. */
+function amountField(data: Data, field: string): number {
+  const value = data[field];
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new PermanentError(`${field} must be a non-negative integer`);
+  }
+  return value;
+}
+
 /** yyyyMMddHH in UTC: likes of one video are grouped per hour of the like. */
 function hourBucket(at: Date): string {
   return at.toISOString().slice(0, 13).replace(/[-T]/g, '');
 }
 
+interface OrderParties {
+  orderId: string;
+  buyerId: string;
+  sellerId: string;
+  shopId: string;
+}
+
+function orderParties(data: Data): OrderParties {
+  return {
+    orderId: uuidField(data, 'order_id'),
+    buyerId: uuidField(data, 'buyer_id'),
+    sellerId: uuidField(data, 'seller_id'),
+    shopId: uuidField(data, 'shop_id'),
+  };
+}
+
 /**
- * Turns social and video events into notifications, and keeps the actor
- * projection. The notification and the inbox row commit together; pushes are
+ * One notification per recipient and step of an order. The buyer is named
+ * through the actor projection; the buyer side names the shop instead.
+ */
+function orderDraft(
+  order: OrderParties,
+  role: 'buyer' | 'seller',
+  type: NotificationType,
+  step: string,
+  actorId: string | null,
+  render: (actor: string) => Message,
+): Draft {
+  return {
+    userId: role === 'buyer' ? order.buyerId : order.sellerId,
+    type,
+    actorId,
+    entityType: 'order',
+    entityId: order.orderId,
+    videoId: null,
+    groupKey: `order:${order.orderId}:${step}`,
+    data: { order_id: order.orderId, role },
+    grouped: false,
+    render,
+  };
+}
+
+/** What the buyer reads when the order ends without them. */
+const BUYER_CANCEL_MESSAGES: Partial<Record<string, (shop: string, refund: boolean) => Message>> = {
+  stock_rejected: (shop, refund) => messages.orderRejected(shop, refund),
+  seller_cancelled: (shop, refund) => messages.orderCancelledBySeller(shop, refund),
+  payment_timeout: (shop, refund) => messages.orderPaymentTimeout(shop, refund),
+};
+
+/**
+ * Turns social, video and order events into notifications, and keeps the actor
+ * and shop projections. The notification and the inbox row commit together; pushes are
  * sent after the commit, at most once.
  */
 @Injectable()
@@ -165,8 +252,11 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
         case TYPE_MODERATION_CONTENT_REMOVED:
           await this.contentRemoved(tx, data);
           return;
+        case TYPE_SHOP_UPDATED:
+          await this.shopUpdated(tx, data);
+          return;
         default:
-          for (const draft of this.drafts(env.type, data)) {
+          for (const draft of await this.drafts(tx, env.type, data)) {
             const pending = await this.write(tx, draft);
             if (pending) {
               pushes.push(pending);
@@ -179,8 +269,16 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
     }
   }
 
-  private drafts(type: string, data: Data): Draft[] {
+  private async drafts(tx: Tx, type: string, data: Data): Promise<Draft[]> {
     switch (type) {
+      case TYPE_ORDER_PLACED:
+        return this.orderPlacedDrafts(tx, data);
+      case TYPE_ORDER_SHIPPED:
+        return this.orderShippedDrafts(tx, data);
+      case TYPE_ORDER_CANCELLED:
+        return this.orderCancelledDrafts(tx, data);
+      case TYPE_ORDER_COMPLETED:
+        return this.orderCompletedDrafts(data);
       case TYPE_SOCIAL_LIKE_CREATED:
         return this.likeDrafts(data);
       case TYPE_SOCIAL_COMMENT_CREATED:
@@ -294,6 +392,82 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
     ];
   }
 
+  /**
+   * Seller hears of a new order, buyer of its confirmation. Only cash on
+   * delivery is notified at placement: a paid order is announced at payment,
+   * which this service does not follow yet.
+   */
+  private async orderPlacedDrafts(tx: Tx, data: Data): Promise<Draft[]> {
+    const order = orderParties(data);
+    const amount = formatAmount(amountField(data, 'total'), currencyField(data, 'currency'));
+    if (data.payment_method !== 'cash_on_delivery') {
+      this.logger.log(`order ${order.orderId} awaits payment: not notified`);
+      return [];
+    }
+    const shop = await this.shopName(tx, order.shopId);
+    return [
+      orderDraft(order, 'seller', 'order_new', 'placed', order.buyerId, (buyer) =>
+        messages.orderNew(buyer, amount),
+      ),
+      orderDraft(order, 'buyer', 'order_confirmed', 'placed', null, () =>
+        messages.orderConfirmed(shop, amount),
+      ),
+    ];
+  }
+
+  private async orderShippedDrafts(tx: Tx, data: Data): Promise<Draft[]> {
+    const order = orderParties(data);
+    const tracking = optionalString(data, 'tracking', 200);
+    const shop = await this.shopName(tx, order.shopId);
+    return [
+      orderDraft(order, 'buyer', 'order_shipped', 'shipped', null, () =>
+        messages.orderShipped(shop, tracking),
+      ),
+    ];
+  }
+
+  /** The party who cancelled is never told; a refused order never reached the seller. */
+  private async orderCancelledDrafts(tx: Tx, data: Data): Promise<Draft[]> {
+    const order = orderParties(data);
+    const paid = data.paid === true;
+    const reason = data.reason;
+    if (reason === 'buyer_cancelled') {
+      return [
+        orderDraft(order, 'seller', 'order_cancelled', 'cancelled', order.buyerId, (buyer) =>
+          messages.orderCancelledByBuyer(buyer),
+        ),
+      ];
+    }
+    const render = typeof reason === 'string' ? BUYER_CANCEL_MESSAGES[reason] : undefined;
+    if (render === undefined) {
+      throw new PermanentError(
+        'reason must be stock_rejected, payment_timeout, buyer_cancelled or seller_cancelled',
+      );
+    }
+    const shop = await this.shopName(tx, order.shopId);
+    return [
+      orderDraft(order, 'buyer', 'order_cancelled', 'cancelled', null, () => render(shop, paid)),
+    ];
+  }
+
+  private orderCompletedDrafts(data: Data): Draft[] {
+    const order = orderParties(data);
+    const amount = formatAmount(amountField(data, 'total'), currencyField(data, 'currency'));
+    return [
+      orderDraft(order, 'seller', 'order_completed', 'completed', order.buyerId, (buyer) =>
+        messages.orderCompleted(buyer, amount),
+      ),
+    ];
+  }
+
+  private async shopName(tx: Tx, shopId: string): Promise<string> {
+    const shop = await tx.shopProjection.findUnique({
+      where: { shopId },
+      select: { name: true },
+    });
+    return shop?.name ?? UNKNOWN_SHOP;
+  }
+
   /** Writes draft and returns the push to send, if any. */
   private async write(tx: Tx, draft: Draft): Promise<PendingPush | undefined> {
     if (draft.actorId === draft.userId) {
@@ -301,7 +475,9 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
     }
     const prefs =
       (await tx.preference.findUnique({ where: { userId: draft.userId } })) ?? DEFAULT_PREFERENCES;
-    if (!prefs[PREFERENCE_OF[draft.type]]) {
+    const preference = PREFERENCE_OF[draft.type];
+    const pushOnly = PUSH_ONLY_PREFERENCES.has(preference);
+    if (!pushOnly && !prefs[preference]) {
       return undefined;
     }
     const actor = actorName(
@@ -343,7 +519,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
         });
       }
       this.metrics.notificationCreated(draft.type);
-      if (!prefs.pushEnabled) {
+      if (!prefs.pushEnabled || !prefs[preference]) {
         return undefined;
       }
       return {
@@ -430,6 +606,21 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
       ],
       skipDuplicates: true,
     });
+  }
+
+  private async shopUpdated(tx: Tx, data: Data): Promise<void> {
+    const shopId = uuidField(data, 'shop_id');
+    const name = requiredString(data, 'name', 60);
+    const handle = requiredString(data, 'handle', 30);
+    const updatedAt = dateField(data, 'updated_at');
+    await tx.$executeRaw`
+      INSERT INTO shop_projections (shop_id, name, handle, updated_at)
+      VALUES (${shopId}::uuid, ${name}, ${handle}, ${updatedAt})
+      ON CONFLICT (shop_id) DO UPDATE
+        SET name = EXCLUDED.name,
+            handle = EXCLUDED.handle,
+            updated_at = EXCLUDED.updated_at
+        WHERE shop_projections.updated_at < EXCLUDED.updated_at`;
   }
 
   private async profileUpdated(tx: Tx, data: Data): Promise<void> {

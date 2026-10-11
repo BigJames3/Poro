@@ -9,6 +9,11 @@ export const TYPE_SOCIAL_COMMENT_CREATED = 'poro.social.comment.created';
 export const TYPE_SOCIAL_COMMENT_DELETED = 'poro.social.comment.deleted';
 export const TYPE_SOCIAL_FOLLOW_CREATED = 'poro.social.follow.created';
 export const TYPE_MODERATION_CONTENT_REMOVED = 'poro.moderation.content.removed';
+export const TYPE_SHOP_UPDATED = 'poro.shop.shop.updated';
+export const TYPE_ORDER_PLACED = 'poro.order.order.placed';
+export const TYPE_ORDER_SHIPPED = 'poro.order.order.shipped';
+export const TYPE_ORDER_CANCELLED = 'poro.order.order.cancelled';
+export const TYPE_ORDER_COMPLETED = 'poro.order.order.completed';
 
 export const CONSUMED_TYPES = [
   TYPE_AUTH_USER_CREATED,
@@ -20,6 +25,11 @@ export const CONSUMED_TYPES = [
   TYPE_SOCIAL_COMMENT_DELETED,
   TYPE_SOCIAL_FOLLOW_CREATED,
   TYPE_MODERATION_CONTENT_REMOVED,
+  TYPE_SHOP_UPDATED,
+  TYPE_ORDER_PLACED,
+  TYPE_ORDER_SHIPPED,
+  TYPE_ORDER_CANCELLED,
+  TYPE_ORDER_COMPLETED,
 ] as const;
 
 export interface AuthUserCreatedV1 {
@@ -91,4 +101,57 @@ export interface ModerationContentRemovedV1 {
   reason: string;
   decided_by: 'auto' | 'moderator';
   removed_at: string;
+}
+
+export type Currency = 'XOF' | 'XAF' | 'NGN';
+export type PaymentMethod = 'cash_on_delivery' | 'wave' | 'simulated';
+export type CancelReason =
+  'stock_rejected' | 'payment_timeout' | 'buyer_cancelled' | 'seller_cancelled';
+
+/** A full snapshot of the public fields of a shop: the newest updated_at wins. */
+export interface ShopUpdatedV1 {
+  shop_id: string;
+  owner_id: string;
+  name: string;
+  handle: string;
+  description: string | null;
+  logo_url: string | null;
+  country_code: string;
+  currency: Currency;
+  status: 'active' | 'closed' | 'suspended';
+  updated_at: string;
+}
+
+interface OrderParties {
+  order_id: string;
+  buyer_id: string;
+  shop_id: string;
+  seller_id: string;
+}
+
+/** Stock held: the order is real. Amounts are minor units (NGN in kobo). */
+export interface OrderPlacedV1 extends OrderParties {
+  currency: Currency;
+  total: number;
+  payment_method: PaymentMethod;
+  placed_at: string;
+  expires_at: string | null;
+}
+
+export interface OrderShippedV1 extends OrderParties {
+  tracking: string | null;
+  shipped_at: string;
+}
+
+export interface OrderCancelledV1 extends OrderParties {
+  reason: CancelReason;
+  paid: boolean;
+  cancelled_at: string;
+}
+
+export interface OrderCompletedV1 extends OrderParties {
+  currency: Currency;
+  total: number;
+  payment_method: PaymentMethod;
+  completed_at: string;
 }

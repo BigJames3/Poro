@@ -141,6 +141,81 @@ describe('poro-notification-dispatcher consumer', () => {
     expect(push.sent[0].tokens).toEqual(['token-e2e-0000000000001']);
   });
 
+  it('carries an order from placement to completion over Kafka', async () => {
+    const order = {
+      order_id: uuidv7(),
+      buyer_id: uuidv7(),
+      shop_id: uuidv7(),
+      seller_id: uuidv7(),
+    };
+    const send = (topic: string, key: string, data: object) =>
+      producer.send({ topic, messages: [{ key, value: goEnvelope(topic, key, data) }] });
+    await send('poro.shop.shop.updated', order.shop_id, {
+      shop_id: order.shop_id,
+      owner_id: order.seller_id,
+      name: 'Chez Fatou',
+      handle: 'chez.fatou',
+      description: null,
+      logo_url: null,
+      country_code: 'SN',
+      currency: 'XOF',
+      status: 'active',
+      updated_at: '2026-10-07T09:00:00.123456789Z',
+    });
+    await eventually(async () => {
+      const { rowCount } = await pg.query('SELECT 1 FROM shop_projections WHERE shop_id = $1', [
+        order.shop_id,
+      ]);
+      return rowCount === 1 ? true : undefined;
+    });
+
+    await send('poro.order.order.placed', order.order_id, {
+      ...order,
+      currency: 'XOF',
+      total: 7000,
+      payment_method: 'cash_on_delivery',
+      placed_at: '2026-10-07T10:00:00.123456789Z',
+      expires_at: null,
+    });
+    await send('poro.order.order.shipped', order.order_id, {
+      ...order,
+      tracking: null,
+      shipped_at: '2026-10-07T11:00:00.123456789Z',
+    });
+    await send('poro.order.order.completed', order.order_id, {
+      ...order,
+      currency: 'XOF',
+      total: 7000,
+      payment_method: 'cash_on_delivery',
+      completed_at: '2026-10-08T11:00:00.123456789Z',
+    });
+
+    const types = (userId: string) =>
+      pg
+        .query<{ type: string }>(
+          'SELECT type FROM notifications WHERE user_id = $1 ORDER BY type',
+          [userId],
+        )
+        .then((r) => r.rows.map((row) => row.type));
+    expect(
+      await eventually(async () => {
+        const found = await types(order.seller_id);
+        return found.length === 2 ? found : undefined;
+      }),
+    ).toEqual(['order_completed', 'order_new']);
+    expect(
+      await eventually(async () => {
+        const found = await types(order.buyer_id);
+        return found.length === 2 ? found : undefined;
+      }),
+    ).toEqual(['order_confirmed', 'order_shipped']);
+    const { rows } = await pg.query<{ body: string }>(
+      `SELECT body FROM notifications WHERE user_id = $1 AND type = 'order_shipped'`,
+      [order.buyer_id],
+    );
+    expect(rows[0].body).toBe('Chez Fatou a expédié ta commande.');
+  });
+
   it('dead-letters events it cannot apply', async () => {
     const topic = 'poro.social.follow.created';
     const consumer = kafka.consumer({ groupId: `dlq-reader-${uuidv7()}` });

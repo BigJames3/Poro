@@ -22,6 +22,20 @@ du broker ou de Firebase.
 5. Like : il est peut-être regroupé. Chercher
    `group_key LIKE 'like:<video_id>:%'` pour le propriétaire.
 
+## Une notification de commande n'arrive pas
+
+1. Le paiement est-il à la livraison ? Une commande payée en ligne n'est pas
+   notifiée à `order.placed`.
+2. Le destinataire a-t-il agi lui-même (acheteur qui annule, vendeur qui
+   annule ou expédie) ? Aucune notification dans ce cas.
+3. `SELECT type, body, created_at FROM notifications WHERE entity_type = 'order' AND entity_id = '<order_id>';`
+   La préférence `orders` coupe seulement le push : l'in-app doit exister.
+4. Sinon : lag de `poro-notification-dispatcher` et DLQ du topic, par exemple
+   `rpk topic consume poro.order.order.placed.dlq`. Côté order, vérifier que
+   l'événement est publié (`outbox_events`, runbook order).
+5. Texte « la boutique » : `SELECT * FROM shop_projections WHERE shop_id = '<id>';`
+   Le prochain `poro.shop.shop.updated` la complète.
+
 ## Le push n'arrive pas
 
 1. `FCM_CREDENTIALS_B64` est-il défini ? Sinon le journal de démarrage contient
