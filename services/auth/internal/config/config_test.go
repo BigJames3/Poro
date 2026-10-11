@@ -15,10 +15,16 @@ func TestValidate(t *testing.T) {
 			OtpSecret:       "0123456789abcdef0123456789abcdef",
 			PostgresSSLMode: "verify-full",
 			KafkaBrokers:    []string{"redpanda:9092"},
+
+			AccountDeletionGrace: "720h",
+			AccountPurgeInterval: "1h",
 		}
 	}
 
-	require.NoError(t, (&Config{AppEnv: EnvDev, SMSProvider: SMSProviderLog, PostgresSSLMode: "disable", KafkaBrokers: []string{"localhost:9092"}}).Validate())
+	require.NoError(t, (&Config{
+		AppEnv: EnvDev, SMSProvider: SMSProviderLog, PostgresSSLMode: "disable", KafkaBrokers: []string{"localhost:9092"},
+		AccountDeletionGrace: "720h", AccountPurgeInterval: "1h",
+	}).Validate())
 
 	valid := prod()
 	valid.SMSProvider = SMSProviderAfricasTalking
@@ -49,6 +55,9 @@ func TestValidate(t *testing.T) {
 			c.AfricasTalkingAPIKey = "k"
 		}, want: "sandbox"},
 		{name: "no kafka brokers", mutate: func(c *Config) { c.KafkaBrokers = nil }, want: "KAFKA_BROKERS"},
+		{name: "no deletion grace", mutate: func(c *Config) { c.AccountDeletionGrace = "" }, want: "ACCOUNT_DELETION_GRACE"},
+		{name: "negative deletion grace", mutate: func(c *Config) { c.AccountDeletionGrace = "-1h" }, want: "ACCOUNT_DELETION_GRACE"},
+		{name: "bad purge interval", mutate: func(c *Config) { c.AccountPurgeInterval = "hourly" }, want: "ACCOUNT_PURGE_INTERVAL"},
 		{name: "bad calling code", mutate: func(c *Config) { c.OtpAllowedCallingCodes = []string{"+225", "225"} }, want: "OTP_ALLOWED_CALLING_CODES"},
 	}
 	for _, tc := range cases {
@@ -74,6 +83,8 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	require.Equal(t, []string{"10.0.0.0/8", "172.16.0.1"}, cfg.TrustedProxies)
 	require.Equal(t, 7, cfg.OtpMaxRequestsPerHour)
 	require.Equal(t, "30s", cfg.JWTRefreshReuseGrace)
+	require.Equal(t, "720h", cfg.AccountDeletionGrace)
+	require.Equal(t, "1h", cfg.AccountPurgeInterval)
 	require.Equal(t, []string{"localhost:9092"}, cfg.KafkaBrokers)
 	require.Equal(t, []string{"+225", "+221", "+237", "+234"}, cfg.OtpAllowedCallingCodes)
 	require.Equal(t, "postgres://poro:poro_dev_password@localhost:5433/poro_auth?sslmode=disable", cfg.PostgresDSN())

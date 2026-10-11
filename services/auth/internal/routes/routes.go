@@ -15,6 +15,7 @@ import (
 // A nil Limiter keeps rate-limit counters in process memory.
 type Dependencies struct {
 	Auth    *handler.AuthHandler
+	Account *handler.AccountHandler
 	Health  *health.Handler
 	Metrics fiber.Handler
 	JWKS    *handler.JWKSHandler
@@ -39,4 +40,10 @@ func Register(app *fiber.App, deps Dependencies) {
 	protected := auth.Group("", middleware.NewAuth(deps.Tokens))
 	protected.Post("/logout", deps.Auth.Logout)
 	protected.Get("/me", deps.Auth.Me)
+	protected.Get("/sessions", deps.Account.Sessions)
+	protected.Post("/sessions/revoke-others", deps.Account.RevokeOtherSessions)
+	protected.Delete("/sessions/:id", deps.Account.RevokeSession)
+	// The deletion checks a password or an OTP code: limited like a sign-in.
+	protected.Post("/me/delete", middleware.LoginLimit(deps.Limiter), deps.Account.DeleteAccount)
+	protected.Post("/me/delete/cancel", deps.Account.CancelDeletion)
 }

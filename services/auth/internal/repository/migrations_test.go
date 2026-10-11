@@ -69,6 +69,12 @@ func TestMigrationsUpgradeLegacyDataAndRoundTrip(t *testing.T) {
 	require.NoError(t, conn.QueryRow(ctx, `SELECT family_id FROM refresh_tokens WHERE id = $1`, tokenID).Scan(&familyID))
 	require.Equal(t, tokenID, familyID, "existing tokens become their own session")
 
+	erasedID := uuid.Must(uuid.NewV7())
+	_, err = conn.Exec(ctx, `INSERT INTO users (id, status, deleted_at) VALUES ($1, 'DELETED', NOW())`, erasedID)
+	require.NoError(t, err, "an erased account keeps its row without identifier")
+	_, err = conn.Exec(ctx, `INSERT INTO users (id, status) VALUES ($1, 'ACTIVE')`, uuid.Must(uuid.NewV7()))
+	require.Error(t, err, "a live account still needs a phone or an email")
+
 	require.NoError(t, m.Migrate(3))
 	var role string
 	require.NoError(t, conn.QueryRow(ctx, `SELECT role FROM users WHERE id = $1`, creatorID).Scan(&role))

@@ -7,7 +7,7 @@ il est mis à jour à chaque jalon P0.
 
 | Élément | État réel |
 |---|---|
-| `services/auth` (Go 1.26, Fiber v2, pgx v5, Redis) | Identité, JWT RS256, OTP, outbox `poro.auth.user.created`, consommateur CREATOR. |
+| `services/auth` (Go 1.26, Fiber v2, pgx v5, Redis) | Identité, JWT RS256, OTP, sessions par appareil, suppression de compte, outbox `poro.auth.user.created` et `.deleted`, consommateurs CREATOR et BUSINESS. |
 | `services/user` (NestJS 11, Prisma 7, port 8082) | Profils, username, avatars présignés, activation créateur. |
 | `services/video` (Go 1.26, Fiber, port 8083) + `media-worker` | Upload multipart, HLS 360p/720p, `poro.video.ready`. |
 | `services/feed` (Go 1.26, Fiber, port 8084) | Flux abonnements (fan-out à la lecture), tendances (72 h, ticker 5 min), For You (sessions Redis de 200 vidéos) ; projections vidéos, abonnements, compteurs, profils. |
@@ -120,8 +120,9 @@ reste acceptable hors auth jusqu'à 15 min ([ADR-0005](adr/0005-evenements-json-
 
 ### P1 — important
 Marketplace (boutique, produits, variantes, stock, panier, checkout), abstraction `PaymentProvider`
-et premier fournisseur, livraison, liste et révocation des sessions par appareil, suppression de
-compte, vérification d'email, réinitialisation du mot de passe, tests de charge k6, DAST (ZAP),
+et premier fournisseur, livraison, ~~liste et révocation des sessions par appareil, suppression de
+compte~~ (faits, [ADR-0013](adr/0013-cycle-de-vie-du-compte.md)), vérification d'email,
+réinitialisation du mot de passe, tests de charge k6, DAST (ZAP),
 signature d'image (cosign), ArgoCD, intégration Auth côté Android (Android Studio), squelette iOS.
 
 ### P2 — amélioration

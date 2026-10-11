@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
@@ -73,6 +74,10 @@ type Config struct {
 	AfricasTalkingAPIKey   string
 	AfricasTalkingSenderID string // optional registered alphanumeric sender
 
+	// Account lifecycle
+	AccountDeletionGrace string // 720h: delay before a requested deletion erases the account
+	AccountPurgeInterval string // 1h: how often due accounts are erased
+
 	// Events and telemetry
 	KafkaBrokers []string // localhost:9092
 	OtelEndpoint string   // OTLP HTTP endpoint; empty disables trace export
@@ -122,6 +127,14 @@ func (c *Config) Validate() error {
 		}
 	default:
 		errs = append(errs, fmt.Errorf("SMS_PROVIDER %q is not supported", c.SMSProvider))
+	}
+	for name, value := range map[string]string{
+		"ACCOUNT_DELETION_GRACE": c.AccountDeletionGrace,
+		"ACCOUNT_PURGE_INTERVAL": c.AccountPurgeInterval,
+	} {
+		if d, err := time.ParseDuration(value); err != nil || d <= 0 {
+			errs = append(errs, fmt.Errorf("%s must be a positive duration, got %q", name, value))
+		}
 	}
 	if len(c.KafkaBrokers) == 0 {
 		errs = append(errs, errors.New("KAFKA_BROKERS is required"))
@@ -204,6 +217,9 @@ func Load() (*Config, error) {
 		AfricasTalkingAPIKey:   v.GetString("AFRICASTALKING_API_KEY"),
 		AfricasTalkingSenderID: v.GetString("AFRICASTALKING_SENDER_ID"),
 
+		AccountDeletionGrace: v.GetString("ACCOUNT_DELETION_GRACE"),
+		AccountPurgeInterval: v.GetString("ACCOUNT_PURGE_INTERVAL"),
+
 		KafkaBrokers: splitList(v.GetString("KAFKA_BROKERS")),
 		OtelEndpoint: v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),
 	}
@@ -249,6 +265,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("AFRICASTALKING_USERNAME", "")
 	v.SetDefault("AFRICASTALKING_API_KEY", "")
 	v.SetDefault("AFRICASTALKING_SENDER_ID", "")
+
+	v.SetDefault("ACCOUNT_DELETION_GRACE", "720h")
+	v.SetDefault("ACCOUNT_PURGE_INTERVAL", "1h")
 
 	v.SetDefault("KAFKA_BROKERS", "localhost:9092")
 	v.SetDefault("OTEL_EXPORTER_OTLP_ENDPOINT", "")

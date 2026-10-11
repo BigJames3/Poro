@@ -13,6 +13,7 @@ tags:
   - name: otp
   - name: email
   - name: session
+  - name: account
   - name: platform
 paths:
   /api/v1/auth/otp/request:
@@ -78,6 +79,7 @@ paths:
               properties:
                 phone: { type: string, example: "+2250700000000" }
                 code: { type: string, pattern: "^[0-9]{6}$" }
+                device_name: { type: string, maxLength: 60, description: "Shown in the session list, e.g. \"Tecno Spark 20\"" }
       responses:
         "200": { $ref: "#/components/responses/Auth" }
         "400": { $ref: "#/components/responses/InvalidRequest" }
@@ -105,6 +107,7 @@ paths:
                 email: { type: string, format: email, maxLength: 254 }
                 password: { type: string, minLength: 8, maxLength: 128 }
                 full_name: { type: string, minLength: 2, maxLength: 100 }
+                device_name: { type: string, maxLength: 60, description: "Shown in the session list, e.g. \"Tecno Spark 20\"" }
       responses:
         "201": { $ref: "#/components/responses/Auth" }
         "400": { $ref: "#/components/responses/InvalidRequest" }
@@ -127,6 +130,7 @@ paths:
               properties:
                 email: { type: string, format: email, maxLength: 254 }
                 password: { type: string, maxLength: 128 }
+                device_name: { type: string, maxLength: 60, description: "Shown in the session list, e.g. \"Tecno Spark 20\"" }
       responses:
         "200": { $ref: "#/components/responses/Auth" }
         "400": { $ref: "#/components/responses/InvalidRequest" }
@@ -182,6 +186,126 @@ paths:
     get:
       tags: [session]
       summary: Current account
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/auth/sessions:
+    get:
+      tags: [session]
+      summary: Signed-in devices of the account
+      description: |
+        Every session that can still refresh, most recently used first. `device` is the
+        `device_name` given at sign-in, else the User-Agent (100 characters at most), else null.
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: Sessions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/auth/sessions/{id}:
+    delete:
+      tags: [session]
+      summary: Sign a device out
+      description: |
+        Revokes the refresh tokens of that session. Revoking the current session is a logout.
+        Access tokens already issued to the device stay valid until they expire (15 min at most).
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Signed out }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: "`session_not_found`: unknown, ended, or another account's"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /api/v1/auth/sessions/revoke-others:
+    post:
+      tags: [session]
+      summary: Sign every other device out
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: Number of sessions ended
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          revoked: { type: integer, minimum: 0 }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/auth/me/delete:
+    post:
+      tags: [account]
+      summary: Ask for the deletion of the account
+      description: |
+        The owner proves it again: `password` for an email account, `otp_code` for a phone
+        account (request it first with `POST /otp/request`). The account is erased 30 days
+        later; every device is signed out now. Signing in again before that date cancels the
+        deletion. Asking twice keeps the first date. 10 requests/min per IP.
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: { type: string, maxLength: 128 }
+                otp_code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "202":
+          description: Deletion scheduled
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          deletion_scheduled_at: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401":
+          description: "`unauthorized`, `invalid_credentials`, `otp_invalid` or `otp_expired`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "403": { $ref: "#/components/responses/Blocked" }
+        "422":
+          description: "`reauth_required`: the password (email account) or the code (phone account) is missing"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429":
+          description: "`otp_too_many_attempts` or `rate_limited`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /api/v1/auth/me/delete/cancel:
+    post:
+      tags: [account]
+      summary: Cancel a pending deletion
+      description: Without a pending deletion, returns the account unchanged.
       security: [{ bearer: [] }]
       responses:
         "200":
@@ -288,6 +412,8 @@ components:
                 - invalid_credentials
                 - refresh_token_invalid
                 - session_revoked
+                - session_not_found
+                - reauth_required
                 - internal_error
             message: { type: string }
         meta:
@@ -316,6 +442,20 @@ components:
         country_code: { type: string }
         language: { type: string }
         created_at: { type: string, format: date-time }
+        deletion_scheduled_at:
+          type: ["string", "null"]
+          format: date-time
+          description: When the account will be erased; null when no deletion is pending.
+    Session:
+      type: object
+      required: [id, device, ip_address, created_at, last_active_at, current]
+      properties:
+        id: { type: string, format: uuid, description: "Also the `sid` claim of its access tokens" }
+        device: { type: ["string", "null"] }
+        ip_address: { type: ["string", "null"], description: Address at sign-in }
+        created_at: { type: string, format: date-time, description: Sign-in }
+        last_active_at: { type: string, format: date-time, description: Latest refresh }
+        current: { type: boolean, description: The session of the calling access token }
   responses:
     Auth:
       description: Signed in
@@ -332,6 +472,9 @@ components:
                       - type: object
                         properties:
                           user: { $ref: "#/components/schemas/User" }
+                          deletion_cancelled:
+                            type: boolean
+                            description: Present and true when this sign-in cancelled a pending deletion.
     InvalidRequest:
       description: "`invalid_json` or `invalid_request`"
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }

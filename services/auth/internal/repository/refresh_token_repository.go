@@ -18,7 +18,7 @@ import (
 var ErrRefreshTokenNotFound = errors.New("refresh token not found")
 
 //nolint:gosec // G101: a column list that names token_hash, not a credential
-const refreshTokenColumns = `id, user_id, family_id, token_hash, expires_at, revoked_at, replaced_by, user_agent, ip_address, created_at`
+const refreshTokenColumns = `id, user_id, family_id, token_hash, expires_at, revoked_at, replaced_by, user_agent, ip_address, created_at, device_name`
 
 // RefreshTokenStore holds the operations available inside and outside a transaction.
 type RefreshTokenStore interface {
@@ -45,6 +45,12 @@ type RefreshTokenRepository interface {
 	RevokeFamily(ctx context.Context, userID, familyID uuid.UUID) (int64, error)
 	RevokeAllForUser(ctx context.Context, userID uuid.UUID) error
 	DeleteExpired(ctx context.Context) (int64, error)
+	// ActiveSessions lists the device sessions of userID that can still refresh,
+	// most recently used first.
+	ActiveSessions(ctx context.Context, userID uuid.UUID) ([]model.Session, error)
+	// RevokeOtherFamilies ends every session of userID except keep, and returns
+	// how many sessions it ended.
+	RevokeOtherFamilies(ctx context.Context, userID, keep uuid.UUID) (int64, error)
 }
 
 type dbtx interface {
@@ -98,6 +104,42 @@ func (r *refreshTokenRepository) RevokeAllForUser(ctx context.Context, userID uu
 	return nil
 }
 
+// ActiveSessions relies on rotation: a live session has exactly one unrevoked,
+// unexpired token, its latest, whose creation is the last use of the session.
+func (r *refreshTokenRepository) ActiveSessions(ctx context.Context, userID uuid.UUID) ([]model.Session, error) {
+	const q = `
+		SELECT t.family_id, t.device_name, t.user_agent, t.ip_address,
+			(SELECT MIN(f.created_at) FROM refresh_tokens f WHERE f.family_id = t.family_id),
+			t.created_at
+		FROM refresh_tokens t
+		WHERE t.user_id = $1 AND t.revoked_at IS NULL AND t.expires_at > $2
+		ORDER BY t.created_at DESC, t.family_id`
+	rows, err := r.pool.Query(ctx, q, userID, time.Now().UTC())
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+	sessions, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (model.Session, error) {
+		var s model.Session
+		err := row.Scan(&s.ID, &s.DeviceName, &s.UserAgent, &s.IPAddress, &s.CreatedAt, &s.LastActiveAt)
+		return s, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+	return sessions, nil
+}
+
+func (r *refreshTokenRepository) RevokeOtherFamilies(ctx context.Context, userID, keep uuid.UUID) (int64, error) {
+	const q = `
+		UPDATE refresh_tokens SET revoked_at = $3
+		WHERE user_id = $1 AND family_id <> $2 AND revoked_at IS NULL AND expires_at > $3`
+	tag, err := r.pool.Exec(ctx, q, userID, keep, time.Now().UTC())
+	if err != nil {
+		return 0, fmt.Errorf("revoke other sessions: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (r *refreshTokenRepository) DeleteExpired(ctx context.Context) (int64, error) {
 	const q = `DELETE FROM refresh_tokens WHERE expires_at < $1`
 	tag, err := r.pool.Exec(ctx, q, time.Now().UTC())
@@ -126,10 +168,10 @@ func (s *refreshTokenQueries) Create(ctx context.Context, token *model.RefreshTo
 		token.CreatedAt = time.Now().UTC()
 	}
 
-	const q = `INSERT INTO refresh_tokens (` + refreshTokenColumns + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+	const q = `INSERT INTO refresh_tokens (` + refreshTokenColumns + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 	_, err := s.db.Exec(ctx, q,
 		token.ID, token.UserID, token.FamilyID, token.TokenHash, token.ExpiresAt, token.RevokedAt,
-		token.ReplacedBy, token.UserAgent, token.IPAddress, token.CreatedAt,
+		token.ReplacedBy, token.UserAgent, token.IPAddress, token.CreatedAt, token.DeviceName,
 	)
 	if err != nil {
 		return fmt.Errorf("create refresh token: %w", err)
@@ -202,7 +244,7 @@ func scanRefreshToken(row pgx.Row) (*model.RefreshToken, error) {
 	var token model.RefreshToken
 	err := row.Scan(
 		&token.ID, &token.UserID, &token.FamilyID, &token.TokenHash, &token.ExpiresAt, &token.RevokedAt,
-		&token.ReplacedBy, &token.UserAgent, &token.IPAddress, &token.CreatedAt,
+		&token.ReplacedBy, &token.UserAgent, &token.IPAddress, &token.CreatedAt, &token.DeviceName,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrRefreshTokenNotFound

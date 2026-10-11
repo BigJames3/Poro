@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/alexedwards/argon2id"
 	"github.com/google/uuid"
@@ -137,7 +138,7 @@ func (s *authService) VerifyOTP(ctx context.Context, req dto.VerifyOTPRequest, u
 		return nil, fmt.Errorf("verify otp: %w", err)
 	}
 
-	res, err := s.issueSession(ctx, user, userAgent, ip)
+	res, err := s.issueSession(ctx, user, sessionInfo{userAgent, ip, req.DeviceName})
 	if err != nil {
 		return nil, fmt.Errorf("verify otp: %w", err)
 	}
@@ -164,7 +165,7 @@ func (s *authService) RegisterEmail(ctx context.Context, req dto.RegisterEmailRe
 		return nil, fmt.Errorf("register email: %w", err)
 	}
 
-	res, err := s.issueSession(ctx, user, userAgent, ip)
+	res, err := s.issueSession(ctx, user, sessionInfo{userAgent, ip, req.DeviceName})
 	if err != nil {
 		return nil, fmt.Errorf("register email: %w", err)
 	}
@@ -196,7 +197,7 @@ func (s *authService) LoginEmail(ctx context.Context, req dto.LoginEmailRequest,
 		return nil, fmt.Errorf("login email: %w", err)
 	}
 
-	res, err := s.issueSession(ctx, user, userAgent, ip)
+	res, err := s.issueSession(ctx, user, sessionInfo{userAgent, ip, req.DeviceName})
 	if err != nil {
 		return nil, fmt.Errorf("login email: %w", err)
 	}
@@ -264,14 +265,15 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshRequest) (*dto
 		}
 
 		next := &model.RefreshToken{
-			ID:        nextID,
-			UserID:    user.ID,
-			FamilyID:  stored.FamilyID,
-			TokenHash: nextHash,
-			ExpiresAt: now.Add(s.refreshTTL),
-			UserAgent: stored.UserAgent,
-			IPAddress: stored.IPAddress,
-			CreatedAt: now,
+			ID:         nextID,
+			UserID:     user.ID,
+			FamilyID:   stored.FamilyID,
+			TokenHash:  nextHash,
+			ExpiresAt:  now.Add(s.refreshTTL),
+			UserAgent:  stored.UserAgent,
+			IPAddress:  stored.IPAddress,
+			DeviceName: stored.DeviceName,
+			CreatedAt:  now,
 		}
 		if err := tx.Create(ctx, next); err != nil {
 			return err
@@ -369,8 +371,27 @@ func (s *authService) ensureActive(ctx context.Context, user *model.User) error 
 	return nil
 }
 
-// issueSession starts a new device session: a refresh token family and its first access token.
-func (s *authService) issueSession(ctx context.Context, user *model.User, userAgent, ip string) (*dto.AuthResponse, error) {
+// sessionInfo describes the device a session is opened on.
+type sessionInfo struct {
+	userAgent  string
+	ip         string
+	deviceName string
+}
+
+// issueSession starts a new device session: a refresh token family and its
+// first access token. Signing in cancels a pending deletion of the account.
+func (s *authService) issueSession(ctx context.Context, user *model.User, info sessionInfo) (*dto.AuthResponse, error) {
+	cancelled := false
+	if user.DeletionScheduledAt != nil {
+		var err error
+		if cancelled, err = s.users.CancelDeletion(ctx, user.ID); err != nil {
+			return nil, fmt.Errorf("issue session: %w", err)
+		}
+		user.DeletionScheduledAt = nil
+		if cancelled {
+			s.log.Info("account deletion cancelled by sign-in", zap.String("user_id", user.ID.String()))
+		}
+	}
 	sessionID, err := uuid.NewV7()
 	if err != nil {
 		return nil, fmt.Errorf("issue session: new id: %w", err)
@@ -384,13 +405,14 @@ func (s *authService) issueSession(ctx context.Context, user *model.User, userAg
 		return nil, fmt.Errorf("issue session: %w", err)
 	}
 	token := &model.RefreshToken{
-		ID:        sessionID,
-		UserID:    user.ID,
-		FamilyID:  sessionID,
-		TokenHash: hash,
-		ExpiresAt: time.Now().UTC().Add(s.refreshTTL),
-		UserAgent: optionalString(userAgent),
-		IPAddress: optionalString(ip),
+		ID:         sessionID,
+		UserID:     user.ID,
+		FamilyID:   sessionID,
+		TokenHash:  hash,
+		ExpiresAt:  time.Now().UTC().Add(s.refreshTTL),
+		UserAgent:  optionalString(truncateRunes(info.userAgent, maxUserAgentLen)),
+		IPAddress:  optionalString(info.ip),
+		DeviceName: optionalString(cleanDeviceName(info.deviceName)),
 	}
 	if err := s.refresh.Create(ctx, token); err != nil {
 		return nil, fmt.Errorf("issue session: %w", err)
@@ -404,6 +426,8 @@ func (s *authService) issueSession(ctx context.Context, user *model.User, userAg
 		RefreshToken: raw,
 		ExpiresIn:    int(s.accessTTL.Seconds()),
 		TokenType:    tokenTypeBearer,
+
+		DeletionCancelled: cancelled,
 	}, nil
 }
 
@@ -429,20 +453,46 @@ func burnPasswordCheck(password string) {
 }
 
 func toUserResponse(user *model.User) dto.UserResponse {
+	var deletion *string
+	if user.DeletionScheduledAt != nil {
+		at := user.DeletionScheduledAt.UTC().Format(time.RFC3339)
+		deletion = &at
+	}
 	return dto.UserResponse{
-		ID:          user.ID.String(),
-		Phone:       user.Phone,
-		Email:       user.Email,
-		Roles:       user.RoleNames(),
-		Status:      string(user.Status),
-		CountryCode: user.CountryCode,
-		Language:    user.Language,
-		CreatedAt:   user.CreatedAt.UTC().Format(time.RFC3339),
+		DeletionScheduledAt: deletion,
+		ID:                  user.ID.String(),
+		Phone:               user.Phone,
+		Email:               user.Email,
+		Roles:               user.RoleNames(),
+		Status:              string(user.Status),
+		CountryCode:         user.CountryCode,
+		Language:            user.Language,
+		CreatedAt:           user.CreatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
 func blocked(status model.UserStatus) bool {
 	return status == model.StatusSuspended || status == model.StatusDeleted
+}
+
+// maxUserAgentLen bounds the stored User-Agent: it is shown, never parsed.
+const maxUserAgentLen = 200
+
+// cleanDeviceName keeps a name the client chose for display: printable
+// characters only, single spaces, trimmed.
+func cleanDeviceName(name string) string {
+	fields := strings.FieldsFunc(name, func(r rune) bool {
+		return unicode.IsSpace(r) || !unicode.IsPrint(r)
+	})
+	return truncateRunes(strings.Join(fields, " "), 60)
+}
+
+func truncateRunes(value string, max int) string {
+	runes := []rune(value)
+	if len(runes) <= max {
+		return value
+	}
+	return string(runes[:max])
 }
 
 func optionalString(value string) *string {
