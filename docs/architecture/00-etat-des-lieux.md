@@ -24,6 +24,7 @@ il est mis à jour à chaque jalon P0.
 | `packages/`, `infra/`, `data/`, `docs/` | Vides avant ce jalon. |
 | `apps/mobile-android` | Projet Android Studio (36 fichiers suivis), ne consomme encore aucune API. Non modifié. |
 | `docker-compose.yml` | Postgres 16 (`poro_auth`, `poro_user`, `poro_video`), Redis 7, SeaweedFS (avatars + videos), Redpanda, auth, user, video, media-worker, relais outbox. |
+| `infra/gateway` (Traefik v3, port 8000) | Point d'entrée unique de l'API : routage `/api/v1/{domaine}`, limites, CORS, compression — [ADR-0014](adr/0014-gateway-traefik.md). |
 | CI (`.github/workflows/ci.yml`) | Avant ce jalon : jobs `echo` uniquement, aucun test exécuté. |
 | iOS, Terraform, Helm, k8s, observabilité | Inexistants. |
 

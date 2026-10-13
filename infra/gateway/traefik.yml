@@ -1,0 +1,68 @@
+# Static configuration of the PORO gateway (Traefik v3).
+# Routes and middlewares live in routes.yml (file provider).
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+entryPoints:
+  # Public API entry. Middlewares listed here apply to every route.
+  web:
+    address: ":8000"
+    # Clients cannot pass X-Forwarded-*: the gateway sets them itself.
+    forwardedHeaders:
+      insecure: false
+    transport:
+      respondingTimeouts:
+        readTimeout: 30s
+        writeTimeout: 60s
+        idleTimeout: 90s
+    http:
+      middlewares:
+        - rate-limit@file
+        - body-limit@file
+        - security-headers@file
+        - cors@file
+        - compress@file
+  # Health and metrics, never published by compose.
+  internal:
+    address: ":8082"
+
+serversTransport:
+  forwardingTimeouts:
+    dialTimeout: 5s
+    responseHeaderTimeout: 30s
+    idleConnTimeout: 90s
+
+ping:
+  entryPoint: internal
+  manualRouting: true
+
+metrics:
+  prometheus:
+    entryPoint: internal
+    addRoutersLabels: true
+    addServicesLabels: true
+
+api:
+  dashboard: false
+
+providers:
+  file:
+    filename: /etc/traefik/routes.yml
+    watch: false
+
+log:
+  level: INFO
+  format: json
+
+# Tokens and cookies never reach the logs: every header is dropped but these.
+accessLog:
+  format: json
+  fields:
+    defaultMode: keep
+    headers:
+      defaultMode: drop
+      names:
+        User-Agent: keep
+        X-Request-Id: keep

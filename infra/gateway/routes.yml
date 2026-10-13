@@ -1,0 +1,196 @@
+# Dynamic configuration of the PORO gateway: routes and middlewares.
+#
+# Only /api/v1/{domain} routes and the gateway's own /health are public.
+# Anything else (service /metrics, /health/*, /api/v1/health, the JWKS)
+# matches no router and gets a 404. Paths are forwarded unchanged.
+#
+# Shared prefixes: /api/v1/videos/{id}/{like,likes,stats,comments,shares} and
+# /api/v1/users/{uuid}/{likes,follow,followers,following,stats} go to social
+# through higher-priority routers; the rest of each prefix goes to video or user.
+# tests/routes.tsv lists every route of docs/api and its expected service.
+
+http:
+  routers:
+    gateway-health:
+      entryPoints: [web]
+      rule: "Path(`/health`)"
+      service: ping@internal
+    internal-ping:
+      entryPoints: [internal]
+      rule: "Path(`/ping`)"
+      service: ping@internal
+    internal-metrics:
+      entryPoints: [internal]
+      rule: "Path(`/metrics`)"
+      service: prometheus@internal
+    auth:
+      entryPoints: [web]
+      rule: "Path(`/api/v1/auth`) || PathPrefix(`/api/v1/auth/`)"
+      service: auth
+    # Profiles: /users/me..., /users/by-username/..., /users/username-availability.
+    user:
+      entryPoints: [web]
+      rule: "Path(`/api/v1/users`) || PathPrefix(`/api/v1/users/`)"
+      service: user
+    # A user id followed by a social resource belongs to social, before the user prefix.
+    social-users:
+      entryPoints: [web]
+      rule: "PathRegexp(`^/api/v1/users/[0-9a-fA-F-]{36}/(likes|follow|followers|following|stats)$`)"
+      service: social
+      priority: 1000
+    # Videos and their uploads.
+    video:
+      entryPoints: [web]
+      rule: "Path(`/api/v1/videos`) || PathPrefix(`/api/v1/videos/`)"
+      service: video
+    # Reactions to a video belong to social, before the video prefix.
+    social-videos:
+      entryPoints: [web]
+      rule: "PathRegexp(`^/api/v1/videos/[^/]+/(like|likes|stats|comments|shares)$`)"
+      service: social
+      priority: 1000
+    social-comments:
+      entryPoints: [web]
+      rule: "Path(`/api/v1/comments`) || PathPrefix(`/api/v1/comments/`)"
+      service: social
+    feed:
+      entryPoints: [web]
+      rule: "Path(`/api/v1/feed`) || PathPrefix(`/api/v1/feed/`)"
+      service: feed
+    search:
+      entryPoints: [web]
+      rule: "Path(`/api/v1/search`) || PathPrefix(`/api/v1/search/`)"
+      service: search
+    notification:
+      entryPoints: [web]
+      rule: "Path(`/api/v1/notifications`) || PathPrefix(`/api/v1/notifications/`)"
+      service: notification
+    moderation:
+      entryPoints: [web]
+      rule: "Path(`/api/v1/moderation`) || PathPrefix(`/api/v1/moderation/`)"
+      service: moderation
+    shop:
+      entryPoints: [web]
+      rule: "Path(`/api/v1/shops`) || PathPrefix(`/api/v1/shops/`) || Path(`/api/v1/products`) || PathPrefix(`/api/v1/products/`) || Path(`/api/v1/admin/shops`) || PathPrefix(`/api/v1/admin/shops/`)"
+      service: shop
+    order:
+      entryPoints: [web]
+      rule: "Path(`/api/v1/cart`) || PathPrefix(`/api/v1/cart/`) || Path(`/api/v1/checkout`) || PathPrefix(`/api/v1/checkout/`) || Path(`/api/v1/orders`) || PathPrefix(`/api/v1/orders/`) || Path(`/api/v1/addresses`) || PathPrefix(`/api/v1/addresses/`) || Path(`/api/v1/seller`) || PathPrefix(`/api/v1/seller/`)"
+      service: order
+
+  services:
+    auth:
+      loadBalancer:
+        servers:
+          - url: "http://auth:8081"
+        healthCheck:
+          path: /health/ready
+          interval: 10s
+          timeout: 3s
+    user:
+      loadBalancer:
+        servers:
+          - url: "http://user:8082"
+        healthCheck:
+          path: /health/ready
+          interval: 10s
+          timeout: 3s
+    video:
+      loadBalancer:
+        servers:
+          - url: "http://video:8083"
+        healthCheck:
+          path: /health/ready
+          interval: 10s
+          timeout: 3s
+    feed:
+      loadBalancer:
+        servers:
+          - url: "http://feed:8084"
+        healthCheck:
+          path: /health/ready
+          interval: 10s
+          timeout: 3s
+    social:
+      loadBalancer:
+        servers:
+          - url: "http://social:8085"
+        healthCheck:
+          path: /health/ready
+          interval: 10s
+          timeout: 3s
+    notification:
+      loadBalancer:
+        servers:
+          - url: "http://notification:8086"
+        healthCheck:
+          path: /health/ready
+          interval: 10s
+          timeout: 3s
+    moderation:
+      loadBalancer:
+        servers:
+          - url: "http://moderation:8087"
+        healthCheck:
+          path: /health/ready
+          interval: 10s
+          timeout: 3s
+    search:
+      loadBalancer:
+        servers:
+          - url: "http://search:8088"
+        healthCheck:
+          path: /health/ready
+          interval: 10s
+          timeout: 3s
+    shop:
+      loadBalancer:
+        servers:
+          - url: "http://shop:8090"
+        healthCheck:
+          path: /health/ready
+          interval: 10s
+          timeout: 3s
+    order:
+      loadBalancer:
+        servers:
+          - url: "http://order:8091"
+        healthCheck:
+          path: /health/ready
+          interval: 10s
+          timeout: 3s
+
+  middlewares:
+    # Generous on purpose: behind carrier-grade NAT many phones share one IP.
+    # Each service keeps its own finer per-route limits.
+    rate-limit:
+      rateLimit:
+        average: 100
+        period: 1s
+        burst: 200
+    # Media goes straight to S3 with presigned URLs: API bodies stay small.
+    body-limit:
+      buffering:
+        maxRequestBodyBytes: 1048576
+        memRequestBodyBytes: 1048576
+    security-headers:
+      headers:
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: no-referrer
+        customResponseHeaders:
+          X-Powered-By: ""
+          Server: ""
+    # Browsers only: the mobile app needs no CORS. GATEWAY_CORS_ORIGINS is a
+    # comma-separated list of exact origins; empty allows none.
+    cors:
+      headers:
+        accessControlAllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+        accessControlAllowHeaders: [Authorization, Content-Type, X-Request-Id, Idempotency-Key]
+        accessControlExposeHeaders: [X-Request-Id, Retry-After]
+        accessControlAllowOriginList: [{{ range $i, $origin := splitList "," (env "GATEWAY_CORS_ORIGINS") }}{{ if trim $origin }}"{{ trim $origin }}", {{ end }}{{ end }}]
+        accessControlMaxAge: 600
+        addVaryHeader: true
+    compress:
+      compress:
+        minResponseBodyBytes: 1024
