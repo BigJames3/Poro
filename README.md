@@ -12,7 +12,7 @@ Plateforme sociale vidéo africaine avec marketplace intégrée.
 | `services/outbox-relay` | Publication de l'outbox SQL vers Kafka |
 | `packages/shared-go` | HTTP, JWT/JWKS, santé, métriques, tracing, événements |
 | `packages/contracts` | Schémas JSON des événements |
-| `infra/` | Terraform, Helm, Kubernetes (à venir) |
+| `infra/` | Gateway Traefik ; Terraform, Helm, Kubernetes (à venir) |
 | `docs/` | Architecture, ADR, contrats d'API, runbooks |
 
 ## Démarrage rapide
@@ -22,9 +22,13 @@ Copy-Item .env.example .env
 docker compose up -d
 ```
 
-Services : Postgres (bases `poro_auth` et `poro_user`), Redis, SeaweedFS, Redpanda
-(topics + DLQ), auth `:8081`, user `:8082`, relais outbox. ClickHouse/Qdrant :
+Services : Postgres (une base par service), Redis, SeaweedFS, Redpanda (topics + DLQ),
+les services de l'API et leurs relais outbox. ClickHouse/Qdrant :
 `docker compose --profile analytics up -d`.
+
+Les clients passent par la gateway, **`http://127.0.0.1:8000/api/v1/...`**, point d'entrée
+unique de l'API ([`infra/gateway`](infra/gateway/README.md)). Les ports directs des services
+(`:8081` à `:8091`) restent ouverts en local pour le débogage.
 
 ## Documentation
 
@@ -35,3 +39,4 @@ Services : Postgres (bases `poro_auth` et `poro_user`), Redis, SeaweedFS, Redpan
 - [Runbook auth](docs/runbooks/auth.md)
 - [Runbook user](docs/runbooks/user.md)
 - [Runbook outbox / DLQ](docs/runbooks/outbox-relay.md)
+- [Gateway](infra/gateway/README.md), [runbook gateway](docs/runbooks/gateway.md)

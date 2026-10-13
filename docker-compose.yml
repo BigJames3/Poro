@@ -273,6 +273,8 @@ services:
       APP_ENV: dev
       APP_PORT: "8081"
       LOG_LEVEL: debug
+      # Only the gateway sets X-Forwarded-For (docker private ranges).
+      TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}
 
       # Postgres — port INTERNE du conteneur
       POSTGRES_HOST: postgres
@@ -394,6 +396,8 @@ services:
       target: runtime
     container_name: poro-user
     environment:
+      # Only the gateway sets X-Forwarded-For (docker private ranges).
+      TRUST_PROXY: ${GATEWAY_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}
       APP_ENV: dev
       PORT: "8082"
       LOG_LEVEL: debug
@@ -457,6 +461,8 @@ services:
       APP_ENV: dev
       APP_PORT: "8083"
       LOG_LEVEL: debug
+      # Only the gateway sets X-Forwarded-For (docker private ranges).
+      TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: poro
@@ -508,6 +514,8 @@ services:
       APP_ENV: dev
       APP_PORT: "8085"
       LOG_LEVEL: debug
+      # Only the gateway sets X-Forwarded-For (docker private ranges).
+      TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: poro
@@ -566,6 +574,8 @@ services:
       APP_ENV: dev
       APP_PORT: "8084"
       LOG_LEVEL: debug
+      # Only the gateway sets X-Forwarded-For (docker private ranges).
+      TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: poro
@@ -608,6 +618,8 @@ services:
       APP_ENV: dev
       APP_PORT: "8088"
       LOG_LEVEL: debug
+      # Only the gateway sets X-Forwarded-For (docker private ranges).
+      TRUSTED_PROXIES: ${GATEWAY_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: poro
@@ -661,6 +673,8 @@ services:
       target: runtime
     container_name: poro-notification
     environment:
+      # Only the gateway sets X-Forwarded-For (docker private ranges).
+      TRUST_PROXY: ${GATEWAY_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}
       APP_ENV: dev
       PORT: "8086"
       LOG_LEVEL: debug
@@ -816,6 +830,8 @@ services:
       target: runtime
     container_name: poro-shop
     environment:
+      # Only the gateway sets X-Forwarded-For (docker private ranges).
+      TRUST_PROXY: ${GATEWAY_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}
       APP_ENV: dev
       PORT: "8090"
       LOG_LEVEL: debug
@@ -890,6 +906,8 @@ services:
       target: runtime
     container_name: poro-order
     environment:
+      # Only the gateway sets X-Forwarded-For (docker private ranges).
+      TRUST_PROXY: ${GATEWAY_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}
       APP_ENV: dev
       PORT: "8091"
       LOG_LEVEL: debug
@@ -932,6 +950,35 @@ services:
         condition: service_completed_successfully
       redpanda-init:
         condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # GATEWAY : point d'entrée unique de l'API (Traefik)
+  # ─────────────────────────────────────────────
+
+  gateway:
+    image: traefik:v3.7.14
+    container_name: poro-gateway
+    command: ["--configFile=/etc/traefik/traefik.yml"]
+    environment:
+      # Comma-separated exact origins of the web clients; empty allows none.
+      GATEWAY_CORS_ORIGINS: ${GATEWAY_CORS_ORIGINS:-}
+    volumes:
+      - ./infra/gateway/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infra/gateway/routes.yml:/etc/traefik/routes.yml:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+    user: "65534:65534"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8082/ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
     networks:
       - poro-network
     restart: unless-stopped

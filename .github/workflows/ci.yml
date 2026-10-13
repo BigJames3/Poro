@@ -30,6 +30,7 @@ jobs:
       shop: ${{ steps.filter.outputs.shop }}
       order: ${{ steps.filter.outputs.order }}
       mobile: ${{ steps.filter.outputs.mobile }}
+      gateway: ${{ steps.filter.outputs.gateway }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
@@ -109,6 +110,12 @@ jobs:
               - '.github/actions/**'
             mobile:
               - 'apps/mobile-android/**'
+            gateway:
+              - 'infra/gateway/**'
+              - 'docs/api/**'
+              - 'docker-compose.yml'
+              - 'services/auth/**'
+              - '.github/workflows/ci.yml'
 
   security:
     # Runs on every change: a secret can land in any file.
@@ -125,6 +132,42 @@ jobs:
           severity: HIGH,CRITICAL
           skip-dirs: "**/node_modules,**/.venv"
           exit-code: "1"
+          format: table
+
+  gateway:
+    # Routes come from docs/api: a documented route without a gateway rule fails here.
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.gateway == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: services/auth/go.mod
+          cache-dependency-path: |
+            services/auth/go.sum
+            packages/shared-go/go.sum
+
+      - name: shellcheck
+        run: shellcheck infra/gateway/tests/*.sh
+
+      - name: Routing contract (every documented route, limits, CORS, compression)
+        run: infra/gateway/tests/run.sh
+
+      - name: End to end with the real auth service
+        run: infra/gateway/tests/e2e_auth.sh
+
+      # Third-party image: reported, not blocking. Bump the tag when Traefik
+      # ships a release that fixes what this lists.
+      - name: Trivy image report (traefik)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.75.0
+          image-ref: traefik:v3.7.14
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
           format: table
 
   shared-go:
