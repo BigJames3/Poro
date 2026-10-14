@@ -289,6 +289,8 @@ services:
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ""
       REDIS_DB: "0"
+      # Registre des sessions révoquées, partagé avec les services (ADR-0016).
+      REVOCATION_REDIS_URL: redis://redis:6379/15
 
       # JWT
       JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
@@ -404,6 +406,8 @@ services:
       DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_user?sslmode=disable
       REDIS_URL: redis://redis:6379/1
       JWKS_URL: http://auth:8081/.well-known/jwks.json
+      # Sessions révoquées par auth, refusées par chaque service (ADR-0016).
+      REVOCATION_REDIS_URL: redis://redis:6379/15
       KAFKA_BROKERS: redpanda:29092
       # Le service parle à SeaweedFS en interne ; les URLs signées pointent
       # vers l'adresse joignable par le client (poste de dev).
@@ -474,6 +478,8 @@ services:
       REDIS_PASSWORD: ""
       REDIS_DB: "2"
       JWKS_URL: http://auth:8081/.well-known/jwks.json
+      # Sessions révoquées par auth, refusées par chaque service (ADR-0016).
+      REVOCATION_REDIS_URL: redis://redis:6379/15
       KAFKA_BROKERS: redpanda:29092
       S3_ENDPOINT: http://seaweedfs:8333
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
@@ -527,6 +533,8 @@ services:
       REDIS_PASSWORD: ""
       REDIS_DB: "3"
       JWKS_URL: http://auth:8081/.well-known/jwks.json
+      # Sessions révoquées par auth, refusées par chaque service (ADR-0016).
+      REVOCATION_REDIS_URL: redis://redis:6379/15
       KAFKA_BROKERS: redpanda:29092
     ports:
       - "127.0.0.1:8085:8085"
@@ -587,6 +595,8 @@ services:
       REDIS_PASSWORD: ""
       REDIS_DB: "4"
       JWKS_URL: http://auth:8081/.well-known/jwks.json
+      # Sessions révoquées par auth, refusées par chaque service (ADR-0016).
+      REVOCATION_REDIS_URL: redis://redis:6379/15
       KAFKA_BROKERS: redpanda:29092
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_BUCKET: poro-videos
@@ -631,6 +641,8 @@ services:
       REDIS_PASSWORD: ""
       REDIS_DB: "7"
       JWKS_URL: http://auth:8081/.well-known/jwks.json
+      # Sessions révoquées par auth, refusées par chaque service (ADR-0016).
+      REVOCATION_REDIS_URL: redis://redis:6379/15
       KAFKA_BROKERS: redpanda:29092
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_BUCKET: poro-videos
@@ -681,6 +693,8 @@ services:
       DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_notification?sslmode=disable
       REDIS_URL: redis://redis:6379/5
       JWKS_URL: http://auth:8081/.well-known/jwks.json
+      # Sessions révoquées par auth, refusées par chaque service (ADR-0016).
+      REVOCATION_REDIS_URL: redis://redis:6379/15
       KAFKA_BROKERS: redpanda:29092
       # Compte de service Firebase en base64 ; vide = push désactivé, in-app seul.
       FCM_CREDENTIALS_B64: ${FCM_CREDENTIALS_B64:-}
@@ -730,6 +744,8 @@ services:
       DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_moderation?sslmode=disable
       REDIS_URL: redis://redis:6379/6
       JWKS_URL: http://auth:8081/.well-known/jwks.json
+      # Sessions révoquées par auth, refusées par chaque service (ADR-0016).
+      REVOCATION_REDIS_URL: redis://redis:6379/15
       KAFKA_BROKERS: redpanda:29092
     ports:
       - "127.0.0.1:8087:8087"
@@ -838,6 +854,8 @@ services:
       DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_shop?sslmode=disable
       REDIS_URL: redis://redis:6379/8
       JWKS_URL: http://auth:8081/.well-known/jwks.json
+      # Sessions révoquées par auth, refusées par chaque service (ADR-0016).
+      REVOCATION_REDIS_URL: redis://redis:6379/15
       KAFKA_BROKERS: redpanda:29092
       # Le service parle à SeaweedFS en interne ; les URLs signées pointent
       # vers l'adresse joignable par le client (poste de dev).
@@ -914,6 +932,8 @@ services:
       DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_order?sslmode=disable
       REDIS_URL: redis://redis:6379/9
       JWKS_URL: http://auth:8081/.well-known/jwks.json
+      # Sessions révoquées par auth, refusées par chaque service (ADR-0016).
+      REVOCATION_REDIS_URL: redis://redis:6379/15
       KAFKA_BROKERS: redpanda:29092
       # Wave sera activé avec le service payment.
       PAYMENT_METHODS: cash_on_delivery
