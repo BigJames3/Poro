@@ -77,8 +77,15 @@ func (c *Config) Validate() error {
 	var errs []error
 	switch c.AppEnv {
 	case EnvDev, EnvStaging, EnvProd:
+	case "":
+		// No default: a forgotten APP_ENV must not start a production
+		// service with the shortcuts of local development.
+		errs = append(errs, errors.New("APP_ENV is required: dev, staging or prod"))
 	default:
 		errs = append(errs, fmt.Errorf("APP_ENV must be dev, staging or prod, got %q", c.AppEnv))
+	}
+	if c.PostgresPassword == "" {
+		errs = append(errs, errors.New("POSTGRES_PASSWORD is required"))
 	}
 	if c.JWKSURL == "" {
 		errs = append(errs, errors.New("JWKS_URL is required"))
@@ -151,7 +158,6 @@ func Load() (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("APP_ENV", EnvDev)
 	v.SetDefault("APP_PORT", "8088")
 	v.SetDefault("LOG_LEVEL", "debug")
 	v.SetDefault("TRUSTED_PROXIES", "")
@@ -159,7 +165,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("POSTGRES_HOST", "localhost")
 	v.SetDefault("POSTGRES_PORT", "5433")
 	v.SetDefault("POSTGRES_USER", "poro")
-	v.SetDefault("POSTGRES_PASSWORD", "poro_dev_password")
 	v.SetDefault("POSTGRES_DB", "poro_search")
 	v.SetDefault("POSTGRES_SSLMODE", "disable")
 

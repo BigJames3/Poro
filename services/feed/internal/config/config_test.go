@@ -11,6 +11,7 @@ import (
 func TestValidate(t *testing.T) {
 	ok := func() *Config {
 		return &Config{
+			PostgresPassword: "secret",
 			AppEnv:           EnvDev,
 			JWKSURL:          "http://localhost:8081/.well-known/jwks.json",
 			KafkaBrokers:     []string{"localhost:9092"},
@@ -32,6 +33,8 @@ func TestValidate(t *testing.T) {
 		want   string
 	}{
 		{name: "unknown env", mutate: func(c *Config) { c.AppEnv = "production" }, want: "APP_ENV"},
+		{name: "missing env", mutate: func(c *Config) { c.AppEnv = "" }, want: "APP_ENV is required"},
+		{name: "missing postgres password", mutate: func(c *Config) { c.PostgresPassword = "" }, want: "POSTGRES_PASSWORD is required"},
 		{name: "missing jwks", mutate: func(c *Config) { c.JWKSURL = "" }, want: "JWKS_URL"},
 		{name: "missing kafka", mutate: func(c *Config) { c.KafkaBrokers = nil }, want: "KAFKA_BROKERS"},
 		{name: "missing public endpoint", mutate: func(c *Config) { c.S3PublicEndpoint = "" }, want: "S3_PUBLIC_ENDPOINT"},
@@ -58,6 +61,8 @@ func TestPostgresDSNEscapesCredentials(t *testing.T) {
 
 func TestLoadDefaultsAndEnv(t *testing.T) {
 	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", EnvDev)
+	t.Setenv("POSTGRES_PASSWORD", "secret")
 	t.Setenv("KAFKA_BROKERS", "a:9092, b:9092 ,")
 	t.Setenv("REDIS_DB", "5")
 	cfg, err := Load()
@@ -81,4 +86,15 @@ func TestLoadReadsDotEnvAndRejectsInvalid(t *testing.T) {
 func TestPublicObjectURL(t *testing.T) {
 	c := &Config{S3PublicEndpoint: "http://localhost:9000/", S3Bucket: "poro-videos"}
 	require.Equal(t, "http://localhost:9000/poro-videos/videos/u/v/thumb.jpg", c.PublicObjectURL("/videos/u/v/thumb.jpg"))
+}
+
+// A forgotten APP_ENV or database password stops the service instead of
+// starting it with the shortcuts of local development.
+func TestLoadRequiresAppEnvAndSecrets(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", "")
+	t.Setenv("POSTGRES_PASSWORD", "")
+	_, err := Load()
+	require.ErrorContains(t, err, "APP_ENV is required")
+	require.ErrorContains(t, err, "POSTGRES_PASSWORD is required")
 }

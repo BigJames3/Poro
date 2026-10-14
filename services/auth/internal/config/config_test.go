@@ -10,11 +10,12 @@ import (
 func TestValidate(t *testing.T) {
 	prod := func() *Config {
 		return &Config{
-			AppEnv:          EnvProd,
-			SMSProvider:     "log",
-			OtpSecret:       "0123456789abcdef0123456789abcdef",
-			PostgresSSLMode: "verify-full",
-			KafkaBrokers:    []string{"redpanda:9092"},
+			PostgresPassword: "secret",
+			AppEnv:           EnvProd,
+			SMSProvider:      "log",
+			OtpSecret:        "0123456789abcdef0123456789abcdef",
+			PostgresSSLMode:  "verify-full",
+			KafkaBrokers:     []string{"redpanda:9092"},
 
 			AccountDeletionGrace: "720h",
 			AccountPurgeInterval: "1h",
@@ -29,7 +30,7 @@ func TestValidate(t *testing.T) {
 	}
 
 	require.NoError(t, (&Config{
-		AppEnv: EnvDev, SMSProvider: SMSProviderLog, PostgresSSLMode: "disable", KafkaBrokers: []string{"localhost:9092"},
+		AppEnv: EnvDev, PostgresPassword: "secret", SMSProvider: SMSProviderLog, PostgresSSLMode: "disable", KafkaBrokers: []string{"localhost:9092"},
 		AccountDeletionGrace: "720h", AccountPurgeInterval: "1h",
 		EmailProvider: EmailProviderLog, EmailCodeTTL: "15m", EmailCodeMaxAttempts: 5,
 	}).Validate())
@@ -90,6 +91,7 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	require.NoError(t, os.Chdir(t.TempDir()))
 	t.Cleanup(func() { _ = os.Chdir(wd) })
 	t.Setenv("APP_ENV", EnvDev)
+	t.Setenv("POSTGRES_PASSWORD", "poro_dev_password")
 	t.Setenv("TRUSTED_PROXIES", " 10.0.0.0/8, ,172.16.0.1 ")
 	t.Setenv("OTP_MAX_REQUESTS_PER_HOUR", "7")
 
@@ -111,4 +113,15 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	t.Setenv("APP_ENV", EnvProd)
 	_, err = Load()
 	require.Error(t, err, "prod without a real SMS provider or secrets must not start")
+}
+
+// A forgotten APP_ENV or database password stops the service instead of
+// starting it with the shortcuts of local development.
+func TestLoadRequiresAppEnvAndSecrets(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", "")
+	t.Setenv("POSTGRES_PASSWORD", "")
+	_, err := Load()
+	require.ErrorContains(t, err, "APP_ENV is required")
+	require.ErrorContains(t, err, "POSTGRES_PASSWORD is required")
 }
