@@ -25,10 +25,16 @@ func TestValidate(t *testing.T) {
 
 	prod := ok()
 	prod.AppEnv = EnvProd
+	prod.RevocationRedisURL = "rediss://revocations.poro.internal:6380/0"
 	prod.PostgresSSLMode = "require"
 	prod.S3AccessKey = "k"
 	prod.S3SecretKey = "s"
 	require.NoError(t, prod.Validate())
+	prod.RevocationRedisURL = ""
+	require.ErrorContains(t, prod.Validate(), "REVOCATION_REDIS_URL is required outside dev")
+	prod.RevocationRedisURL = "http://redis:6379"
+	require.ErrorContains(t, prod.Validate(), "redis://")
+	prod.RevocationRedisURL = "rediss://revocations.poro.internal:6380/0"
 
 	cases := []struct {
 		name   string

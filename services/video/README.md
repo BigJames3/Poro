@@ -53,3 +53,11 @@ Postgres via testcontainers ; S3 via un serveur S3 en mémoire (`gofakes3`).
   aucune purge automatique.
 - En local, SeaweedFS n'a pas d'authentification : `poro-quarantine` y reste
   lisible. La protection repose sur un bucket privé en production.
+
+## Sessions révoquées
+
+Les access tokens des sessions révoquées par auth (déconnexion, « déconnecter les autres
+appareils », réinitialisation du mot de passe, suppression du compte, vol de refresh token) sont
+refusés grâce au registre partagé `REVOCATION_REDIS_URL`
+([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) : obligatoire hors dev,
+réponse `503` s'il ne répond pas.
