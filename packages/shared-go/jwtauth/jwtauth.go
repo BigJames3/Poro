@@ -1,7 +1,8 @@
 // Package jwtauth verifies Poro access tokens locally against the auth service JWKS.
 //
-// Verification is offline: a token revoked by logout stays accepted by other
-// services until it expires (15 minutes at most).
+// Signatures are checked offline. With a revocation registry (ADR-0016), the
+// tokens of a session revoked by auth (logout, "sign out other devices",
+// password reset, account deletion, stolen refresh token) are refused too.
 package jwtauth
 
 import (
@@ -32,6 +33,15 @@ const (
 // ErrInvalidToken is returned for any token that must be refused with 401.
 var ErrInvalidToken = errors.New("invalid token")
 
+// ErrRevocationUnavailable is returned when the revocation registry cannot be
+// read. The request is refused with 503: a revoked session is never accepted.
+var ErrRevocationUnavailable = errors.New("revocation registry unavailable")
+
+// Revocations tells whether a session was revoked.
+type Revocations interface {
+	IsRevoked(ctx context.Context, sessionID uuid.UUID) (bool, error)
+}
+
 // Claims is the verified identity of the caller.
 type Claims struct {
 	UserID    uuid.UUID
@@ -49,12 +59,17 @@ type Config struct {
 	JWKSURL    string
 	HTTPClient *http.Client  // defaults to a client with a 5 s timeout
 	MaxAge     time.Duration // defaults to 5 minutes, the auth Cache-Control max-age
+	// Revocations, when set, refuses the tokens of revoked sessions. Only a
+	// local development setup may leave it nil.
+	Revocations Revocations
 }
 
-// Verifier checks RS256 signature, issuer, audience and expiry.
+// Verifier checks RS256 signature, issuer, audience, expiry and, with a
+// registry, revocation.
 type Verifier struct {
-	keys   *keySet
-	parser *jwt.Parser
+	keys        *keySet
+	parser      *jwt.Parser
+	revocations Revocations
 }
 
 type accessClaims struct {
@@ -78,7 +93,8 @@ func NewVerifier(cfg Config) (*Verifier, error) {
 		maxAge = defaultMaxAge
 	}
 	return &Verifier{
-		keys: &keySet{url: cfg.JWKSURL, client: client, maxAge: maxAge, minGap: defaultMinGap, now: time.Now},
+		keys:        &keySet{url: cfg.JWKSURL, client: client, maxAge: maxAge, minGap: defaultMinGap, now: time.Now},
+		revocations: cfg.Revocations,
 		parser: jwt.NewParser(
 			jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}),
 			jwt.WithIssuer(Issuer),
@@ -89,7 +105,8 @@ func NewVerifier(cfg Config) (*Verifier, error) {
 }
 
 // Verify returns the claims of a valid token. It returns ErrKeysUnavailable
-// when the signing keys cannot be loaded, and ErrInvalidToken otherwise.
+// when the signing keys cannot be loaded, ErrRevocationUnavailable when the
+// revocation registry cannot be read, and ErrInvalidToken otherwise.
 func (v *Verifier) Verify(ctx context.Context, token string) (*Claims, error) {
 	var keyErr error
 	parsed, err := v.parser.ParseWithClaims(token, &accessClaims{}, func(t *jwt.Token) (any, error) {
@@ -121,6 +138,15 @@ func (v *Verifier) Verify(ctx context.Context, token string) (*Claims, error) {
 	}
 	if c.ID == "" {
 		return nil, fmt.Errorf("%w: missing jti", ErrInvalidToken)
+	}
+	if v.revocations != nil {
+		revoked, err := v.revocations.IsRevoked(ctx, sessionID)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrRevocationUnavailable, err)
+		}
+		if revoked {
+			return nil, fmt.Errorf("%w: session revoked", ErrInvalidToken)
+		}
 	}
 	return &Claims{
 		UserID:    userID,
@@ -164,7 +190,7 @@ func OptionalMiddleware(v *Verifier) fiber.Handler {
 
 func attachClaims(c *fiber.Ctx, v *Verifier, token string, unauthorized, unavailable *httpx.APIError) error {
 	claims, err := v.Verify(c.UserContext(), token)
-	if errors.Is(err, ErrKeysUnavailable) {
+	if errors.Is(err, ErrKeysUnavailable) || errors.Is(err, ErrRevocationUnavailable) {
 		return unavailable.WithCause(err)
 	}
 	if err != nil {
