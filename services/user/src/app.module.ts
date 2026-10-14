@@ -20,6 +20,7 @@ import { PrismaService } from './prisma/prisma.service';
 import { ProfilesController } from './profiles/profiles.controller';
 import { ProfilesService } from './profiles/profiles.service';
 import { REDIS_CLIENT, RedisModule } from './redis.module';
+import { RevocationModule } from './auth/revocations';
 import { UserCreatedConsumer } from './profiles/user-created.consumer';
 import { SERVICE_NAME, SERVICE_VERSION } from './version';
 
@@ -64,6 +65,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
       }),
     }),
     RedisModule,
+    RevocationModule,
     ThrottlerModule.forRootAsync({
       inject: [{ token: REDIS_CLIENT, optional: true }],
       useFactory: (redis?: Redis) => ({

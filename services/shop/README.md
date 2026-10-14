@@ -107,3 +107,11 @@ Postgres et Redpanda via testcontainers, S3 simulé. Couverture minimale 70 %.
 - Une boutique fermée garde ses produits ; ils redeviennent visibles à la
   réouverture.
 - Les produits ne sont pas encore cherchables : search ne les indexe pas.
+
+## Sessions révoquées
+
+Les access tokens des sessions révoquées par auth (déconnexion, « déconnecter les autres
+appareils », réinitialisation du mot de passe, suppression du compte, vol de refresh token) sont
+refusés grâce au registre partagé `REVOCATION_REDIS_URL`
+([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) : obligatoire hors dev,
+réponse `503` s'il ne répond pas.

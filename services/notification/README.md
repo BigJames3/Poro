@@ -105,6 +105,7 @@ Voir `.env.example`.
 | `DATABASE_URL` | — | `poro_notification` ; hors `dev`, `sslmode=require` ou `verify-*` |
 | `REDIS_URL` | — | Compteurs de limite de débit (DB 5) ; obligatoire hors `dev` |
 | `JWKS_URL` | `http://localhost:8081/.well-known/jwks.json` | Clés publiques d'auth |
+| `REVOCATION_REDIS_URL` | *(vide en dev)* | Registre des sessions révoquées par auth ([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) ; obligatoire hors dev, 503 s'il ne répond pas |
 | `KAFKA_BROKERS` | `localhost:9092` | Brokers Redpanda/Kafka |
 | `KAFKA_CONSUMER_ENABLED` | `true` | `false` : HTTP seul |
 | `FCM_CREDENTIALS_B64` | vide | JSON du compte de service Firebase en base64 ; vide = push désactivé |
