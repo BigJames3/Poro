@@ -11,6 +11,7 @@ import httpx
 import jwt
 from jwt.algorithms import RSAAlgorithm
 
+from moderation.http.revocations import RedisRevocations
 from moderation.ids import parse_uuid
 
 ISSUER = "poro-auth"
@@ -110,8 +111,12 @@ class JwksKeyStore:
 
 
 class TokenVerifier:
-    def __init__(self, keys: JwksKeyStore) -> None:
+    """With a registry, refuses the tokens of the sessions auth revoked
+    (ADR-0016). Only a dev service started on its own runs without one."""
+
+    def __init__(self, keys: JwksKeyStore, revocations: RedisRevocations | None = None) -> None:
         self._keys = keys
+        self._revocations = revocations
 
     async def verify(self, token: str) -> Principal:
         try:
@@ -138,4 +143,7 @@ class TokenVerifier:
         roles = claims.get("roles")
         if user_id is None or not isinstance(roles, list) or not all(isinstance(r, str) for r in roles):
             raise InvalidTokenError("malformed claims")
-        return Principal(user_id, frozenset(roles), str(claims["sid"]))
+        session_id = str(claims["sid"])
+        if self._revocations is not None and await self._revocations.is_revoked(session_id):
+            raise InvalidTokenError("session revoked")
+        return Principal(user_id, frozenset(roles), session_id)

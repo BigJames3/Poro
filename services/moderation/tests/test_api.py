@@ -2,9 +2,11 @@
 
 from typing import Any
 
+import fakeredis
 import httpx
 from fastapi import FastAPI
 
+from moderation.http.revocations import KEY_PREFIX, RedisRevocations
 from moderation.ids import uuid7
 from tests.conftest import Keys
 
@@ -183,3 +185,31 @@ async def test_jwks_outage(app: FastAPI, http: httpx.AsyncClient, keys: Keys) ->
     finally:
         keys.status = 200
         app.state.verifier._keys._last_attempt = float("-inf")
+
+
+async def test_revoked_sessions(app: FastAPI, http: httpx.AsyncClient, keys: Keys) -> None:
+    """Auth revoked the session: its access tokens are refused (ADR-0016), and
+    a registry that cannot be read answers 503 rather than accept them."""
+    server = fakeredis.FakeServer()
+    writer = fakeredis.FakeAsyncRedis(server=server)
+    verifier = app.state.verifier
+    verifier._revocations = RedisRevocations(fakeredis.FakeAsyncRedis(server=server))
+    try:
+        revoked = str(uuid7())
+        token = keys.token(roles=MOD, sid=revoked)
+        assert (await http.get("/api/v1/moderation/cases", headers=bearer(token))).status_code == 200
+
+        await writer.set(KEY_PREFIX + revoked, "1", ex=960)
+        refused = await http.get("/api/v1/moderation/cases", headers=bearer(token))
+        assert refused.status_code == 401
+        assert refused.json()["error"]["code"] == "unauthorized"
+        other = keys.token(roles=MOD)
+        assert (await http.get("/api/v1/moderation/cases", headers=bearer(other))).status_code == 200
+
+        server.connected = False
+        down = await http.get("/api/v1/moderation/cases", headers=bearer(other))
+        assert down.status_code == 503
+        assert down.json()["error"]["code"] == "unavailable"
+    finally:
+        verifier._revocations = None
+        await writer.aclose()

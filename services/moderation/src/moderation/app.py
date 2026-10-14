@@ -17,6 +17,7 @@ from moderation.http.errors import RequestIdMiddleware, install_error_handlers
 from moderation.http.jwks import JwksKeyStore, TokenVerifier
 from moderation.http.metrics import MetricsMiddleware
 from moderation.http.ratelimit import Limiter, MemoryLimiter, RedisLimiter
+from moderation.http.revocations import RedisRevocations
 from moderation.rules.engine import RuleEngine
 from moderation.scanner import GROUP, TOPICS, Scanner
 
@@ -38,7 +39,14 @@ def create_app(config: Config, http_client: httpx.AsyncClient | None = None) -> 
         app.state.sessions = session_factory(engine)
         app.state.redis = redis
         app.state.limiter = limiter
-        app.state.verifier = TokenVerifier(JwksKeyStore(config.jwks_url, client))
+        revocations = None
+        if config.revocation_redis_url is None:
+            log.warning(
+                "REVOCATION_REDIS_URL is not set: revoked sessions stay accepted until their tokens expire"
+            )
+        else:
+            revocations = RedisRevocations.connect(config.revocation_redis_url)
+        app.state.verifier = TokenVerifier(JwksKeyStore(config.jwks_url, client), revocations)
         app.state.scanner = Scanner(app.state.sessions, rules)
         consumer = None
         if config.kafka_consumer_enabled:
@@ -55,6 +63,8 @@ def create_app(config: Config, http_client: httpx.AsyncClient | None = None) -> 
                 await client.aclose()
             if redis is not None:
                 await redis.aclose()
+            if revocations is not None:
+                await revocations.close()
             await engine.dispose()
 
     app = FastAPI(
