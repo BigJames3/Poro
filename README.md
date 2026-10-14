@@ -22,6 +22,10 @@ Copy-Item .env.example .env
 docker compose up -d
 ```
 
+Chaque service exige `APP_ENV` (`dev`, `staging` ou `prod`) et ses secrets (mot de passe Postgres,
+clés S3) : aucune valeur par défaut dans le code, pour qu'un oubli ne lance jamais la production
+en mode dev. Compose les fournit ; pour lancer un service seul, copier son `.env.example`.
+
 Services : Postgres (une base par service), Redis, SeaweedFS, Redpanda (topics + DLQ),
 les services de l'API et leurs relais outbox. ClickHouse/Qdrant :
 `docker compose --profile analytics up -d`.

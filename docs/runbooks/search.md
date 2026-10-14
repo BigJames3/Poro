@@ -34,3 +34,10 @@ Voir le seuil de bascule vers OpenSearch dans
 [ADR-0011](../architecture/adr/0011-search-postgres-v1.md) (p95 > 200 ms).
 Vérifier d'abord les plans : `EXPLAIN ANALYZE` doit utiliser
 `videos_document_idx` ou `videos_title_trgm_idx`.
+
+## Démarrage refusé : `APP_ENV is required`
+
+`APP_ENV` n'a pas de valeur par défaut, pas plus que le mot de passe Postgres ou les clés S3 :
+un oubli arrête le service au lieu de le lancer avec les raccourcis du mode dev (TLS facultatif,
+Redis facultatif, secrets de développement). Fixer `APP_ENV=dev`, `staging` ou `prod` et fournir
+les secrets (compose, `.env` copié de `.env.example`, ou gestionnaire de secrets).

@@ -13,6 +13,7 @@ Le démarrage est volontairement strict. Lire la première ligne `fatal` des log
 
 | Message | Cause | Action |
 |---|---|---|
+| `invalid config: APP_ENV is required …` / `POSTGRES_PASSWORD is required` | variable absente : aucune valeur par défaut, pour qu'un oubli ne lance pas la production en mode dev | fixer `APP_ENV=dev`, `staging` ou `prod` et fournir le mot de passe (compose, `.env` ou gestionnaire de secrets) |
 | `invalid config: OTP_HMAC_SECRET …` | secret absent ou < 32 octets hors dev | générer : `openssl rand -base64 48`, le stocker dans le gestionnaire de secrets |
 | `invalid config: SMS_PROVIDER=log …` | fournisseur de dev hors dev | configurer un fournisseur réel (non encore intégré : staging/prod bloqués) |
 | `invalid config: POSTGRES_SSLMODE …` | TLS désactivé hors dev | `require` ou `verify-full` |

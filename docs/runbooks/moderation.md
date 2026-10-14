@@ -37,3 +37,10 @@ v1. Corriger ensuite la liste de termes.
 
 Les tables croissent avec les signalements et les textes vus ; aucune purge
 n'existe encore en v1. Le relais purge l'outbox publiée.
+
+## Démarrage refusé : `APP_ENV is required`
+
+`APP_ENV` n'a pas de valeur par défaut, pas plus que le mot de passe Postgres ou les clés S3 :
+un oubli arrête le service au lieu de le lancer avec les raccourcis du mode dev (TLS facultatif,
+Redis facultatif, secrets de développement). Fixer `APP_ENV=dev`, `staging` ou `prod` et fournir
+les secrets (compose, `.env` copié de `.env.example`, ou gestionnaire de secrets).
