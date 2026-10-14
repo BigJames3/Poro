@@ -58,6 +58,10 @@ type Config struct {
 	RedisPassword string
 	RedisDB       int // 0
 
+	// RevocationRedisURL is the registry of revoked sessions shared with every
+	// service (ADR-0016). Auth writes it, so it is always required.
+	RevocationRedisURL string
+
 	// JWT
 	JWTPrivateKeyPath    string // ./keys/private.pem
 	JWTPublicKeyPath     string // ./keys/public.pem
@@ -117,6 +121,10 @@ func (c *Config) RedisAddr() string {
 	return net.JoinHostPort(c.RedisHost, c.RedisPort)
 }
 
+// DevRevocationRedisURL is the registry of a local development setup: the
+// Compose Redis, database 15. Outside dev, REVOCATION_REDIS_URL must be set.
+const DevRevocationRedisURL = "redis://localhost:6380/15"
+
 // IsDev reports whether the service runs in the local development environment.
 func (c *Config) IsDev() bool {
 	return c.AppEnv == EnvDev
@@ -169,6 +177,9 @@ func (c *Config) Validate() error {
 	}
 	if len(c.KafkaBrokers) == 0 {
 		errs = append(errs, errors.New("KAFKA_BROKERS is required"))
+	}
+	if u, err := url.Parse(c.RevocationRedisURL); err != nil || (u.Scheme != "redis" && u.Scheme != "rediss") || u.Host == "" {
+		errs = append(errs, errors.New("REVOCATION_REDIS_URL must be a redis:// or rediss:// URL"))
 	}
 	for _, code := range c.OtpAllowedCallingCodes {
 		if !callingCodePattern.MatchString(code) {
@@ -233,6 +244,8 @@ func Load() (*Config, error) {
 		RedisPassword: v.GetString("REDIS_PASSWORD"),
 		RedisDB:       v.GetInt("REDIS_DB"),
 
+		RevocationRedisURL: v.GetString("REVOCATION_REDIS_URL"),
+
 		JWTPrivateKeyPath:    v.GetString("JWT_PRIVATE_KEY_PATH"),
 		JWTPublicKeyPath:     v.GetString("JWT_PUBLIC_KEY_PATH"),
 		JWTAccessTTL:         v.GetString("JWT_ACCESS_TTL"),
@@ -267,6 +280,9 @@ func Load() (*Config, error) {
 		OtelEndpoint: v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),
 	}
 
+	if cfg.RevocationRedisURL == "" && cfg.IsDev() {
+		cfg.RevocationRedisURL = DevRevocationRedisURL
+	}
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}

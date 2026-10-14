@@ -20,6 +20,7 @@ import (
 	"github.com/poro/shared-go/kafka"
 	"github.com/poro/shared-go/logging"
 	"github.com/poro/shared-go/metrics"
+	"github.com/poro/shared-go/revocation"
 	"github.com/poro/shared-go/tracing"
 
 	"github.com/poro/auth/internal/config"
@@ -81,7 +82,15 @@ func run() error {
 	}
 	defer func() { _ = rdb.Close() }()
 
-	tokens, err := service.NewTokenService(cfg, rdb)
+	registry, err := revocation.Open(cfg.RevocationRedisURL)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = registry.Close() }()
+	if err := registry.Ping(ctx); err != nil {
+		return err
+	}
+	tokens, err := service.NewTokenService(cfg, registry)
 	if err != nil {
 		return fmt.Errorf("init token service: %w", err)
 	}
@@ -119,7 +128,7 @@ func run() error {
 		return fmt.Errorf("init email sender: %w", err)
 	}
 	emailCodes := repository.NewEmailCodeRepository(pool)
-	emailSvc, err := service.NewEmailService(cfg, users, emailCodes, emailThrottle, emailSender, log)
+	emailSvc, err := service.NewEmailService(cfg, users, emailCodes, emailThrottle, emailSender, accountSvc, log)
 	if err != nil {
 		return fmt.Errorf("init email service: %w", err)
 	}
@@ -156,8 +165,9 @@ func run() error {
 		Account: handler.NewAccountHandler(accountSvc),
 		// Kafka is left out: sign-in keeps working while the broker is down.
 		Health: health.New("auth", version, map[string]health.Check{
-			"postgres": pool.Ping,
-			"redis":    func(ctx context.Context) error { return rdb.Ping(ctx).Err() },
+			"postgres":   pool.Ping,
+			"redis":      func(ctx context.Context) error { return rdb.Ping(ctx).Err() },
+			"revocation": registry.Ping,
 		}),
 		Metrics: m.Handler(),
 		JWKS:    handler.NewJWKSHandler(tokens),

@@ -160,6 +160,7 @@ type stubAccounts struct {
 	revokeOthers  func(context.Context, service.TokenClaims) (*dto.RevokeSessionsResponse, error)
 	deleteAccount func(context.Context, service.TokenClaims, dto.DeleteAccountRequest) (*dto.DeletionResponse, error)
 	cancel        func(context.Context, service.TokenClaims) (*dto.UserResponse, error)
+	service.SessionRevoker
 }
 
 func (s *stubAccounts) Sessions(ctx context.Context, c service.TokenClaims) ([]dto.SessionResponse, error) {

@@ -26,6 +26,7 @@ import (
 
 	"github.com/poro/shared-go/health"
 	"github.com/poro/shared-go/httpx"
+	"github.com/poro/shared-go/revocation"
 
 	"github.com/poro/auth/internal/config"
 	"github.com/poro/auth/internal/handler"
@@ -88,7 +89,10 @@ func TestEmailAccountLifecycle(t *testing.T) {
 		EmailCodeTTL: "15m", EmailCodeMaxAttempts: 5,
 	}
 	cfg.JWTPrivateKeyPath, cfg.JWTPublicKeyPath = writeKeys(t)
-	tokens, err := service.NewTokenService(cfg, rdb)
+	registry, err := revocation.Open("redis://" + mr.Addr() + "/15")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = registry.Close() })
+	tokens, err := service.NewTokenService(cfg, registry)
 	require.NoError(t, err)
 	otpThrottle, err := service.NewRedisOTPThrottle(cfg, rdb)
 	require.NoError(t, err)
@@ -103,7 +107,7 @@ func TestEmailAccountLifecycle(t *testing.T) {
 	accounts, err := service.NewAccountService(users, refresh, otp, tokens, 720*time.Hour, log)
 	require.NoError(t, err)
 	mails := &mailbox{got: make(chan struct{}, 10)}
-	emails, err := service.NewEmailService(cfg, users, repository.NewEmailCodeRepository(pool), emailThrottle, mails, log)
+	emails, err := service.NewEmailService(cfg, users, repository.NewEmailCodeRepository(pool), emailThrottle, mails, accounts, log)
 	require.NoError(t, err)
 
 	app := fiber.New(fiber.Config{ErrorHandler: httpx.ErrorHandler(log)})
@@ -149,6 +153,22 @@ func TestEmailAccountLifecycle(t *testing.T) {
 	require.Equal(t, "Tecno Spark 20", list[0]["device"])
 	require.Equal(t, true, list[0]["current"])
 
+	// "Sign out other devices" refuses their access tokens at once, not only
+	// their refresh tokens.
+	status, body = api.call(http.MethodPost, "/api/v1/auth/email/login", "",
+		`{"email":"awa.kone@poro.test","password":"premier-mdp","device_name":"Itel A70"}`)
+	require.Equal(t, http.StatusOK, status)
+	secondDevice := body["access_token"].(string)
+	status, _ = api.call(http.MethodGet, "/api/v1/auth/me", secondDevice, "")
+	require.Equal(t, http.StatusOK, status)
+	status, body = api.call(http.MethodPost, "/api/v1/auth/sessions/revoke-others", access, "")
+	require.Equal(t, http.StatusOK, status)
+	require.EqualValues(t, 1, body["revoked"])
+	status, _ = api.call(http.MethodGet, "/api/v1/auth/me", secondDevice, "")
+	require.Equal(t, http.StatusUnauthorized, status, "the other device's access token is refused")
+	status, _ = api.call(http.MethodGet, "/api/v1/auth/me", access, "")
+	require.Equal(t, http.StatusOK, status, "the caller stays signed in")
+
 	// Forgotten password: an unknown address gets the same answer and no email.
 	sentBefore := mails.count()
 	status, _ = api.call(http.MethodPost, "/api/v1/auth/email/password/forgot", "", `{"email":"nobody@poro.test"}`)
@@ -170,6 +190,8 @@ func TestEmailAccountLifecycle(t *testing.T) {
 	status, body = api.call(http.MethodPost, "/api/v1/auth/refresh", "", `{"refresh_token":"`+firstRefresh+`"}`)
 	require.Equal(t, http.StatusUnauthorized, status, "the reset signed every device out")
 	require.Equal(t, "refresh_token_invalid", body["code"])
+	status, _ = api.call(http.MethodGet, "/api/v1/auth/me", access, "")
+	require.Equal(t, http.StatusUnauthorized, status, "including the access tokens issued before the reset")
 	status, _ = api.call(http.MethodPost, "/api/v1/auth/email/login", "", `{"email":"awa.kone@poro.test","password":"premier-mdp"}`)
 	require.Equal(t, http.StatusUnauthorized, status)
 	status, body = api.call(http.MethodPost, "/api/v1/auth/email/login", "", `{"email":"awa.kone@poro.test","password":"second-mdp"}`)
@@ -180,6 +202,8 @@ func TestEmailAccountLifecycle(t *testing.T) {
 	status, body = api.call(http.MethodPost, "/api/v1/auth/me/delete", access, `{"password":"second-mdp"}`)
 	require.Equal(t, http.StatusAccepted, status)
 	require.NotEmpty(t, body["deletion_scheduled_at"])
+	status, _ = api.call(http.MethodGet, "/api/v1/auth/me", access, "")
+	require.Equal(t, http.StatusUnauthorized, status, "a deletion request signs every device out at once")
 	status, body = api.call(http.MethodPost, "/api/v1/auth/email/login", "", `{"email":"awa.kone@poro.test","password":"second-mdp"}`)
 	require.Equal(t, http.StatusOK, status)
 	require.Equal(t, true, body["deletion_cancelled"])
