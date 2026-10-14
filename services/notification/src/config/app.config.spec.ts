@@ -23,6 +23,7 @@ const serviceAccount = {
 describe('loadConfig', () => {
   it('has safe dev defaults', () => {
     const config = loadConfig({
+      APP_ENV: 'dev',
       DATABASE_URL: 'postgresql://poro:x@localhost:5433/poro_notification',
     });
     expect(config).toMatchObject({
@@ -59,6 +60,12 @@ describe('loadConfig', () => {
     expect(config.retentionDays).toBe(30);
     expect(config.purgeEnabled).toBe(false);
     expect(loadConfig({ ...prod, TRUST_PROXY: 'loopback' }).trustProxy).toBe('loopback');
+  });
+
+  it.each([undefined, '', '  '])('refuses to start with APP_ENV %p', (appEnv) => {
+    expect(() => loadConfig({ ...prod, APP_ENV: appEnv })).toThrow(
+      'APP_ENV is required: dev, staging or prod',
+    );
   });
 
   it.each([

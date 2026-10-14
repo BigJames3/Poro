@@ -12,7 +12,10 @@ const prod = {
 
 describe('loadConfig', () => {
   it('has safe dev defaults', () => {
-    const config = loadConfig({ DATABASE_URL: 'postgresql://poro:x@localhost:5433/poro_order' });
+    const config = loadConfig({
+      APP_ENV: 'dev',
+      DATABASE_URL: 'postgresql://poro:x@localhost:5433/poro_order',
+    });
     expect(config).toMatchObject({
       env: 'dev',
       port: 8091,
@@ -43,6 +46,12 @@ describe('loadConfig', () => {
     expect(config.logLevel).toBe('info');
     expect(config.paymentMethods).toEqual(['cash_on_delivery', 'wave']);
     expect(loadConfig({ ...prod, TRUST_PROXY: 'loopback' }).trustProxy).toBe('loopback');
+  });
+
+  it.each([undefined, '', '  '])('refuses to start with APP_ENV %p', (appEnv) => {
+    expect(() => loadConfig({ ...prod, APP_ENV: appEnv })).toThrow(
+      'APP_ENV is required: dev, staging or prod',
+    );
   });
 
   it.each([
