@@ -44,7 +44,12 @@ type Config struct {
 	S3Endpoint       string
 	S3PublicEndpoint string
 	S3Region         string
-	S3Bucket         string
+	// S3Bucket is the publicly readable media bucket: HLS renditions and
+	// thumbnails only.
+	S3Bucket string
+	// S3SourceBucket holds the original uploads. It must not be publicly
+	// readable.
+	S3SourceBucket string
 	// S3QuarantineBucket holds the media of removed and deleted videos. It
 	// must not be publicly readable.
 	S3QuarantineBucket string
@@ -105,6 +110,9 @@ func (c *Config) Validate() error {
 	}
 	if c.S3QuarantineBucket == "" || c.S3QuarantineBucket == c.S3Bucket {
 		errs = append(errs, errors.New("S3_QUARANTINE_BUCKET is required and must differ from S3_BUCKET"))
+	}
+	if c.S3SourceBucket == "" || c.S3SourceBucket == c.S3Bucket {
+		errs = append(errs, errors.New("S3_SOURCE_BUCKET is required and must differ from S3_BUCKET"))
 	}
 	if c.S3PublicEndpoint == "" {
 		errs = append(errs, errors.New("S3_PUBLIC_ENDPOINT is required"))
@@ -168,6 +176,7 @@ func Load() (*Config, error) {
 		S3PublicEndpoint:   v.GetString("S3_PUBLIC_ENDPOINT"),
 		S3Region:           v.GetString("S3_REGION"),
 		S3Bucket:           v.GetString("S3_BUCKET"),
+		S3SourceBucket:     v.GetString("S3_SOURCE_BUCKET"),
 		S3QuarantineBucket: v.GetString("S3_QUARANTINE_BUCKET"),
 		S3AccessKey:        v.GetString("S3_ACCESS_KEY_ID"),
 		S3SecretKey:        v.GetString("S3_SECRET_ACCESS_KEY"),
@@ -208,6 +217,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("S3_PUBLIC_ENDPOINT", "http://localhost:9000")
 	v.SetDefault("S3_REGION", "us-east-1")
 	v.SetDefault("S3_BUCKET", "poro-videos")
+	v.SetDefault("S3_SOURCE_BUCKET", "poro-video-sources")
 	v.SetDefault("S3_QUARANTINE_BUCKET", "poro-quarantine")
 	v.SetDefault("S3_ACCESS_KEY_ID", "poro_dev")
 	v.SetDefault("S3_SECRET_ACCESS_KEY", "poro_dev_secret")

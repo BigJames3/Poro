@@ -15,13 +15,17 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"github.com/poro/video/internal/config"
+	"github.com/poro/video/internal/model"
 )
 
 // S3 talks to a path-style S3-compatible store (SeaweedFS in development).
+// Sources go to a private bucket; only HLS renditions and thumbnails go to the
+// public media bucket.
 type S3 struct {
 	internal   *s3.Client
 	presign    *s3.PresignClient
-	bucket     string
+	sources    string
+	media      string
 	quarantine string
 }
 
@@ -39,7 +43,8 @@ func NewS3(ctx context.Context, cfg *config.Config) (*S3, error) {
 	return &S3{
 		internal:   internal,
 		presign:    s3.NewPresignClient(public),
-		bucket:     cfg.S3Bucket,
+		sources:    cfg.S3SourceBucket,
+		media:      cfg.S3Bucket,
 		quarantine: cfg.S3QuarantineBucket,
 	}, nil
 }
@@ -60,7 +65,7 @@ func s3Client(ctx context.Context, cfg *config.Config, endpoint string) (*s3.Cli
 
 func (s *S3) CreateMultipart(ctx context.Context, key, contentType string) (string, error) {
 	out, err := s.internal.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{
-		Bucket:      aws.String(s.bucket),
+		Bucket:      aws.String(s.sources),
 		Key:         aws.String(key),
 		ContentType: aws.String(contentType),
 	})
@@ -72,7 +77,7 @@ func (s *S3) CreateMultipart(ctx context.Context, key, contentType string) (stri
 
 func (s *S3) PresignPart(ctx context.Context, key, uploadID string, part int32) (string, error) {
 	out, err := s.presign.PresignUploadPart(ctx, &s3.UploadPartInput{
-		Bucket:     aws.String(s.bucket),
+		Bucket:     aws.String(s.sources),
 		Key:        aws.String(key),
 		UploadId:   aws.String(uploadID),
 		PartNumber: aws.Int32(part),
@@ -92,7 +97,7 @@ func (s *S3) CompleteMultipart(ctx context.Context, key, uploadID string, parts 
 		completed[i] = types.CompletedPart{ETag: aws.String(etag), PartNumber: aws.Int32(p.Number)}
 	}
 	_, err := s.internal.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
-		Bucket:   aws.String(s.bucket),
+		Bucket:   aws.String(s.sources),
 		Key:      aws.String(key),
 		UploadId: aws.String(uploadID),
 		MultipartUpload: &types.CompletedMultipartUpload{
@@ -107,7 +112,7 @@ func (s *S3) CompleteMultipart(ctx context.Context, key, uploadID string, parts 
 
 func (s *S3) AbortMultipart(ctx context.Context, key, uploadID string) error {
 	_, err := s.internal.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
-		Bucket:   aws.String(s.bucket),
+		Bucket:   aws.String(s.sources),
 		Key:      aws.String(key),
 		UploadId: aws.String(uploadID),
 	})
@@ -117,9 +122,9 @@ func (s *S3) AbortMultipart(ctx context.Context, key, uploadID string) error {
 	return nil
 }
 
-func (s *S3) Head(ctx context.Context, key string) (Object, error) {
+func (s *S3) HeadSource(ctx context.Context, key string) (Object, error) {
 	out, err := s.internal.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(s.bucket),
+		Bucket: aws.String(s.sources),
 		Key:    aws.String(key),
 	})
 	if err != nil {
@@ -128,9 +133,9 @@ func (s *S3) Head(ctx context.Context, key string) (Object, error) {
 	return Object{Size: aws.ToInt64(out.ContentLength)}, nil
 }
 
-func (s *S3) GetRange(ctx context.Context, key string, start, end int64) ([]byte, error) {
+func (s *S3) GetSourceRange(ctx context.Context, key string, start, end int64) ([]byte, error) {
 	out, err := s.internal.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
+		Bucket: aws.String(s.sources),
 		Key:    aws.String(key),
 		Range:  aws.String(fmt.Sprintf("bytes=%d-%d", start, end)),
 	})
@@ -141,9 +146,9 @@ func (s *S3) GetRange(ctx context.Context, key string, start, end int64) ([]byte
 	return io.ReadAll(io.LimitReader(out.Body, 64<<10))
 }
 
-func (s *S3) Get(ctx context.Context, key string, dest io.Writer) error {
+func (s *S3) GetSource(ctx context.Context, key string, dest io.Writer) error {
 	out, err := s.internal.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
+		Bucket: aws.String(s.sources),
 		Key:    aws.String(key),
 	})
 	if err != nil {
@@ -154,9 +159,9 @@ func (s *S3) Get(ctx context.Context, key string, dest io.Writer) error {
 	return err
 }
 
-func (s *S3) Put(ctx context.Context, key, contentType string, body io.Reader) error {
+func (s *S3) PutMedia(ctx context.Context, key, contentType string, body io.Reader) error {
 	_, err := s.internal.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(s.bucket),
+		Bucket:      aws.String(s.media),
 		Key:         aws.String(key),
 		Body:        body,
 		ContentType: aws.String(contentType),
@@ -167,9 +172,9 @@ func (s *S3) Put(ctx context.Context, key, contentType string, body io.Reader) e
 	return nil
 }
 
-func (s *S3) Delete(ctx context.Context, key string) error {
+func (s *S3) DeleteSource(ctx context.Context, key string) error {
 	_, err := s.internal.DeleteObject(ctx, &s3.DeleteObjectInput{
-		Bucket: aws.String(s.bucket),
+		Bucket: aws.String(s.sources),
 		Key:    aws.String(key),
 	})
 	if err != nil {
@@ -179,16 +184,35 @@ func (s *S3) Delete(ctx context.Context, key string) error {
 }
 
 func (s *S3) Hide(ctx context.Context, prefix string) (int, error) {
-	return s.move(ctx, s.bucket, s.quarantine, prefix)
+	return s.move(ctx, s.media, s.quarantine, prefix)
 }
 
 func (s *S3) Reveal(ctx context.Context, prefix string) (int, error) {
-	return s.move(ctx, s.quarantine, s.bucket, prefix)
+	return s.move(ctx, s.quarantine, s.media, prefix)
 }
 
 // move copies then deletes each object, so an interrupted move leaves every
 // object in at least one bucket and a retry finishes it.
 func (s *S3) move(ctx context.Context, from, to, prefix string) (int, error) {
+	return s.moveMatching(ctx, from, to, prefix, func(string) bool { return true })
+}
+
+// MoveLegacySources moves the source objects that predate the private source
+// bucket out of the media and quarantine buckets. It is idempotent and
+// returns how many objects moved.
+func (s *S3) MoveLegacySources(ctx context.Context) (int, error) {
+	total := 0
+	for _, from := range []string{s.media, s.quarantine} {
+		n, err := s.moveMatching(ctx, from, s.sources, model.MediaRoot, model.IsSourceKey)
+		total += n
+		if err != nil {
+			return total, err
+		}
+	}
+	return total, nil
+}
+
+func (s *S3) moveMatching(ctx context.Context, from, to, prefix string, match func(string) bool) (int, error) {
 	moved := 0
 	pages := s3.NewListObjectsV2Paginator(s.internal, &s3.ListObjectsV2Input{
 		Bucket: aws.String(from),
@@ -201,6 +225,9 @@ func (s *S3) move(ctx context.Context, from, to, prefix string) (int, error) {
 		}
 		for _, obj := range page.Contents {
 			key := aws.ToString(obj.Key)
+			if !match(key) {
+				continue
+			}
 			if _, err := s.internal.CopyObject(ctx, &s3.CopyObjectInput{
 				Bucket:     aws.String(to),
 				Key:        aws.String(key),

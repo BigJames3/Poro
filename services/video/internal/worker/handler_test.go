@@ -89,7 +89,7 @@ func TestHandlerMarksReady(t *testing.T) {
 	seedProcessing(t, user, id)
 	mem := storage.NewMemory()
 	key := model.SourceKey(user.String(), id.String(), "mp4")
-	require.NoError(t, mem.Put(ctx, key, "video/mp4", bytes.NewReader([]byte("src"))))
+	mem.PutSource(key, []byte("src"))
 
 	h := worker.New(testdb.Pool, repository.New(testdb.Pool), mem, fakeFF{}, zap.NewNop())
 	env := uploadedEnv(t, user, id, key)
@@ -101,6 +101,8 @@ func TestHandlerMarksReady(t *testing.T) {
 	require.NotNil(t, got.HLSKey)
 	require.NotEmpty(t, mem.Bytes(*got.HLSKey))
 	require.NotEmpty(t, mem.Bytes(*got.ThumbnailKey))
+	require.True(t, mem.HasSource(key), "the source is kept, privately")
+	require.False(t, mem.Has(key), "the source never becomes public")
 
 	var n int
 	require.NoError(t, testdb.Pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events WHERE topic = $1 AND event_key = $2`,
@@ -129,7 +131,7 @@ func TestHandlerMarksFailedTooLong(t *testing.T) {
 	seedProcessing(t, user, id)
 	mem := storage.NewMemory()
 	key := model.SourceKey(user.String(), id.String(), "mp4")
-	require.NoError(t, mem.Put(ctx, key, "video/mp4", bytes.NewReader([]byte("src"))))
+	mem.PutSource(key, []byte("src"))
 
 	h := worker.New(testdb.Pool, repository.New(testdb.Pool), mem, fakeFF{err: transcode.ErrTooLong}, zap.NewNop())
 	require.NoError(t, h.Handle(ctx, uploadedEnv(t, user, id, key)))
@@ -172,7 +174,7 @@ func TestMediaOfAVideoWithdrawnDuringTranscodeAreQuarantined(t *testing.T) {
 			seedProcessing(t, user, id)
 			mem := storage.NewMemory()
 			key := model.SourceKey(user.String(), id.String(), "mp4")
-			require.NoError(t, mem.Put(ctx, key, "video/mp4", bytes.NewReader([]byte("src"))))
+			mem.PutSource(key, []byte("src"))
 			ff := slowFF{during: func() { withdraw(user, id) }}
 			h := worker.New(testdb.Pool, repo, mem, ff, zap.NewNop())
 			require.NoError(t, h.Handle(ctx, uploadedEnv(t, user, id, key)))
@@ -191,7 +193,7 @@ func TestHideIfWithdrawnLeavesApprovedVideosAlone(t *testing.T) {
 	seedProcessing(t, user, id)
 	mem := storage.NewMemory()
 	thumb := model.ThumbKey(user.String(), id.String())
-	require.NoError(t, mem.Put(ctx, thumb, "image/jpeg", bytes.NewReader([]byte("jpg"))))
+	require.NoError(t, mem.PutMedia(ctx, thumb, "image/jpeg", bytes.NewReader([]byte("jpg"))))
 	h := worker.New(testdb.Pool, repository.New(testdb.Pool), mem, fakeFF{}, zap.NewNop())
 	require.NoError(t, h.HideIfWithdrawn(ctx, id))
 	require.True(t, mem.Has(thumb))

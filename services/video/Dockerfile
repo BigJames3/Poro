@@ -10,7 +10,8 @@ WORKDIR /src/services/video
 RUN go mod download
 
 COPY services/video /src/services/video
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/video ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/video ./cmd/server \
+ && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/storage-migrate ./cmd/storage-migrate
 
 FROM alpine:3.22
 
@@ -18,6 +19,7 @@ RUN apk add --no-cache ca-certificates wget && adduser -D -u 10001 app
 
 WORKDIR /app
 COPY --from=builder /out/video /app/video
+COPY --from=builder /out/storage-migrate /app/storage-migrate
 COPY services/video/migrations /app/migrations
 
 ENV MIGRATIONS_PATH=/app/migrations
