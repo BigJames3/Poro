@@ -17,7 +17,8 @@ Le démarrage est volontairement strict. Lire la première ligne `fatal` des log
 | `invalid config: SMS_PROVIDER=log …` | fournisseur de dev hors dev | configurer un fournisseur réel (non encore intégré : staging/prod bloqués) |
 | `invalid config: POSTGRES_SSLMODE …` | TLS désactivé hors dev | `require` ou `verify-full` |
 | `postgres …` / `migrations …` | base injoignable ou migration en échec | vérifier réseau et identifiants ; en cas de migration « dirty », voir plus bas |
-| `redis …` | Redis injoignable | vérifier Redis ; le service n'accepte pas de fonctionner sans (blacklist et limites) |
+| `redis …` | Redis injoignable | vérifier Redis ; le service n'accepte pas de fonctionner sans (limites de débit) |
+| `revocation registry unavailable` / `REVOCATION_REDIS_URL …` | registre des sessions révoquées injoignable ou non configuré | vérifier le Redis du registre ; sans lui, auth ne démarre pas |
 | `token service …` | clés absentes, < 2048 bits, ou privée et publique non appariées | remonter la bonne paire |
 | `read private key: … permission denied` | le processus tourne en non-root (`app`) et ne peut pas lire la clé | Kubernetes : `securityContext.fsGroup` + `defaultMode: 0440` sur le secret ; Docker : clé lisible par l'UID de `app` |
 | `invalid config: AFRICASTALKING_…` | identifiants SMS absents, ou bac à sable en prod | fournir `AFRICASTALKING_USERNAME` / `AFRICASTALKING_API_KEY` |
@@ -125,3 +126,20 @@ proxy (ex. `10.0.0.0/8`) ; ne jamais mettre `0.0.0.0/0`.
 Chaque réponse porte `X-Request-ID` (fourni par le client ou généré) et `meta.request_id`.
 Chercher cette valeur dans les logs (`request_id`) pour retrouver l'access log et l'erreur interne.
 Les numéros de téléphone sont masqués dans les logs, sauf la ligne `dev sms otp` en dev.
+
+## Registre des sessions révoquées (ADR-0016)
+
+Auth écrit une clé `poro:revoked:sid:<sid>` par session révoquée (TTL 16 min) dans
+`REVOCATION_REDIS_URL`. Tous les services la lisent à chaque requête authentifiée.
+
+| Symptôme | Cause probable | Action |
+|---|---|---|
+| Tous les services répondent `503 unavailable` sur les routes authentifiées | Redis du registre en panne : un jeton qu'on ne peut pas vérifier est refusé | rétablir Redis ; readiness `revocation` en échec dans chaque service |
+| Un utilisateur reste connecté sur un appareil après « déconnecter les autres » | service sans registre (dev lancé seul) ou base Redis différente | vérifier `REVOCATION_REDIS_URL` du service (même hôte, même base `/15`) |
+| Un utilisateur est déconnecté alors qu'il ne l'a pas demandé | session révoquée par une réutilisation de refresh token (vol présumé) | logs `refresh token reuse detected` avec le `user_id` |
+
+Vérifier une session (sans secret) :
+
+```powershell
+docker compose exec redis redis-cli -n 15 TTL poro:revoked:sid:<sid>
+```
