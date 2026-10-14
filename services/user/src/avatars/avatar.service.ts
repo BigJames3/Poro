@@ -46,6 +46,7 @@ export function s3ClientFor(config: AppConfigType, endpoint: string): S3Client {
 export class AvatarService {
   private readonly logger = new Logger(AvatarService.name);
   private readonly bucket: string;
+  private readonly uploadBucket: string;
   private readonly publicBaseUrl: string;
 
   constructor(
@@ -54,6 +55,7 @@ export class AvatarService {
     @Inject(S3_PRESIGN_CLIENT) private readonly presignS3: S3Client,
   ) {
     this.bucket = config.s3.bucket;
+    this.uploadBucket = config.s3.uploadBucket;
     this.publicBaseUrl = config.avatarPublicBaseUrl;
   }
 
@@ -64,7 +66,7 @@ export class AvatarService {
   async createUpload(userId: string, contentType: AvatarContentType): Promise<AvatarUploadView> {
     const key = `${UPLOAD_PREFIX}/${userId}/${uuidv7()}`;
     const { url, fields } = await createPresignedPost(this.presignS3, {
-      Bucket: this.bucket,
+      Bucket: this.uploadBucket,
       Key: key,
       Conditions: [
         ['content-length-range', 1, AVATAR_MAX_BYTES],
@@ -99,11 +101,11 @@ export class AvatarService {
         CacheControl: 'public, max-age=31536000, immutable',
       }),
     );
-    await this.remove(uploadKey);
+    await this.removeUpload(uploadKey);
     return key;
   }
 
-  /** Best effort: an orphan object costs storage, not correctness. */
+  /** Deletes a public object. Best effort: an orphan costs storage, not correctness. */
   async remove(key: string): Promise<void> {
     try {
       await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
@@ -112,12 +114,21 @@ export class AvatarService {
     }
   }
 
+  /** Deletes a private original once re-encoded or rejected. Best effort. */
+  private async removeUpload(key: string): Promise<void> {
+    try {
+      await this.s3.send(new DeleteObjectCommand({ Bucket: this.uploadBucket, Key: key }));
+    } catch (err) {
+      this.logger.warn({ msg: 'avatar upload not deleted', key, err });
+    }
+  }
+
   private async download(key: string): Promise<Buffer> {
     let body;
     try {
-      const res = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      const res = await this.s3.send(new GetObjectCommand({ Bucket: this.uploadBucket, Key: key }));
       if ((res.ContentLength ?? 0) > AVATAR_MAX_BYTES) {
-        await this.remove(key);
+        await this.removeUpload(key);
         throw new ApiError(422, 'avatar_too_large', 'avatar is larger than 5 MB');
       }
       body = await res.Body?.transformToByteArray();

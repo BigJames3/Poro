@@ -10,7 +10,10 @@ export interface S3Settings {
   endpoint: string;
   publicEndpoint: string;
   region: string;
+  /** Publicly readable bucket: re-encoded images only. */
   bucket: string;
+  /** Private bucket where clients upload originals before re-encoding. */
+  uploadBucket: string;
   accessKeyId: string;
   secretAccessKey: string;
   forcePathStyle: boolean;
@@ -124,6 +127,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     publicEndpoint: env.S3_PUBLIC_ENDPOINT ?? s3Endpoint,
     region: env.S3_REGION ?? 'us-east-1',
     bucket: env.S3_BUCKET ?? 'poro-avatars',
+    uploadBucket: env.S3_UPLOAD_BUCKET ?? 'poro-avatar-uploads',
     accessKeyId: env.S3_ACCESS_KEY_ID ?? (dev ? 'poro_dev' : ''),
     secretAccessKey: env.S3_SECRET_ACCESS_KEY ?? (dev ? 'poro_dev_secret' : ''),
     forcePathStyle: (env.S3_FORCE_PATH_STYLE ?? 'true') !== 'false',
@@ -141,6 +145,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   }
   if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(s3.bucket)) {
     errors.push('S3_BUCKET is not a valid bucket name');
+  }
+  if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(s3.uploadBucket)) {
+    errors.push('S3_UPLOAD_BUCKET is not a valid bucket name');
+  } else if (s3.uploadBucket === s3.bucket) {
+    errors.push('S3_UPLOAD_BUCKET must differ from S3_BUCKET: originals must not be public');
   }
   if (s3.accessKeyId === '' || s3.secretAccessKey === '') {
     errors.push('S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required outside dev');

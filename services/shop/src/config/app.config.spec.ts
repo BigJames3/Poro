@@ -28,6 +28,7 @@ describe('loadConfig', () => {
       corsOrigins: [],
       trustProxy: false,
       mediaPublicBaseUrl: 'http://localhost:9000/poro-shop',
+      s3: expect.objectContaining({ bucket: 'poro-shop', uploadBucket: 'poro-shop-uploads' }),
     });
   });
 
@@ -54,6 +55,8 @@ describe('loadConfig', () => {
     [{ S3_PUBLIC_ENDPOINT: 'http://storage.poro.africa' }, 'S3_PUBLIC_ENDPOINT must use https'],
     [{ S3_ENDPOINT: 'not a url' }, 'S3_ENDPOINT'],
     [{ S3_BUCKET: 'Bad_Bucket' }, 'S3_BUCKET'],
+    [{ S3_UPLOAD_BUCKET: 'Bad_Bucket' }, 'S3_UPLOAD_BUCKET is not'],
+    [{ S3_BUCKET: 'poro-public', S3_UPLOAD_BUCKET: 'poro-public' }, 'S3_UPLOAD_BUCKET must differ'],
     [{ S3_SECRET_ACCESS_KEY: undefined }, 'S3_ACCESS_KEY_ID'],
     [{ JWKS_URL: 'nope' }, 'JWKS_URL'],
     [{ MEDIA_PUBLIC_BASE_URL: 'nope' }, 'MEDIA_PUBLIC_BASE_URL'],
