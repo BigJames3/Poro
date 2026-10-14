@@ -710,6 +710,8 @@ services:
       target: migrate
     container_name: poro-moderation-migrate
     environment:
+      # Alembic loads the service configuration, which has no APP_ENV default.
+      APP_ENV: dev
       DATABASE_URL: postgresql://poro:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/poro_moderation?sslmode=disable
     depends_on:
       postgres-init:

@@ -57,8 +57,12 @@ def _int(env: Mapping[str, str], name: str, default: str, low: int, high: int, e
 
 def load_config(env: Mapping[str, str]) -> Config:
     errors: list[str] = []
-    app_env = env.get("APP_ENV", "dev")
-    if app_env not in APP_ENVS:
+    # No default: a forgotten APP_ENV must not start a production service with
+    # the shortcuts of local development.
+    app_env = env.get("APP_ENV", "").strip()
+    if not app_env:
+        errors.append("APP_ENV is required: dev, staging or prod")
+    elif app_env not in APP_ENVS:
         errors.append(f'APP_ENV must be dev, staging or prod, got "{app_env}"')
     dev = app_env == "dev"
 

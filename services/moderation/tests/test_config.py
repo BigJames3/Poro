@@ -13,7 +13,9 @@ PROD = {
 
 
 def test_dev_defaults() -> None:
-    config = load_config({"DATABASE_URL": "postgresql://poro:x@localhost:5433/poro_moderation"})
+    config = load_config(
+        {"APP_ENV": "dev", "DATABASE_URL": "postgresql://poro:x@localhost:5433/poro_moderation"}
+    )
     assert config.env == "dev"
     assert config.port == 8087
     assert config.log_level == "DEBUG"
@@ -39,6 +41,8 @@ def test_hardened_prod() -> None:
     ("override", "message"),
     [
         ({"APP_ENV": "production"}, "APP_ENV"),
+        ({"APP_ENV": ""}, "APP_ENV is required"),
+        ({"APP_ENV": "  "}, "APP_ENV is required"),
         ({"PORT": "70000"}, "PORT"),
         ({"LOG_LEVEL": "verbose"}, "LOG_LEVEL"),
         ({"DATABASE_URL": "mysql://x/y"}, "DATABASE_URL must be"),
@@ -61,3 +65,9 @@ def test_custom_rules_path(tmp_path: Path) -> None:
     rules = tmp_path / "rules.yml"
     rules.write_text("block: {}\n", encoding="utf-8")
     assert load_config({**PROD, "RULES_PATH": str(rules)}).rules_path == rules
+
+
+def test_app_env_has_no_default() -> None:
+    """A forgotten APP_ENV stops the service instead of running it in dev."""
+    with pytest.raises(ConfigError, match="APP_ENV is required"):
+        load_config({"DATABASE_URL": "postgresql://poro:x@localhost:5433/poro_moderation"})
