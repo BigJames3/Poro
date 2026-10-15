@@ -32,6 +32,7 @@ jobs:
       mobile: ${{ steps.filter.outputs.mobile }}
       gateway: ${{ steps.filter.outputs.gateway }}
       storage: ${{ steps.filter.outputs.storage }}
+      backup: ${{ steps.filter.outputs.backup }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
@@ -116,6 +117,10 @@ jobs:
               - 'docs/api/**'
               - 'docker-compose.yml'
               - 'services/auth/**'
+              - '.github/workflows/ci.yml'
+            backup:
+              - 'infra/backup/**'
+              - 'docker-compose.yml'
               - '.github/workflows/ci.yml'
             storage:
               - 'infra/storage/**'
@@ -227,6 +232,21 @@ jobs:
         env:
           PYTHON: python
         run: infra/storage/tests/run.sh
+
+  backup:
+    # Encrypted dumps, restore into scratch databases, tamper and wrong-key
+    # rejection, off-site copy to S3 (PORO-012).
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.backup == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Tools
+        run: sudo apt-get update && sudo apt-get install -y age postgresql-client
+      - name: shellcheck
+        run: shellcheck infra/backup/*.sh infra/backup/tests/*.sh
+      - name: Backup and restore round trip
+        run: infra/backup/tests/run.sh
 
   shared-go:
     needs: detect-changes
@@ -749,6 +769,7 @@ jobs:
       - repo-checks
       - gateway
       - storage
+      - backup
       - shared-go
       - outbox-relay
       - auth

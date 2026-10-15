@@ -16,7 +16,7 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
 | 2 | PORO-002 propager la suppression de compte | À FAIRE | obligation de protection des données, réutilise l'outbox existante |
 | 3 | PORO-011 CI et images | TERMINÉE (protection de branche : action humaine) | prérequis de toute livraison (staging, CD) |
 | 4 | PORO-009 observabilité | À FAIRE | prérequis d'une exploitation de staging |
-| 5 | PORO-010/012 staging, CD, sauvegardes | À FAIRE | dépend de 3 et 4 ; accès hébergeur absents |
+| 5 | PORO-010/012 staging, CD, sauvegardes | EN COURS (sauvegardes faites ; staging/CD bloqués : hébergeur) | dépend de 3 et 4 ; accès hébergeur absents |
 | 6 | PORO-013 Android et connexion API | À FAIRE | code Android hors périmètre autorisé (voir plus bas) |
 
 ## 0. Intégration des branches en attente — TERMINÉE
@@ -139,9 +139,35 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
   contournement, pas de force push) demande un administrateur du dépôt. Les outils disponibles ici
   n'ont pas cette API. La procédure est dans `SECURITY.md`.
 
+## 5a. PORO-012 — Sauvegardes — TERMINÉE côté code (mise en service : action humaine)
+
+- **Fichiers** : `infra/backup/backup.sh`, `infra/backup/restore_verify.sh`,
+  `infra/backup/tests/run.sh`, `docs/runbooks/backup.md`, CI (job `backup`, inclus dans
+  `ci-ok`).
+- **Changements** :
+  - un `pg_dump` par base `poro_*`, chiffré `age` avant écriture ; le refus est net sans clé
+    publique ;
+  - manifeste SHA-256 écrit et envoyé en dernier ;
+  - aucune sauvegarde partielle laissée après un échec ;
+  - copie distante par S3 SigV4 avec des identifiants en écriture seule, passés par stdin ;
+  - rétention locale limitée aux répertoires du script ;
+  - restauration vérifiée dans des bases jetables, toujours supprimées, avec un garde-fou contre
+    la production.
+- **Tests et résultats** : `infra/backup/tests/run.sh` passe ses 7 contrôles contre un vrai
+  Postgres 16 et SeaweedFS ; shellcheck propre.
+- **Décisions à prendre (métier ou juridique)** :
+  - RPO 24 h, RTO 4 h et rétention de 35 jours sont des **propositions** ;
+  - durée de conservation légale des commandes.
+- **Bloqué (accès)** :
+  - choisir le fournisseur du bucket de sauvegarde, sur un autre compte avec Object Lock ;
+  - planifier la tâche ;
+  - répliquer les objets S3 (médias) chez un second fournisseur.
+
 ## Interventions humaines requises (cumul)
 
 - Lancer `infra/media-worker/check_sandbox.sh` sur le vrai conteneur après reconstruction.
 - Administrateur GitHub : protection de `main` avec `ci-ok` et `security` requis (`SECURITY.md`).
+- Sauvegardes : générer la clé `age` hors ligne, créer le bucket de sauvegarde (autre compte,
+  Object Lock), planifier `backup.sh`, valider RPO/RTO (`docs/runbooks/backup.md`).
 - Après la première publication : rendre les paquets GHCR privés ou publics selon la politique
   du projet (GHCR crée les paquets privés par défaut).
