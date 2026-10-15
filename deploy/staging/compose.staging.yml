@@ -1,0 +1,160 @@
+# Staging (PORO-010): every service runs the image CI published for one
+# commit, never a local build. Used by deploy/deploy.sh:
+#
+#   docker compose -f docker-compose.yml -f deploy/staging/compose.staging.yml ...
+#
+# PORO_IMAGE_REGISTRY (ghcr.io/<owner>) and PORO_IMAGE_TAG (sha-<commit>) are
+# set by the deploy script; secrets interpolated by docker-compose.yml come
+# from --env-file .env.staging on the host (never committed).
+#
+# APP_ENV=staging makes every service refuse the shortcuts of local
+# development (Postgres without TLS, log SMS/SMTP, http public endpoints).
+# docker-compose.yml still points at the local Postgres, SeaweedFS and
+# Redpanda: until the hosting provider is chosen, a staging layer naming the
+# managed endpoints is missing, and services refuse to start rather than run
+# with development settings. deploy/deploy.sh then rolls back.
+services:
+  auth:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-auth:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  feed:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-feed:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  media-worker:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-media-worker:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  moderation:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-moderation:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  moderation-migrate:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-moderation:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  notification:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-notification:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  notification-migrate:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-notification:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  order:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-order:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  order-migrate:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-order:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  outbox-relay-auth:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-outbox-relay:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  outbox-relay-moderation:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-outbox-relay:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  outbox-relay-order:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-outbox-relay:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  outbox-relay-shop:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-outbox-relay:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  outbox-relay-social:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-outbox-relay:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  outbox-relay-user:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-outbox-relay:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  outbox-relay-video:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-outbox-relay:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  search:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-search:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  shop:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-shop:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  shop-migrate:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-shop:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  social:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-social:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  user:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-user:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  user-migrate:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-user:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  video:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-video:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging
+  video-storage-migrate:
+    image: ${PORO_IMAGE_REGISTRY:?set by deploy/deploy.sh}/poro-video:${PORO_IMAGE_TAG:?set by deploy/deploy.sh}
+    pull_policy: always
+    build: !reset null
+    environment:
+      APP_ENV: staging

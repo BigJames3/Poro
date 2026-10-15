@@ -34,6 +34,7 @@ jobs:
       storage: ${{ steps.filter.outputs.storage }}
       backup: ${{ steps.filter.outputs.backup }}
       observability: ${{ steps.filter.outputs.observability }}
+      deploy: ${{ steps.filter.outputs.deploy }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
@@ -118,6 +119,10 @@ jobs:
               - 'docs/api/**'
               - 'docker-compose.yml'
               - 'services/auth/**'
+              - '.github/workflows/ci.yml'
+            deploy:
+              - 'deploy/**'
+              - 'docker-compose.yml'
               - '.github/workflows/ci.yml'
             observability:
               - 'infra/observability/**'
@@ -265,6 +270,28 @@ jobs:
         run: shellcheck infra/observability/tests/*.sh
       - name: Rules, configuration and stack
         run: infra/observability/tests/run.sh
+
+  deploy:
+    # deploy.sh against a real Compose project: healthy version goes live,
+    # unhealthy version or failing migration rolls back (PORO-010). Also checks
+    # that the staging layer replaces every local build with a published image.
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.deploy == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: shellcheck
+        run: shellcheck deploy/*.sh deploy/tests/*.sh
+      - name: Staging layer uses published images only
+        env:
+          PORO_IMAGE_REGISTRY: ghcr.io/poro
+          PORO_IMAGE_TAG: sha-0000000000000000000000000000000000000000
+        run: |
+          built=$(docker compose --env-file .env.example -f docker-compose.yml -f deploy/staging/compose.staging.yml \
+            config --format json | jq -r '.services | to_entries[] | select(.value.build != null) | .key')
+          if [ -n "$built" ]; then echo "built locally in staging: $built"; exit 1; fi
+      - name: Deploy and rollback
+        run: deploy/tests/run.sh
 
   shared-go:
     needs: detect-changes
@@ -789,6 +816,7 @@ jobs:
       - storage
       - backup
       - observability
+      - deploy
       - shared-go
       - outbox-relay
       - auth

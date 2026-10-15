@@ -16,7 +16,7 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
 | 2 | PORO-002 propager la suppression de compte | À FAIRE | obligation de protection des données, réutilise l'outbox existante |
 | 3 | PORO-011 CI et images | TERMINÉE (protection de branche : action humaine) | prérequis de toute livraison (staging, CD) |
 | 4 | PORO-009 observabilité | À FAIRE | prérequis d'une exploitation de staging |
-| 5 | PORO-010/012 staging, CD, sauvegardes | EN COURS (sauvegardes faites ; staging/CD bloqués : hébergeur) | dépend de 3 et 4 ; accès hébergeur absents |
+| 5 | PORO-010/012 staging, CD, sauvegardes | TERMINÉE côté code ; mise en service BLOQUÉE (hébergeur, secrets) | dépend de 3 et 4 ; accès hébergeur absents |
 | 6 | PORO-013 Android et connexion API | À FAIRE | code Android hors périmètre autorisé (voir plus bas) |
 
 ## 0. Intégration des branches en attente — TERMINÉE
@@ -163,11 +163,52 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
   - planifier la tâche ;
   - répliquer les objets S3 (médias) chez un second fournisseur.
 
+## 5b. PORO-010 — Staging et CD — TERMINÉE côté code ; BLOQUÉE pour la mise en service (hébergeur, secrets)
+
+- **Fichiers** :
+  - `deploy/deploy.sh` ;
+  - `deploy/staging/compose.staging.yml` ;
+  - `deploy/tests/run.sh` ;
+  - `.github/workflows/deploy-staging.yml` ;
+  - CI (job `deploy`, inclus dans `ci-ok`) ;
+  - `docs/runbooks/deploy.md`.
+- **Changements** :
+  - **Déploiement manuel de staging** :
+    - approbation par l'environnement GitHub `staging` ;
+    - vérification que le commit est sur `main` et que chaque image a une attestation de
+      provenance de la CI ;
+    - SSH avec empreinte d'hôte épinglée ;
+    - test de fumée par la gateway.
+  - **`deploy.sh`** :
+    - images `sha-<commit>` uniquement, jamais de build local ;
+    - migrations d'abord, puis attente du statut running ou healthy ;
+    - **rollback automatique** vers la version précédente, avec historique et verrou.
+  - **Migrations** : règle expand/contract documentée pour rester compatibles avec un rollback.
+  - **Production** : aucun déploiement automatique, conformément au mandat.
+- **Tests et résultats** :
+  - `deploy/tests/run.sh`, contre un vrai projet Compose, passe ses 5 contrôles :
+    - une version saine passe ;
+    - une version malsaine revient à la précédente ;
+    - une migration en échec revient aussi à la précédente ;
+    - l'historique est tenu ;
+    - un sha malformé et l'absence de secrets sont refusés.
+  - La couche staging ne garde aucun service construit localement (0 sur 24) : vérifié en CI.
+  - actionlint et shellcheck sont propres.
+- **Bloqué (accès, coût, décision)** :
+  - choix de l'hébergeur ;
+  - couche d'environnement staging (Postgres TLS, S3, SMTP, SMS managés) ;
+  - environnement GitHub `staging` et ses secrets.
+
+  Tant que ces éléments manquent, les services refusent de démarrer en `APP_ENV=staging` et le
+  workflow s'arrête en listant ce qui manque.
+
 ## Interventions humaines requises (cumul)
 
 - Lancer `infra/media-worker/check_sandbox.sh` sur le vrai conteneur après reconstruction.
 - Administrateur GitHub : protection de `main` avec `ci-ok` et `security` requis (`SECURITY.md`).
 - Sauvegardes : générer la clé `age` hors ligne, créer le bucket de sauvegarde (autre compte,
   Object Lock), planifier `backup.sh`, valider RPO/RTO (`docs/runbooks/backup.md`).
+- Staging : choisir l'hébergeur, écrire la couche d'environnement staging, créer l'environnement
+  GitHub `staging` (relecteurs, secrets SSH, variables) : `docs/runbooks/deploy.md`.
 - Après la première publication : rendre les paquets GHCR privés ou publics selon la politique
   du projet (GHCR crée les paquets privés par défaut).
