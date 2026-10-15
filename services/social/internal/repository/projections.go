@@ -75,9 +75,12 @@ func MarkVideoRestored(ctx context.Context, db DBTX, videoID uuid.UUID, at time.
 	return nil
 }
 
-// EnsureUser records that an account exists.
+// EnsureUser records that an account exists. An erased account is never
+// recorded again.
 func EnsureUser(ctx context.Context, db DBTX, userID uuid.UUID) error {
-	if _, err := db.Exec(ctx, `INSERT INTO users_projection (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`, userID); err != nil {
+	if _, err := db.Exec(ctx, `INSERT INTO users_projection (user_id)
+		SELECT $1 WHERE NOT EXISTS (SELECT 1 FROM erased_users WHERE user_id = $1)
+		ON CONFLICT (user_id) DO NOTHING`, userID); err != nil {
 		return fmt.Errorf("ensure user: %w", err)
 	}
 	return nil

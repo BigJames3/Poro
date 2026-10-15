@@ -12,7 +12,7 @@ Plateforme sociale vidéo africaine avec marketplace intégrée.
 | `services/outbox-relay` | Publication de l'outbox SQL vers Kafka |
 | `packages/shared-go` | HTTP, JWT/JWKS, santé, métriques, tracing, événements |
 | `packages/contracts` | Schémas JSON des événements |
-| `infra/` | Gateway Traefik ; Terraform, Helm, Kubernetes (à venir) |
+| `infra/` | Gateway Traefik, contrôle d'accès du stockage objet ; Terraform, Helm, Kubernetes (à venir) |
 | `docs/` | Architecture, ADR, contrats d'API, runbooks |
 
 ## Démarrage rapide
@@ -21,6 +21,14 @@ Plateforme sociale vidéo africaine avec marketplace intégrée.
 Copy-Item .env.example .env
 docker compose up -d
 ```
+
+Chaque service exige `APP_ENV` (`dev`, `staging` ou `prod`) et ses secrets (mot de passe Postgres,
+clés S3) : aucune valeur par défaut dans le code, pour qu'un oubli ne lance jamais la production
+en mode dev. Compose les fournit ; pour lancer un service seul, copier son `.env.example`.
+
+Mise à jour d'un `.env` existant : le stockage objet exige un identifiant S3 par service
+(`S3_USER_*`, `S3_VIDEO_*`, `S3_SHOP_*`, voir `.env.example` et le
+[runbook](docs/runbooks/storage.md)).
 
 Services : Postgres (une base par service), Redis, SeaweedFS, Redpanda (topics + DLQ),
 les services de l'API et leurs relais outbox. ClickHouse/Qdrant :

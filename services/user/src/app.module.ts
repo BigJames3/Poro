@@ -20,6 +20,8 @@ import { PrismaService } from './prisma/prisma.service';
 import { ProfilesController } from './profiles/profiles.controller';
 import { ProfilesService } from './profiles/profiles.service';
 import { REDIS_CLIENT, RedisModule } from './redis.module';
+import { RevocationModule } from './auth/revocations';
+import { AccountErasureConsumer } from './profiles/account-erasure.consumer';
 import { UserCreatedConsumer } from './profiles/user-created.consumer';
 import { SERVICE_NAME, SERVICE_VERSION } from './version';
 
@@ -42,7 +44,22 @@ class AccountThrottlerGuard extends ThrottlerGuard {
           base: { service: SERVICE_NAME, version: SERVICE_VERSION },
           genReqId: (req) => requestIdOf(req as PoroRequest),
           customAttributeKeys: { reqId: 'request_id' },
-          redact: ['req.headers.authorization', 'req.headers.cookie'],
+          // Secrets and contact details never reach the logs, whatever object
+          // carries them (same list as shared-go/logging).
+          redact: [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'res.headers["set-cookie"]',
+            '*.password',
+            '*.token',
+            '*.access_token',
+            '*.refresh_token',
+            '*.fcm_token',
+            '*.otp',
+            '*.secret',
+            '*.phone',
+            '*.email',
+          ],
           serializers: {
             req: (req: { id: string; method: string; url: string }) => ({
               id: req.id,
@@ -64,6 +81,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
       }),
     }),
     RedisModule,
+    RevocationModule,
     ThrottlerModule.forRootAsync({
       inject: [{ token: REDIS_CLIENT, optional: true }],
       useFactory: (redis?: Redis) => ({
@@ -81,6 +99,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
     AvatarService,
     ProfilesService,
     UserCreatedConsumer,
+    AccountErasureConsumer,
 
     {
       provide: S3_CLIENT,

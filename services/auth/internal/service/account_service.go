@@ -32,6 +32,12 @@ type AccountService interface {
 	RevokeOtherSessions(ctx context.Context, claims TokenClaims) (*dto.RevokeSessionsResponse, error)
 	DeleteAccount(ctx context.Context, claims TokenClaims, req dto.DeleteAccountRequest) (*dto.DeletionResponse, error)
 	CancelDeletion(ctx context.Context, claims TokenClaims) (*dto.UserResponse, error)
+	SessionRevoker
+}
+
+// SessionRevoker signs every device of an account out, in every service.
+type SessionRevoker interface {
+	RevokeAllSessions(ctx context.Context, userID uuid.UUID, extra ...uuid.UUID) error
 }
 
 type accountService struct {
@@ -39,6 +45,7 @@ type accountService struct {
 	refresh repository.RefreshTokenRepository
 	otp     OTPService
 	tokens  TokenService
+	logins  LoginGuard
 	log     *zap.Logger
 	grace   time.Duration
 	now     func() time.Time
@@ -46,15 +53,19 @@ type accountService struct {
 
 // NewAccountService wires the account operations. grace is the delay between
 // a deletion request and the erasure of the account.
-func NewAccountService(users repository.UserRepository, refresh repository.RefreshTokenRepository, otp OTPService, tokens TokenService, grace time.Duration, log *zap.Logger) (AccountService, error) {
+func NewAccountService(users repository.UserRepository, refresh repository.RefreshTokenRepository, otp OTPService, tokens TokenService, logins LoginGuard, grace time.Duration, log *zap.Logger) (AccountService, error) {
 	if grace <= 0 {
 		return nil, fmt.Errorf("account deletion grace must be positive, got %s", grace)
+	}
+	if logins == nil {
+		return nil, errors.New("account service: login guard is required")
 	}
 	return &accountService{
 		users:   users,
 		refresh: refresh,
 		otp:     otp,
 		tokens:  tokens,
+		logins:  logins,
 		log:     log,
 		grace:   grace,
 		now:     func() time.Time { return time.Now().UTC() },
@@ -81,18 +92,24 @@ func (s *accountService) Sessions(ctx context.Context, claims TokenClaims) ([]dt
 }
 
 // RevokeSession signs a device out. Revoking the current session is a logout.
+// The session enters the shared registry before its refresh tokens are
+// revoked: if the registry fails nothing changed and the call can be retried,
+// and if the database fails the session's access tokens are still refused.
 func (s *accountService) RevokeSession(ctx context.Context, claims TokenClaims, sessionID uuid.UUID) error {
-	if sessionID == claims.SessionID {
-		if err := s.tokens.BlacklistToken(ctx, claims.TokenID, time.Until(claims.Exp)); err != nil {
+	if sessionID != claims.SessionID {
+		owned, err := s.ownsSession(ctx, claims.UserID, sessionID)
+		if err != nil {
 			return fmt.Errorf("revoke session: %w", err)
 		}
+		if !owned {
+			return ErrSessionNotFound
+		}
 	}
-	revoked, err := s.refresh.RevokeFamily(ctx, claims.UserID, sessionID)
-	if err != nil {
+	if err := s.tokens.RevokeSessions(ctx, sessionID); err != nil {
 		return fmt.Errorf("revoke session: %w", err)
 	}
-	if revoked == 0 && sessionID != claims.SessionID {
-		return ErrSessionNotFound
+	if _, err := s.refresh.RevokeFamily(ctx, claims.UserID, sessionID); err != nil {
+		return fmt.Errorf("revoke session: %w", err)
 	}
 	s.log.Info("session revoked",
 		zap.String("user_id", claims.UserID.String()),
@@ -102,6 +119,19 @@ func (s *accountService) RevokeSession(ctx context.Context, claims TokenClaims, 
 }
 
 func (s *accountService) RevokeOtherSessions(ctx context.Context, claims TokenClaims) (*dto.RevokeSessionsResponse, error) {
+	sessions, err := s.refresh.ActiveSessions(ctx, claims.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("revoke other sessions: %w", err)
+	}
+	others := make([]uuid.UUID, 0, len(sessions))
+	for _, session := range sessions {
+		if session.ID != claims.SessionID {
+			others = append(others, session.ID)
+		}
+	}
+	if err := s.tokens.RevokeSessions(ctx, others...); err != nil {
+		return nil, fmt.Errorf("revoke other sessions: %w", err)
+	}
 	revoked, err := s.refresh.RevokeOtherFamilies(ctx, claims.UserID, claims.SessionID)
 	if err != nil {
 		return nil, fmt.Errorf("revoke other sessions: %w", err)
@@ -111,6 +141,41 @@ func (s *accountService) RevokeOtherSessions(ctx context.Context, claims TokenCl
 		zap.Int64("revoked", revoked),
 	)
 	return &dto.RevokeSessionsResponse{Revoked: revoked}, nil
+}
+
+// RevokeAllSessions signs every device of userID out, everywhere: each live
+// session enters the shared registry, plus extra ones (the caller's session,
+// which may have no live refresh token left), then the refresh tokens are
+// revoked.
+func (s *accountService) RevokeAllSessions(ctx context.Context, userID uuid.UUID, extra ...uuid.UUID) error {
+	sessions, err := s.refresh.ActiveSessions(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("revoke all sessions: %w", err)
+	}
+	ids := append([]uuid.UUID(nil), extra...)
+	for _, session := range sessions {
+		ids = append(ids, session.ID)
+	}
+	if err := s.tokens.RevokeSessions(ctx, ids...); err != nil {
+		return fmt.Errorf("revoke all sessions: %w", err)
+	}
+	if err := s.refresh.RevokeAllForUser(ctx, userID); err != nil {
+		return fmt.Errorf("revoke all sessions: %w", err)
+	}
+	return nil
+}
+
+func (s *accountService) ownsSession(ctx context.Context, userID, sessionID uuid.UUID) (bool, error) {
+	sessions, err := s.refresh.ActiveSessions(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	for _, session := range sessions {
+		if session.ID == sessionID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // DeleteAccount schedules the erasure of the caller's account after the
@@ -134,10 +199,7 @@ func (s *accountService) DeleteAccount(ctx context.Context, claims TokenClaims, 
 	if err != nil {
 		return nil, fmt.Errorf("delete account: %w", err)
 	}
-	if err := s.refresh.RevokeAllForUser(ctx, user.ID); err != nil {
-		return nil, fmt.Errorf("delete account: %w", err)
-	}
-	if err := s.tokens.BlacklistToken(ctx, claims.TokenID, time.Until(claims.Exp)); err != nil {
+	if err := s.RevokeAllSessions(ctx, user.ID, claims.SessionID); err != nil {
 		return nil, fmt.Errorf("delete account: %w", err)
 	}
 	s.log.Info("account deletion scheduled",
@@ -174,14 +236,23 @@ func (s *accountService) reauthenticate(ctx context.Context, user *model.User, r
 		if req.Password == "" {
 			return ErrReauthRequired
 		}
+		// The same lock as sign-in: a stolen session must not become a way
+		// to guess the password.
+		account := passwordAccount(user)
+		if err := s.logins.Check(ctx, account); err != nil {
+			return err
+		}
 		match, err := argon2id.ComparePasswordAndHash(req.Password, *user.PasswordHash)
 		if err != nil {
 			return fmt.Errorf("compare password: %w", err)
 		}
 		if !match {
+			if err := s.logins.Fail(ctx, account); err != nil {
+				return err
+			}
 			return ErrInvalidCredentials
 		}
-		return nil
+		return s.logins.Reset(ctx, account)
 	case user.Phone != nil:
 		if req.OTPCode == "" {
 			return ErrReauthRequired
@@ -191,6 +262,15 @@ func (s *accountService) reauthenticate(ctx context.Context, user *model.User, r
 	default:
 		return ErrReauthRequired
 	}
+}
+
+// passwordAccount names the account of a password user for the login guard:
+// its email address, the name sign-in uses.
+func passwordAccount(user *model.User) string {
+	if user.Email != nil {
+		return *user.Email
+	}
+	return "user:" + user.ID.String()
 }
 
 // deviceLabel names a session: the name the app gave, else its User-Agent.

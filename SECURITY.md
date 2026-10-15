@@ -42,8 +42,27 @@ corrigées.
 
 Dans **Settings → Branches → Branch protection rules** pour `main` :
 - *Require a pull request before merging* ;
-- *Require status checks to pass*, avec `detect-changes` et `security` ;
-- *Do not allow bypassing the above settings*.
+- *Require status checks to pass*, avec **`ci-ok`** et `security`. `ci-ok` agrège tous les jobs
+  de la CI (tests, lint, format, typecheck, build et scan des images, migrations appliquées par les
+  tests, gateway, stockage, workflows, compose) : il échoue si l'un d'eux a échoué ou a été annulé ;
+  un job non concerné par le changement (filtre de chemins) compte comme réussi. Exiger seulement
+  `detect-changes` laissait passer une PR dont les tests échouent ;
+- *Require branches to be up to date before merging* ;
+- *Do not allow bypassing the above settings* ;
+- interdire les *force pushes* et la suppression de `main`.
+
+Ces réglages demandent un administrateur du dépôt : ils ne peuvent pas être posés depuis le code.
+
+## Publication des images
+
+`.github/workflows/images.yml` publie les images sur GHCR (`ghcr.io/<propriétaire>/poro-<service>`)
+seulement après une CI verte sur un push de `main`, jamais depuis une PR. Étiquette unique
+`sha-<commit complet>` : jamais `latest`, une étiquette existante n'est jamais réécrite. Chaque
+image passe le scan Trivy avant publication et porte une attestation de provenance signée
+(`gh attestation verify oci://<image> --owner <propriétaire>`). Le job a seulement
+`packages: write`, `id-token: write` et `attestations: write`, et n'utilise que le `GITHUB_TOKEN`.
+
+Déployer par **digest** (`@sha256:…`) ou par `sha-<commit>`, jamais par une étiquette mobile.
 
 Dans **Settings → Code security** : *Dependabot alerts*, *Dependabot security
 updates* et *Secret scanning* (avec *Push protection*).

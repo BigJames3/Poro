@@ -1,0 +1,70 @@
+# Prometheus for PORO (PORO-009). Scrapes every service over the Compose
+# network; /metrics is never published through the gateway.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: dev
+
+rule_files:
+  - /etc/prometheus/rules/*.rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["auth:8081"]
+        labels: { service: auth }
+      - targets: ["user:8082"]
+        labels: { service: user }
+      - targets: ["video:8083"]
+        labels: { service: video }
+      - targets: ["feed:8084"]
+        labels: { service: feed }
+      - targets: ["social:8085"]
+        labels: { service: social }
+      - targets: ["notification:8086"]
+        labels: { service: notification }
+      - targets: ["moderation:8087"]
+        labels: { service: moderation }
+      - targets: ["search:8088"]
+        labels: { service: search }
+      - targets: ["shop:8090"]
+        labels: { service: shop }
+      - targets: ["order:8091"]
+        labels: { service: order }
+
+  - job_name: outbox-relay
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["outbox-relay-auth:9100"]
+        labels: { service: outbox-relay-auth }
+      - targets: ["outbox-relay-user:9100"]
+        labels: { service: outbox-relay-user }
+      - targets: ["outbox-relay-video:9100"]
+        labels: { service: outbox-relay-video }
+      - targets: ["outbox-relay-social:9100"]
+        labels: { service: outbox-relay-social }
+      - targets: ["outbox-relay-moderation:9100"]
+        labels: { service: outbox-relay-moderation }
+      - targets: ["outbox-relay-shop:9100"]
+        labels: { service: outbox-relay-shop }
+      - targets: ["outbox-relay-order:9100"]
+        labels: { service: outbox-relay-order }
+
+  - job_name: gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["gateway:8082"]
+        labels: { service: gateway }
+
+  - job_name: redpanda
+    metrics_path: /public_metrics
+    static_configs:
+      - targets: ["redpanda:9644"]
+        labels: { service: redpanda }

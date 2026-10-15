@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +11,9 @@ import (
 func TestValidate(t *testing.T) {
 	ok := func() *Config {
 		return &Config{
+			PostgresPassword: "secret",
+			S3AccessKey:      "k",
+			S3SecretKey:      "s",
 			AppEnv:           EnvDev,
 			JWKSURL:          "http://localhost:8081/.well-known/jwks.json",
 			KafkaBrokers:     []string{"localhost:9092"},
@@ -19,16 +23,23 @@ func TestValidate(t *testing.T) {
 			PostgresSSLMode:  "disable",
 
 			S3QuarantineBucket: "poro-quarantine",
+			S3SourceBucket:     "poro-video-sources",
 		}
 	}
 	require.NoError(t, ok().Validate())
 
 	prod := ok()
 	prod.AppEnv = EnvProd
+	prod.RevocationRedisURL = "rediss://revocations.poro.internal:6380/0"
 	prod.PostgresSSLMode = "require"
 	prod.S3AccessKey = "k"
 	prod.S3SecretKey = "s"
 	require.NoError(t, prod.Validate())
+	prod.RevocationRedisURL = ""
+	require.ErrorContains(t, prod.Validate(), "REVOCATION_REDIS_URL is required outside dev")
+	prod.RevocationRedisURL = "http://redis:6379"
+	require.ErrorContains(t, prod.Validate(), "redis://")
+	prod.RevocationRedisURL = "rediss://revocations.poro.internal:6380/0"
 
 	cases := []struct {
 		name   string
@@ -41,13 +52,17 @@ func TestValidate(t *testing.T) {
 		{name: "missing bucket", mutate: func(c *Config) { c.S3Bucket = "" }, want: "S3_BUCKET"},
 		{name: "missing quarantine", mutate: func(c *Config) { c.S3QuarantineBucket = "" }, want: "S3_QUARANTINE_BUCKET"},
 		{name: "public quarantine", mutate: func(c *Config) { c.S3QuarantineBucket = "poro-videos" }, want: "must differ"},
+		{name: "missing source bucket", mutate: func(c *Config) { c.S3SourceBucket = "" }, want: "S3_SOURCE_BUCKET"},
+		{name: "public source bucket", mutate: func(c *Config) { c.S3SourceBucket = "poro-videos" }, want: "S3_SOURCE_BUCKET is required and must differ"},
 		{name: "prod ssl", mutate: func(c *Config) {
 			c.AppEnv = EnvProd
 			c.PostgresSSLMode = "disable"
 			c.S3AccessKey = "k"
 			c.S3SecretKey = "s"
 		}, want: "POSTGRES_SSLMODE"},
-		{name: "prod creds", mutate: func(c *Config) { c.AppEnv = EnvProd; c.PostgresSSLMode = "require" }, want: "S3 credentials"},
+		{name: "missing s3 credentials", mutate: func(c *Config) { c.S3SecretKey = "" }, want: "S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required"},
+		{name: "missing env", mutate: func(c *Config) { c.AppEnv = "" }, want: "APP_ENV is required"},
+		{name: "missing postgres password", mutate: func(c *Config) { c.PostgresPassword = "" }, want: "POSTGRES_PASSWORD is required"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,11 +81,52 @@ func TestPublicObjectURL(t *testing.T) {
 }
 
 func TestLoadDefaults(t *testing.T) {
+	t.Chdir(t.TempDir())
 	t.Setenv("APP_ENV", "dev")
+	t.Setenv("POSTGRES_PASSWORD", "secret")
+	t.Setenv("S3_ACCESS_KEY_ID", "k")
+	t.Setenv("S3_SECRET_ACCESS_KEY", "s")
 	t.Setenv("JWKS_URL", "http://auth/.well-known/jwks.json")
 	cfg, err := Load()
 	require.NoError(t, err)
 	require.Equal(t, "8083", cfg.AppPort)
 	require.Equal(t, "poro_video", cfg.PostgresDB)
 	_ = os.Unsetenv("APP_ENV")
+}
+
+// A forgotten APP_ENV or database password stops the service instead of
+// starting it with the shortcuts of local development.
+func TestLoadRequiresAppEnvAndSecrets(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", "")
+	t.Setenv("POSTGRES_PASSWORD", "")
+	_, err := Load()
+	require.ErrorContains(t, err, "APP_ENV is required")
+	require.ErrorContains(t, err, "POSTGRES_PASSWORD is required")
+}
+
+// storage-migrate only touches buckets: it starts without database, broker or
+// JWKS settings, but still refuses a missing APP_ENV or S3 credentials.
+func TestLoadStorageNeedsOnlyStorageSettings(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", "prod")
+	t.Setenv("POSTGRES_PASSWORD", "")
+	t.Setenv("KAFKA_BROKERS", "")
+	t.Setenv("JWKS_URL", "")
+	t.Setenv("S3_ACCESS_KEY_ID", "k")
+	t.Setenv("S3_SECRET_ACCESS_KEY", "s")
+	cfg, err := LoadStorage()
+	require.NoError(t, err)
+	require.Equal(t, "poro-video-sources", cfg.S3SourceBucket)
+
+	_, err = Load()
+	require.ErrorContains(t, err, "POSTGRES_PASSWORD is required", "the API and the worker still need everything")
+
+	t.Setenv("APP_ENV", "")
+	t.Setenv("S3_SECRET_ACCESS_KEY", "")
+	_, err = LoadStorage()
+	require.ErrorContains(t, err, "APP_ENV is required")
+	require.ErrorContains(t, err, "S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required")
+	_, err = Load()
+	require.Equal(t, 1, strings.Count(err.Error(), "APP_ENV is required"), "reported once")
 }

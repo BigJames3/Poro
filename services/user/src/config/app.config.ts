@@ -10,7 +10,10 @@ export interface S3Settings {
   endpoint: string;
   publicEndpoint: string;
   region: string;
+  /** Publicly readable bucket: re-encoded images only. */
   bucket: string;
+  /** Private bucket where clients upload originals before re-encoding. */
+  uploadBucket: string;
   accessKeyId: string;
   secretAccessKey: string;
   forcePathStyle: boolean;
@@ -25,6 +28,8 @@ export interface AppConfig {
   kafkaBrokers: string[];
   kafkaConsumerEnabled: boolean;
   redisUrl: string | undefined;
+  /** Registry of revoked sessions written by auth (ADR-0016). Required outside dev. */
+  revocationRedisUrl: string | undefined;
   corsOrigins: string[];
   trustProxy: boolean | number | string;
   s3: S3Settings;
@@ -61,8 +66,12 @@ function parseTrustProxy(raw: string | undefined): boolean | number | string {
  */
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const errors: string[] = [];
-  const appEnv = (env.APP_ENV ?? 'dev') as AppEnv;
-  if (!APP_ENVS.includes(appEnv)) {
+  // No default: a forgotten APP_ENV must not start a production service with
+  // the shortcuts of local development.
+  const appEnv = (env.APP_ENV?.trim() ?? '') as AppEnv;
+  if ((appEnv as string) === '') {
+    errors.push('APP_ENV is required: dev, staging or prod');
+  } else if (!APP_ENVS.includes(appEnv)) {
     errors.push(`APP_ENV must be dev, staging or prod, got "${appEnv}"`);
   }
   const dev = appEnv === 'dev';
@@ -106,6 +115,18 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     errors.push('REDIS_URL is required outside dev: rate limits must be shared by replicas');
   }
 
+  const revocationRedisUrl =
+    env.REVOCATION_REDIS_URL?.trim() === '' ? undefined : env.REVOCATION_REDIS_URL?.trim();
+  if (
+    revocationRedisUrl !== undefined &&
+    !['redis:', 'rediss:'].includes(parseUrl(revocationRedisUrl)?.protocol ?? '')
+  ) {
+    errors.push('REVOCATION_REDIS_URL must be a redis:// or rediss:// URL');
+  }
+  if (!dev && revocationRedisUrl === undefined) {
+    errors.push('REVOCATION_REDIS_URL is required outside dev: revoked sessions must be refused');
+  }
+
   const corsOrigins = list(env.CORS_ORIGINS);
   for (const origin of corsOrigins) {
     const url = parseUrl(origin);
@@ -124,8 +145,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     publicEndpoint: env.S3_PUBLIC_ENDPOINT ?? s3Endpoint,
     region: env.S3_REGION ?? 'us-east-1',
     bucket: env.S3_BUCKET ?? 'poro-avatars',
-    accessKeyId: env.S3_ACCESS_KEY_ID ?? (dev ? 'poro_dev' : ''),
-    secretAccessKey: env.S3_SECRET_ACCESS_KEY ?? (dev ? 'poro_dev_secret' : ''),
+    uploadBucket: env.S3_UPLOAD_BUCKET ?? 'poro-avatar-uploads',
+    accessKeyId: env.S3_ACCESS_KEY_ID ?? '',
+    secretAccessKey: env.S3_SECRET_ACCESS_KEY ?? '',
     forcePathStyle: (env.S3_FORCE_PATH_STYLE ?? 'true') !== 'false',
   };
   for (const [name, value] of [
@@ -142,8 +164,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(s3.bucket)) {
     errors.push('S3_BUCKET is not a valid bucket name');
   }
+  if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(s3.uploadBucket)) {
+    errors.push('S3_UPLOAD_BUCKET is not a valid bucket name');
+  } else if (s3.uploadBucket === s3.bucket) {
+    errors.push('S3_UPLOAD_BUCKET must differ from S3_BUCKET: originals must not be public');
+  }
   if (s3.accessKeyId === '' || s3.secretAccessKey === '') {
-    errors.push('S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required outside dev');
+    errors.push('S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required');
   }
 
   const avatarPublicBaseUrl = (
@@ -165,6 +192,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     kafkaBrokers,
     kafkaConsumerEnabled,
     redisUrl,
+    revocationRedisUrl,
     corsOrigins,
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     s3,

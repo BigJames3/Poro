@@ -99,6 +99,15 @@ model UserProjection {
   @@map("user_projections")
 }
 
+// Accounts erased by auth (ADR-0018), id only: a late or replayed event can
+// neither recreate their projection nor write a notification for or about them.
+model ErasedUser {
+  userId   String   @id @map("user_id") @db.Uuid
+  erasedAt DateTime @map("erased_at") @db.Timestamptz(6)
+
+  @@map("erased_users")
+}
+
 // Public fields of every shop, fed by shop.updated. The newest updated_at wins.
 model ShopProjection {
   shopId    String   @id @map("shop_id") @db.Uuid

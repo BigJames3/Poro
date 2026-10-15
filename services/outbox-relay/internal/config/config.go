@@ -53,8 +53,15 @@ func (c *Config) Validate() error {
 	var errs []error
 	switch c.AppEnv {
 	case "dev", "staging", "prod":
+	case "":
+		// No default: a forgotten APP_ENV must not start a production
+		// service with the shortcuts of local development.
+		errs = append(errs, errors.New("APP_ENV is required: dev, staging or prod"))
 	default:
 		errs = append(errs, fmt.Errorf("APP_ENV must be dev, staging or prod, got %q", c.AppEnv))
+	}
+	if c.PostgresPassword == "" {
+		errs = append(errs, errors.New("POSTGRES_PASSWORD is required"))
 	}
 	if c.Source == "" {
 		errs = append(errs, errors.New("RELAY_SOURCE is required"))
@@ -88,13 +95,11 @@ func (c *Config) Validate() error {
 func Load() (*Config, error) {
 	v := viper.New()
 	v.AutomaticEnv()
-	v.SetDefault("APP_ENV", "dev")
 	v.SetDefault("HTTP_PORT", "9100")
 	v.SetDefault("LOG_LEVEL", "info")
 	v.SetDefault("POSTGRES_HOST", "localhost")
 	v.SetDefault("POSTGRES_PORT", "5433")
 	v.SetDefault("POSTGRES_USER", "poro")
-	v.SetDefault("POSTGRES_PASSWORD", "")
 	v.SetDefault("POSTGRES_SSLMODE", "disable")
 	v.SetDefault("KAFKA_BROKERS", "localhost:9092")
 	v.SetDefault("RELAY_BATCH_SIZE", 100)

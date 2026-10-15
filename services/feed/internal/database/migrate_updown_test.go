@@ -20,7 +20,7 @@ func TestMain(m *testing.M) { os.Exit(testdb.Run(m)) }
 
 var tables = []string{
 	"videos", "follows", "author_followers",
-	"video_stats", "authors", "processed_events",
+	"video_stats", "authors", "processed_events", "erased_users",
 }
 
 func tableCount(t *testing.T) int {

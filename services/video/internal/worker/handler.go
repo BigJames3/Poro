@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +30,12 @@ import (
 // Group is the Kafka consumer group that transcodes uploads.
 const Group = "poro-media-transcode"
 
+// storageAttempts bounds the tries of one storage read or write. A storage
+// outage longer than the backoff marks the video failed instead of leaving it
+// in processing; the transcode itself is never retried (a file that failed
+// once fails again).
+const storageAttempts = 3
+
 // Handler downloads a source object, transcodes it, and writes ready/failed
 // in the same transaction as the inbox claim.
 type Handler struct {
@@ -38,11 +45,37 @@ type Handler struct {
 	ffmpeg transcode.Transcoder
 	log    *zap.Logger
 	now    func() time.Time
+	// backoff is the first wait between storage attempts, doubled each time.
+	backoff time.Duration
 }
 
 // New builds a Kafka handler.
 func New(pool *pgxpool.Pool, repo *repository.Videos, store storage.Storage, ffmpeg transcode.Transcoder, log *zap.Logger) *Handler {
-	return &Handler{pool: pool, repo: repo, store: store, ffmpeg: ffmpeg, log: log, now: time.Now}
+	return &Handler{pool: pool, repo: repo, store: store, ffmpeg: ffmpeg, log: log, now: time.Now, backoff: time.Second}
+}
+
+// SetRetryBackoff changes the first wait between storage attempts (tests).
+func (h *Handler) SetRetryBackoff(d time.Duration) { h.backoff = d }
+
+// retry runs op up to storageAttempts times while ctx is alive.
+func (h *Handler) retry(ctx context.Context, what string, op func() error) error {
+	wait := h.backoff
+	var err error
+	for attempt := 1; ; attempt++ {
+		if err = op(); err == nil {
+			return nil
+		}
+		if attempt == storageAttempts {
+			return err
+		}
+		h.log.Warn("storage attempt failed, retrying", zap.String("op", what), zap.Int("attempt", attempt), zap.Error(err))
+		select {
+		case <-ctx.Done():
+			return errors.Join(err, ctx.Err())
+		case <-time.After(wait):
+		}
+		wait *= 2
+	}
 }
 
 // Handle implements kafka.Handler.
@@ -91,7 +124,17 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 	if err != nil {
 		return err
 	}
-	if err := h.store.Get(ctx, data.SourceKey, srcFile); err != nil {
+	err = h.retry(ctx, "get source", func() error {
+		// A failed attempt may have written part of the object.
+		if err := srcFile.Truncate(0); err != nil {
+			return err
+		}
+		if _, err := srcFile.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		return h.store.GetSource(ctx, data.SourceKey, srcFile)
+	})
+	if err != nil {
 		_ = srcFile.Close()
 		return h.fail(ctx, env, videoID, userID, events.VideoFailInvalid, err)
 	}
@@ -190,7 +233,9 @@ func (h *Handler) uploadOutput(ctx context.Context, outDir, userID, videoID stri
 			return err
 		}
 		key := objectKey(userID, videoID, f.Rel)
-		if err := h.store.Put(ctx, key, f.ContentType, bytes.NewReader(raw)); err != nil {
+		if err := h.retry(ctx, "put media", func() error {
+			return h.store.PutMedia(ctx, key, f.ContentType, bytes.NewReader(raw))
+		}); err != nil {
 			return err
 		}
 	}

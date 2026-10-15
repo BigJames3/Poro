@@ -7,6 +7,7 @@ from fastapi import Depends, Request
 
 from moderation.cases import DomainError
 from moderation.http.jwks import InvalidTokenError, KeysUnavailableError, Principal, TokenVerifier
+from moderation.http.revocations import RevocationUnavailableError
 
 MODERATOR_ROLES = ("MODERATOR", "ADMIN")
 log = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ async def current_user(request: Request) -> Principal:
     verifier: TokenVerifier = request.app.state.verifier
     try:
         principal = await verifier.verify(token)
-    except KeysUnavailableError as err:
+    except (KeysUnavailableError, RevocationUnavailableError) as err:
         raise DomainError(503, "unavailable", "authentication temporarily unavailable") from err
     except InvalidTokenError as err:
         log.debug("token rejected", extra={"reason": str(err)})

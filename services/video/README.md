@@ -17,13 +17,15 @@ HLS tourne dans `media-worker` (même module, `cmd/worker`).
 | Consommé (API) | `poro.moderation.content.removed` (vidéo) | `poro-video-moderation` | `moderation_status = removed`, médias en quarantaine |
 | Consommé (API) | `poro.moderation.content.restored` | `poro-video-moderation` | `approved`, médias remis en ligne (sauf vidéo supprimée) |
 | Consommé (API) | `poro.video.deleted` | `poro-video-moderation` | Médias de la vidéo supprimée en quarantaine |
+| Consommé (API) | `poro.auth.user.deleted` | `poro-video-account-erasure` | Toutes les vidéos du compte supprimées, titre et description vidés, un `poro.video.deleted` par vidéo encore en ligne, uploads abandonnés, sources supprimées ([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) |
 
 ## Quarantaine des médias
 
-Les médias d'une vidéo retirée ou supprimée (source, HLS, miniature, sous
+Les médias publics d'une vidéo retirée ou supprimée (HLS, miniature, sous
 `videos/<user_id>/<video_id>/`) passent du bucket public `S3_BUCKET` au bucket
 **privé** `S3_QUARANTINE_BUCKET` : copie puis suppression, objet par objet,
-idempotent. Le statut est enregistré avant le déplacement et l'inbox réclamée
+idempotent. La source n'est jamais publique : elle reste dans
+`S3_SOURCE_BUCKET`. Le statut est enregistré avant le déplacement et l'inbox réclamée
 après, donc une relivraison termine un déplacement interrompu. Le worker relit
 le statut après avoir publié ses fichiers : une vidéo retirée ou supprimée
 pendant son transcodage part aussi en quarantaine.
@@ -31,12 +33,27 @@ pendant son transcodage part aussi en quarantaine.
 Seul le propriétaire voit une vidéo retirée (`moderation_status: removed`,
 sans URL de média) ; les autres reçoivent `404 video_not_found`.
 
+## Stockage
+
+Trois buckets ([ADR-0015](../../docs/architecture/adr/0015-controle-acces-stockage-objet.md)),
+accessibles avec l'identité S3 `poro-video` (`S3_VIDEO_*` dans `.env`) :
+
+| Bucket | Visibilité | Contenu |
+|---|---|---|
+| `S3_BUCKET` (`poro-videos`) | lecture publique | HLS et miniatures |
+| `S3_SOURCE_BUCKET` (`poro-video-sources`) | privé | Fichiers originaux, envoyés par parties présignées et conservés après transcodage |
+| `S3_QUARANTINE_BUCKET` (`poro-quarantine`) | privé | Médias retirés ou supprimés |
+
+`cmd/storage-migrate` (service compose `video-storage-migrate`) déplace une fois
+les sources des versions précédentes vers `S3_SOURCE_BUCKET` ; il est idempotent.
+
 ## Variables d'environnement
 
-Voir `internal/config/config.go`. Ajout de cette version :
+Voir `internal/config/config.go`.
 
 | Variable | Défaut | Rôle |
 |---|---|---|
+| `S3_SOURCE_BUCKET` | `poro-video-sources` | Bucket privé des sources ; doit différer de `S3_BUCKET` |
 | `S3_QUARANTINE_BUCKET` | `poro-quarantine` | Bucket privé des médias retirés ou supprimés ; doit différer de `S3_BUCKET` |
 
 ## Tests
@@ -46,10 +63,38 @@ go test ./... -count=1 -race
 ```
 
 Postgres via testcontainers ; S3 via un serveur S3 en mémoire (`gofakes3`).
+`TestS3AgainstSeaweedFS` tourne contre un vrai SeaweedFS avec contrôle d'accès,
+lancé par `infra/storage/tests/run.sh` (ignoré sinon). Les tests de sécurité de
+`internal/transcode` utilisent le vrai `ffmpeg` (ignorés s'il est absent ; installé en CI).
+
+## Isolation de FFmpeg
+
+Le media-worker traite les fichiers envoyés comme hostiles
+([ADR-0007, complément PORO-007](../../docs/architecture/adr/0007-pipeline-video.md)) :
+démuxeur imposé d'après les octets magiques, codecs et dimensions en liste blanche, aucun
+protocole hors `file`, environnement réduit à `PATH`, conteneur sans capacité, en lecture seule,
+avec mémoire, CPU et processus bornés.
+
+| Refus | Code public |
+|---|---|
+| ni MP4/MOV ni WebM/Matroska (playlist, concat, HTML…) | `invalid_media` |
+| codec vidéo hors `h264`, `hevc`, `mpeg4`, `vp8`, `vp9`, `av1` | `invalid_media` |
+| codec audio hors `aac`, `mp3`, `opus`, `vorbis` | `invalid_media` |
+| largeur ou hauteur > 4096 px, > 4 flux audio/vidéo, > 16 flux | `invalid_media` |
+| durée > 3 minutes | `too_long` |
+
+Vérifier le conteneur lancé : `infra/media-worker/check_sandbox.sh`.
 
 ## Limites
 
 - Le CDN (Bunny) peut servir des segments en cache jusqu'à leur expiration ;
   aucune purge automatique.
-- En local, SeaweedFS n'a pas d'authentification : `poro-quarantine` y reste
-  lisible. La protection repose sur un bucket privé en production.
+- La purge des uploads multipart abandonnés n'est pas encore faite (PORO-008).
+
+## Sessions révoquées
+
+Les access tokens des sessions révoquées par auth (déconnexion, « déconnecter les autres
+appareils », réinitialisation du mot de passe, suppression du compte, vol de refresh token) sont
+refusés grâce au registre partagé `REVOCATION_REDIS_URL`
+([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) : obligatoire hors dev,
+réponse `503` s'il ne répond pas.

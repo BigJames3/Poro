@@ -23,6 +23,7 @@ type accountFixture struct {
 	refresh *fakeRefresh
 	otp     *fakeOTP
 	tokens  *fakeTokens
+	logins  LoginGuard
 	now     time.Time
 }
 
@@ -33,9 +34,10 @@ func newAccountFixture(t *testing.T) *accountFixture {
 		refresh: newFakeRefresh(),
 		otp:     &fakeOTP{},
 		tokens:  &fakeTokens{},
+		logins:  mustLoginGuard(t),
 		now:     time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC),
 	}
-	svc, err := NewAccountService(f.users, f.refresh, f.otp, f.tokens, testGrace, zap.NewNop())
+	svc, err := NewAccountService(f.users, f.refresh, f.otp, f.tokens, f.logins, testGrace, zap.NewNop())
 	require.NoError(t, err)
 	f.svc = svc.(*accountService)
 	f.svc.now = func() time.Time { return f.now }
@@ -56,7 +58,7 @@ func claimsFor(user *model.User, session uuid.UUID) TokenClaims {
 }
 
 func TestNewAccountServiceRejectsNonPositiveGrace(t *testing.T) {
-	_, err := NewAccountService(newFakeUsers(), newFakeRefresh(), &fakeOTP{}, &fakeTokens{}, 0, zap.NewNop())
+	_, err := NewAccountService(newFakeUsers(), newFakeRefresh(), &fakeOTP{}, &fakeTokens{}, mustLoginGuard(t), 0, zap.NewNop())
 	require.Error(t, err)
 }
 
@@ -106,24 +108,30 @@ func TestRevokeSession(t *testing.T) {
 	claims := claimsFor(user, current.FamilyID)
 	ctx := context.Background()
 
+	f.tokens.failRevoke = true
+	require.Error(t, f.svc.RevokeSession(ctx, claims, other.FamilyID))
+	require.Nil(t, other.RevokedAt, "a registry failure changes nothing: the call can be retried")
+	f.tokens.failRevoke = false
+
 	require.NoError(t, f.svc.RevokeSession(ctx, claims, other.FamilyID))
 	require.NotNil(t, other.RevokedAt)
 	require.Nil(t, current.RevokedAt)
-	require.Empty(t, f.tokens.blacklisted, "another device: the caller keeps its access token")
+	require.Equal(t, []uuid.UUID{other.FamilyID}, f.tokens.revoked, "the other device's access tokens are refused everywhere")
 
 	require.ErrorIs(t, f.svc.RevokeSession(ctx, claims, other.FamilyID), ErrSessionNotFound, "already ended")
 	require.ErrorIs(t, f.svc.RevokeSession(ctx, claims, stranger.FamilyID), ErrSessionNotFound, "not the caller's")
 	require.Nil(t, stranger.RevokedAt)
+	require.NotContains(t, f.tokens.revoked, stranger.FamilyID, "nobody revokes another account's session")
 
 	require.NoError(t, f.svc.RevokeSession(ctx, claims, current.FamilyID))
 	require.NotNil(t, current.RevokedAt)
-	require.Equal(t, []string{"jti-current"}, f.tokens.blacklisted, "the current device is logged out")
+	require.Equal(t, []uuid.UUID{other.FamilyID, current.FamilyID}, f.tokens.revoked, "the current device is logged out")
 
-	f.tokens.failBlacklist = true
-	require.Error(t, f.svc.RevokeSession(ctx, claims, current.FamilyID))
-	f.tokens.failBlacklist = false
-	f.refresh.revokeErr = errors.New("db down")
+	f.refresh.getErr = errors.New("db down")
 	require.Error(t, f.svc.RevokeSession(ctx, claims, other.FamilyID))
+	f.refresh.getErr = nil
+	f.refresh.revokeErr = errors.New("db down")
+	require.Error(t, f.svc.RevokeSession(ctx, claims, current.FamilyID))
 }
 
 func TestRevokeOtherSessionsKeepsTheCurrentDevice(t *testing.T) {
@@ -133,13 +141,25 @@ func TestRevokeOtherSessionsKeepsTheCurrentDevice(t *testing.T) {
 	first := f.refresh.seed(t, user.ID, "first")
 	second := f.refresh.seed(t, user.ID, "second")
 
+	f.tokens.failRevoke = true
+	_, err := f.svc.RevokeOtherSessions(context.Background(), claimsFor(user, current.FamilyID))
+	require.Error(t, err)
+	require.Nil(t, first.RevokedAt, "a registry failure changes nothing: the call can be retried")
+	f.tokens.failRevoke = false
+
 	res, err := f.svc.RevokeOtherSessions(context.Background(), claimsFor(user, current.FamilyID))
 	require.NoError(t, err)
 	require.Equal(t, int64(2), res.Revoked)
 	require.Nil(t, current.RevokedAt)
 	require.NotNil(t, first.RevokedAt)
 	require.NotNil(t, second.RevokedAt)
+	require.ElementsMatch(t, []uuid.UUID{first.FamilyID, second.FamilyID}, f.tokens.revoked,
+		"the other devices' access tokens are refused at once, the caller keeps its own")
 
+	f.refresh.getErr = errors.New("db down")
+	_, err = f.svc.RevokeOtherSessions(context.Background(), claimsFor(user, current.FamilyID))
+	require.Error(t, err)
+	f.refresh.getErr = nil
 	f.refresh.revokeErr = errors.New("db down")
 	_, err = f.svc.RevokeOtherSessions(context.Background(), claimsFor(user, current.FamilyID))
 	require.Error(t, err)
@@ -170,7 +190,8 @@ func TestDeleteEmailAccountNeedsItsPassword(t *testing.T) {
 	require.Equal(t, want, *user.DeletionScheduledAt)
 	require.NotNil(t, current.RevokedAt)
 	require.NotNil(t, other.RevokedAt, "every device is signed out")
-	require.Equal(t, []string{"jti-current"}, f.tokens.blacklisted)
+	require.ElementsMatch(t, []uuid.UUID{current.FamilyID, current.FamilyID, other.FamilyID}, f.tokens.revoked,
+		"every device's access tokens are refused everywhere")
 
 	f.now = f.now.Add(48 * time.Hour)
 	again, err := f.svc.DeleteAccount(ctx, claims, dto.DeleteAccountRequest{Password: testPassword})
@@ -235,7 +256,12 @@ func TestDeleteAccountRefusals(t *testing.T) {
 	require.Error(t, err)
 	f.refresh.revokeErr = nil
 
-	f.tokens.failBlacklist = true
+	f.refresh.getErr = errors.New("db down")
+	_, err = f.svc.DeleteAccount(ctx, claims, dto.DeleteAccountRequest{OTPCode: "123456"})
+	require.Error(t, err)
+	f.refresh.getErr = nil
+
+	f.tokens.failRevoke = true
 	_, err = f.svc.DeleteAccount(ctx, claims, dto.DeleteAccountRequest{OTPCode: "123456"})
 	require.Error(t, err)
 }

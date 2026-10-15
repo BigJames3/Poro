@@ -8,7 +8,13 @@ import { configureApp } from '../../src/app.setup';
 export async function createApp(env: Record<string, string>): Promise<NestExpressApplication> {
   Object.assign(
     process.env,
-    { APP_ENV: 'dev', LOG_LEVEL: 'fatal', KAFKA_CONSUMER_ENABLED: 'false' },
+    {
+      APP_ENV: 'dev',
+      LOG_LEVEL: 'fatal',
+      KAFKA_CONSUMER_ENABLED: 'false',
+      S3_ACCESS_KEY_ID: 'test-key',
+      S3_SECRET_ACCESS_KEY: 'test-secret',
+    },
     env,
   );
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();

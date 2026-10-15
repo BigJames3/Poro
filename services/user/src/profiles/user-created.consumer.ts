@@ -4,6 +4,7 @@ import {
   Logger,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  Optional,
 } from '@nestjs/common';
 
 import { isUuid } from '../common/uuid';
@@ -13,6 +14,7 @@ import { Envelope } from '../events/envelope';
 import { KafkaEventConsumer, PermanentError } from '../events/event-consumer';
 import { claim } from '../events/outbox';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsService } from '../metrics/metrics';
 
 export const PROFILES_CONSUMER_GROUP = 'poro-user-profiles';
 const COUNTRY_CODE = /^[A-Z]{2}$/;
@@ -26,6 +28,7 @@ export class UserCreatedConsumer implements OnApplicationBootstrap, OnApplicatio
   constructor(
     private readonly prisma: PrismaService,
     @Inject(appConfig.KEY) private readonly config: AppConfigType,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -35,7 +38,11 @@ export class UserCreatedConsumer implements OnApplicationBootstrap, OnApplicatio
     }
     this.consumer = new KafkaEventConsumer(
       this.config.kafkaBrokers,
-      { group: PROFILES_CONSUMER_GROUP, topics: [TYPE_AUTH_USER_CREATED] },
+      {
+        group: PROFILES_CONSUMER_GROUP,
+        topics: [TYPE_AUTH_USER_CREATED],
+        records: this.metrics?.kafkaRecords,
+      },
       (env) => this.handle(env),
     );
     this.consumer.start();
@@ -64,6 +71,7 @@ export class UserCreatedConsumer implements OnApplicationBootstrap, OnApplicatio
         return;
       }
       // A profile may already exist: GET /me creates it when this event is late.
+      // An erased profile is left as is, so a replayed event never refills it.
       await tx.$executeRaw`
         INSERT INTO profiles (user_id, country_code, created_at, updated_at)
         VALUES (${userId}::uuid, ${countryCode}, now(), now())
@@ -72,7 +80,8 @@ export class UserCreatedConsumer implements OnApplicationBootstrap, OnApplicatio
               updated_at = CASE
                 WHEN profiles.country_code IS NULL AND EXCLUDED.country_code IS NOT NULL THEN now()
                 ELSE profiles.updated_at
-              END`;
+              END
+          WHERE profiles.deleted_at IS NULL`;
     });
   }
 }

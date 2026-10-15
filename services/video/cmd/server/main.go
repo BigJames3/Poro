@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,10 +20,12 @@ import (
 	"github.com/poro/shared-go/kafka"
 	"github.com/poro/shared-go/logging"
 	"github.com/poro/shared-go/metrics"
+	"github.com/poro/shared-go/revocation"
 	"github.com/poro/shared-go/tracing"
 
 	"github.com/poro/video/internal/config"
 	"github.com/poro/video/internal/database"
+	"github.com/poro/video/internal/erasure"
 	"github.com/poro/video/internal/handler"
 	"github.com/poro/video/internal/middleware"
 	"github.com/poro/video/internal/moderation"
@@ -78,7 +81,21 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init s3: %w", err)
 	}
-	jwt, err := jwtauth.NewVerifier(jwtauth.Config{JWKSURL: cfg.JWKSURL})
+	// Revoked sessions are refused (ADR-0016). Only a dev service started on
+	// its own may run without the registry.
+	var revocations jwtauth.Revocations
+	revocationCheck := func(context.Context) error { return nil }
+	if cfg.RevocationRedisURL != "" {
+		registry, err := revocation.Open(cfg.RevocationRedisURL)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = registry.Close() }()
+		revocations, revocationCheck = registry, registry.Ping
+	} else {
+		log.Warn("REVOCATION_REDIS_URL is not set: revoked sessions stay accepted until their tokens expire")
+	}
+	jwt, err := jwtauth.NewVerifier(jwtauth.Config{JWKSURL: cfg.JWKSURL, Revocations: revocations})
 	if err != nil {
 		return fmt.Errorf("init jwks: %w", err)
 	}
@@ -93,9 +110,19 @@ func run() error {
 		Brokers: cfg.KafkaBrokers,
 		Group:   moderation.Group,
 		Topics:  moderation.Topics,
+		Metrics: m.Registry(),
 	}, moderation.New(pool, repo, store, log).Handle, log)
 	if err != nil {
 		return fmt.Errorf("init moderation consumer: %w", err)
+	}
+	eraser, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   erasure.Group,
+		Topics:  erasure.Topics,
+		Metrics: m.Registry(),
+	}, erasure.New(pool, repo, store, log).Handle, log)
+	if err != nil {
+		return fmt.Errorf("init account erasure consumer: %w", err)
 	}
 
 	app := fiber.New(fiber.Config{
@@ -116,7 +143,8 @@ func run() error {
 	routes.Register(app, routes.Dependencies{
 		Videos: handler.NewVideos(svc),
 		Health: health.New("video", version, map[string]health.Check{
-			"postgres": pool.Ping,
+			"postgres":   pool.Ping,
+			"revocation": revocationCheck,
 		}),
 		Metrics: m.Handler(),
 		JWT:     jwt,
@@ -126,7 +154,15 @@ func run() error {
 	consumerDone := make(chan struct{})
 	go func() {
 		defer close(consumerDone)
-		_ = moderator.Run(ctx)
+		var wg sync.WaitGroup
+		for _, c := range []*kafka.Consumer{moderator, eraser} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = c.Run(ctx)
+			}()
+		}
+		wg.Wait()
 	}()
 
 	addr := ":" + cfg.AppPort

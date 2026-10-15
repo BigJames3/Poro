@@ -113,6 +113,52 @@ func (r *Videos) SoftDelete(ctx context.Context, tx pgx.Tx, id, userID uuid.UUID
 	return scanVideo(row)
 }
 
+// ListAllByUser returns every video of a user, deleted or not and whatever
+// its status, oldest first (account erasure).
+func (r *Videos) ListAllByUser(ctx context.Context, userID uuid.UUID) ([]model.Video, error) {
+	rows, err := r.pool.Query(ctx, `SELECT `+videoColumns+` FROM videos
+		WHERE user_id = $1 ORDER BY created_at, id`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list user videos: %w", err)
+	}
+	defer rows.Close()
+	var out []model.Video
+	for rows.Next() {
+		v, err := scanVideo(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *v)
+	}
+	return out, rows.Err()
+}
+
+// EraseUser empties the title and description of every video of a user and
+// soft-deletes the ones still live, whatever their status. It returns only
+// the videos it deleted, so a second call returns none.
+func (r *Videos) EraseUser(ctx context.Context, tx pgx.Tx, userID uuid.UUID) ([]model.Video, error) {
+	if _, err := tx.Exec(ctx, `UPDATE videos SET title = '', description = '', updated_at = now()
+		WHERE user_id = $1 AND deleted_at IS NOT NULL AND (title <> '' OR description <> '')`, userID); err != nil {
+		return nil, fmt.Errorf("erase deleted videos: %w", err)
+	}
+	rows, err := tx.Query(ctx, `UPDATE videos SET title = '', description = '', deleted_at = now(), updated_at = now()
+		WHERE user_id = $1 AND deleted_at IS NULL
+		RETURNING `+videoColumns, userID)
+	if err != nil {
+		return nil, fmt.Errorf("erase videos: %w", err)
+	}
+	defer rows.Close()
+	var out []model.Video
+	for rows.Next() {
+		v, err := scanVideo(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *v)
+	}
+	return out, rows.Err()
+}
+
 // MarkReady records HLS output. Only processing rows change.
 func (r *Videos) MarkReady(ctx context.Context, tx pgx.Tx, id uuid.UUID, durationMs, width, height int, hlsKey, thumbKey string, renditions []model.Rendition) error {
 	raw, err := json.Marshal(renditions)

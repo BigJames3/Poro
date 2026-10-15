@@ -1,5 +1,6 @@
 // Event types. The JSON Schema of each lives in packages/contracts/events.
 export const TYPE_AUTH_USER_CREATED = 'poro.auth.user.created';
+export const TYPE_AUTH_USER_DELETED = 'poro.auth.user.deleted';
 export const TYPE_USER_CREATOR_ACTIVATED = 'poro.user.creator.activated';
 export const TYPE_USER_PROFILE_UPDATED = 'poro.user.profile.updated';
 
@@ -10,6 +11,12 @@ export interface AuthUserCreatedV1 {
   country_code: string | null;
   language: string;
   created_at: string;
+}
+
+/** Published by auth when an account is erased (ADR-0018). Carries no contact data. */
+export interface AuthUserDeletedV1 {
+  user_id: string;
+  deleted_at: string;
 }
 
 /** Published by this service when a profile becomes a creator. */

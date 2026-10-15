@@ -1,6 +1,7 @@
 import { loadConfig } from './app.config';
 
 const prod = {
+  REVOCATION_REDIS_URL: 'rediss://revocations:6380/0',
   APP_ENV: 'prod',
   DATABASE_URL: 'postgresql://poro:secret@db:5432/poro_user?sslmode=verify-full',
   REDIS_URL: 'rediss://redis:6379',
@@ -16,7 +17,12 @@ const prod = {
 
 describe('loadConfig', () => {
   it('has safe dev defaults', () => {
-    const config = loadConfig({ DATABASE_URL: 'postgresql://poro:x@localhost:5433/poro_user' });
+    const config = loadConfig({
+      APP_ENV: 'dev',
+      DATABASE_URL: 'postgresql://poro:x@localhost:5433/poro_user',
+      S3_ACCESS_KEY_ID: 'poro_dev',
+      S3_SECRET_ACCESS_KEY: 'poro_dev_secret',
+    });
     expect(config).toMatchObject({
       env: 'dev',
       port: 8082,
@@ -28,6 +34,7 @@ describe('loadConfig', () => {
       corsOrigins: [],
       trustProxy: false,
       avatarPublicBaseUrl: 'http://localhost:9000/poro-avatars',
+      s3: expect.objectContaining({ bucket: 'poro-avatars', uploadBucket: 'poro-avatar-uploads' }),
     });
   });
 
@@ -38,6 +45,18 @@ describe('loadConfig', () => {
     expect(config.logLevel).toBe('info');
     expect(config.avatarPublicBaseUrl).toBe('https://cdn.poro.africa/avatars');
     expect(loadConfig({ ...prod, TRUST_PROXY: 'loopback' }).trustProxy).toBe('loopback');
+  });
+
+  it.each([undefined, '', '  '])('refuses to start with APP_ENV %p', (appEnv) => {
+    expect(() => loadConfig({ ...prod, APP_ENV: appEnv })).toThrow(
+      'APP_ENV is required: dev, staging or prod',
+    );
+  });
+
+  it('has no S3 credentials built in, even in dev', () => {
+    expect(() =>
+      loadConfig({ APP_ENV: 'dev', DATABASE_URL: 'postgresql://poro:x@localhost:5433/poro_user' }),
+    ).toThrow('S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required');
   });
 
   it.each([
@@ -54,8 +73,12 @@ describe('loadConfig', () => {
     [{ S3_PUBLIC_ENDPOINT: 'http://storage.poro.africa' }, 'S3_PUBLIC_ENDPOINT must use https'],
     [{ S3_ENDPOINT: 'not a url' }, 'S3_ENDPOINT'],
     [{ S3_BUCKET: 'Bad_Bucket' }, 'S3_BUCKET'],
+    [{ S3_UPLOAD_BUCKET: 'Bad_Bucket' }, 'S3_UPLOAD_BUCKET is not'],
+    [{ S3_BUCKET: 'poro-public', S3_UPLOAD_BUCKET: 'poro-public' }, 'S3_UPLOAD_BUCKET must differ'],
     [{ S3_SECRET_ACCESS_KEY: undefined }, 'S3_ACCESS_KEY_ID'],
     [{ JWKS_URL: 'nope' }, 'JWKS_URL'],
+    [{ REVOCATION_REDIS_URL: undefined }, 'REVOCATION_REDIS_URL is required outside dev'],
+    [{ REVOCATION_REDIS_URL: 'http://redis:6379' }, 'REVOCATION_REDIS_URL must be'],
     [{ AVATAR_PUBLIC_BASE_URL: 'nope' }, 'AVATAR_PUBLIC_BASE_URL'],
   ])('rejects %p', (override, message) => {
     expect(() => loadConfig({ ...prod, ...override })).toThrow(message);

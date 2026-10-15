@@ -17,8 +17,10 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/redis/go-redis/v9"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/poro/shared-go/revocation"
 
 	"github.com/poro/auth/internal/config"
 )
@@ -176,44 +178,52 @@ func TestTokenServiceRejectsWeakKey(t *testing.T) {
 	require.ErrorContains(t, err, "at least 2048 bits")
 }
 
-func TestTokenServiceBlacklist(t *testing.T) {
+func TestTokenServiceRevokesSessions(t *testing.T) {
 	priv, pub := writeRSAKeys(t, false)
+	ctx := context.Background()
+	session, other := uuid.New(), uuid.New()
 
-	withoutRedis := newTokens(t, tokenConfig(priv, pub), nil)
-	require.Error(t, withoutRedis.BlacklistToken(context.Background(), "jti", time.Minute))
-	_, err := withoutRedis.IsBlacklisted(context.Background(), "jti")
-	require.Error(t, err, "blacklist checks fail closed without Redis")
+	withoutRegistry := newTokens(t, tokenConfig(priv, pub), nil)
+	require.Error(t, withoutRegistry.RevokeSessions(ctx, session))
+	_, err := withoutRegistry.IsSessionRevoked(ctx, session)
+	require.Error(t, err, "revocation checks fail closed without a registry")
 
 	mr := miniredis.RunT(t)
-	svc := newTokens(t, tokenConfig(priv, pub), redis.NewClient(&redis.Options{Addr: mr.Addr()}))
-	ctx := context.Background()
-	listed, err := svc.IsBlacklisted(ctx, "jti")
+	registry, err := revocation.Open("redis://" + mr.Addr())
 	require.NoError(t, err)
-	require.False(t, listed)
+	svc := newTokens(t, tokenConfig(priv, pub), registry)
+	revoked, err := svc.IsSessionRevoked(ctx, session)
+	require.NoError(t, err)
+	require.False(t, revoked)
 
-	require.NoError(t, svc.BlacklistToken(ctx, "jti", time.Minute))
-	listed, err = svc.IsBlacklisted(ctx, "jti")
+	require.NoError(t, svc.RevokeSessions(ctx, session))
+	require.NoError(t, svc.RevokeSessions(ctx), "nothing to revoke")
+	revoked, err = svc.IsSessionRevoked(ctx, session)
 	require.NoError(t, err)
-	require.True(t, listed)
+	require.True(t, revoked)
+	revoked, err = svc.IsSessionRevoked(ctx, other)
+	require.NoError(t, err)
+	require.False(t, revoked)
+	require.Equal(t, 16*time.Minute, mr.TTL(revocation.Key(session)), "kept as long as the session's last access token, plus a margin")
 
-	require.NoError(t, svc.BlacklistToken(ctx, "expired", 0))
-	listed, err = svc.IsBlacklisted(ctx, "expired")
+	mr.FastForward(16 * time.Minute)
+	revoked, err = svc.IsSessionRevoked(ctx, session)
 	require.NoError(t, err)
-	require.False(t, listed, "an already expired token needs no entry")
+	require.False(t, revoked, "entries expire after the access tokens")
 
-	mr.FastForward(2 * time.Minute)
-	listed, err = svc.IsBlacklisted(ctx, "jti")
-	require.NoError(t, err)
-	require.False(t, listed, "entries expire with the token")
+	mr.Close()
+	require.ErrorIs(t, svc.RevokeSessions(ctx, session), revocation.ErrUnavailable)
+	_, err = svc.IsSessionRevoked(ctx, session)
+	require.ErrorIs(t, err, revocation.ErrUnavailable)
 }
 
 func tokenConfig(priv, pub string) *config.Config {
 	return &config.Config{JWTPrivateKeyPath: priv, JWTPublicKeyPath: pub, JWTAccessTTL: "15m"}
 }
 
-func newTokens(t *testing.T, cfg *config.Config, rdb *redis.Client) TokenService {
+func newTokens(t *testing.T, cfg *config.Config, registry SessionRegistry) TokenService {
 	t.Helper()
-	svc, err := NewTokenService(cfg, rdb)
+	svc, err := NewTokenService(cfg, registry)
 	require.NoError(t, err)
 	return svc
 }

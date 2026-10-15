@@ -142,23 +142,23 @@ func (s *Videos) Complete(ctx context.Context, userID, videoID uuid.UUID, req dt
 	if err := s.store.CompleteMultipart(ctx, row.SourceKey, *row.S3UploadID, parts); err != nil {
 		return nil, errInternal.WithCause(err)
 	}
-	obj, err := s.store.Head(ctx, row.SourceKey)
+	obj, err := s.store.HeadSource(ctx, row.SourceKey)
 	if err != nil {
 		return nil, errInternal.WithCause(err)
 	}
 	if obj.Size <= 0 {
-		_ = s.store.Delete(ctx, row.SourceKey)
+		_ = s.store.DeleteSource(ctx, row.SourceKey)
 		_ = s.dropRow(ctx, userID, videoID)
 		return nil, errInvalidMedia
 	}
 	if obj.Size > model.MaxBytes {
-		_ = s.store.Delete(ctx, row.SourceKey)
+		_ = s.store.DeleteSource(ctx, row.SourceKey)
 		_ = s.dropRow(ctx, userID, videoID)
 		return nil, errTooLarge
 	}
-	head, err := s.store.GetRange(ctx, row.SourceKey, 0, 31)
+	head, err := s.store.GetSourceRange(ctx, row.SourceKey, 0, 31)
 	if err != nil || !media.LooksLikeVideo(head) {
-		_ = s.store.Delete(ctx, row.SourceKey)
+		_ = s.store.DeleteSource(ctx, row.SourceKey)
 		_ = s.dropRow(ctx, userID, videoID)
 		return nil, errInvalidMedia
 	}
@@ -307,9 +307,7 @@ func (s *Videos) Delete(ctx context.Context, userID, videoID uuid.UUID) error {
 	if deleted.DeletedAt != nil {
 		deletedAt = deleted.DeletedAt.UTC()
 	}
-	env, err := events.New(events.TypeVideoDeleted, 1, "video", videoID.String(), events.VideoDeletedV1{
-		VideoID: videoID.String(), UserID: userID.String(), DeletedAt: deletedAt,
-	}, deletedAt)
+	env, err := DeletedEvent(videoID.String(), userID.String(), deletedAt)
 	if err != nil {
 		return errInternal.WithCause(err)
 	}
@@ -317,6 +315,13 @@ func (s *Videos) Delete(ctx context.Context, userID, videoID uuid.UUID) error {
 		return errInternal.WithCause(err)
 	}
 	return tx.Commit(ctx)
+}
+
+// DeletedEvent is the poro.video.deleted event of a soft-deleted video.
+func DeletedEvent(videoID, userID string, deletedAt time.Time) (events.Envelope, error) {
+	return events.New(events.TypeVideoDeleted, 1, "video", videoID, events.VideoDeletedV1{
+		VideoID: videoID, UserID: userID, DeletedAt: deletedAt,
+	}, deletedAt)
 }
 
 func (s *Videos) view(row *model.Video, owner bool) *dto.VideoView {

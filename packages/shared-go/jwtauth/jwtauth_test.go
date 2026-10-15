@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -21,6 +22,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/poro/shared-go/httpx"
+	"github.com/poro/shared-go/revocation"
 )
 
 var (
@@ -331,4 +333,43 @@ func TestMiddleware(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusForbidden, resp.StatusCode, "RequireRole without claims refuses")
+}
+
+func TestVerifyRefusesRevokedSessions(t *testing.T) {
+	ctx := context.Background()
+	a, _ := keys(t)
+	srv := newJWKSServer(t, map[string]*rsa.PublicKey{"a": &a.PublicKey})
+	mr := miniredis.RunT(t)
+	store, err := revocation.Open("redis://" + mr.Addr())
+	require.NoError(t, err)
+	v, err := NewVerifier(Config{JWKSURL: srv.URL, Revocations: store})
+	require.NoError(t, err)
+
+	revoked, kept := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	require.NoError(t, store.Revoke(ctx, time.Minute, revoked))
+
+	_, err = v.Verify(ctx, sign(t, tokenOpts{sid: revoked.String()}))
+	require.ErrorIs(t, err, ErrInvalidToken)
+	claims, err := v.Verify(ctx, sign(t, tokenOpts{sid: kept.String()}))
+	require.NoError(t, err)
+	require.Equal(t, kept, claims.SessionID)
+
+	app := fiber.New(fiber.Config{ErrorHandler: httpx.ErrorHandler(zap.NewNop())})
+	app.Use(Middleware(v))
+	app.Get("/me", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusOK) })
+	status := func(sid uuid.UUID) int {
+		req := httptest.NewRequest(http.MethodGet, "/me", nil)
+		req.Header.Set("Authorization", "Bearer "+sign(t, tokenOpts{sid: sid.String()}))
+		resp, err := app.Test(req, -1)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+	require.Equal(t, http.StatusUnauthorized, status(revoked))
+	require.Equal(t, http.StatusOK, status(kept))
+
+	mr.Close()
+	_, err = v.Verify(ctx, sign(t, tokenOpts{sid: kept.String()}))
+	require.ErrorIs(t, err, ErrRevocationUnavailable)
+	require.Equal(t, http.StatusServiceUnavailable, status(kept), "a token that cannot be checked is refused")
 }

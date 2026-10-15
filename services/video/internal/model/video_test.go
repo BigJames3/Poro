@@ -25,3 +25,27 @@ func TestPartCountAndKeys(t *testing.T) {
 		t.Fatal()
 	}
 }
+
+func TestIsSourceKey(t *testing.T) {
+	user := "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b"
+	video := "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6c"
+	for _, ext := range []string{"mp4", "mov", "webm"} {
+		if !IsSourceKey(SourceKey(user, video, ext)) {
+			t.Fatal(ext)
+		}
+	}
+	for _, key := range []string{
+		ThumbKey(user, video),
+		HLSDir(user, video) + "/master.m3u8",
+		MediaRoot + user + "/" + video + "/hls/source.mp4",
+		MediaRoot + "not-a-uuid/" + video + "/source.mp4",
+		MediaRoot + user + "/not-a-uuid/source.mp4",
+		MediaRoot + user + "/" + video + "/source.",
+		MediaRoot + user + "/" + video + "/source.tar.gz",
+		"other/" + user + "/" + video + "/source.mp4",
+	} {
+		if IsSourceKey(key) {
+			t.Fatal(key)
+		}
+	}
+}

@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   NoSuchKey,
   PutObjectCommand,
   S3Client,
@@ -46,6 +47,7 @@ export function s3ClientFor(config: AppConfigType, endpoint: string): S3Client {
 export class AvatarService {
   private readonly logger = new Logger(AvatarService.name);
   private readonly bucket: string;
+  private readonly uploadBucket: string;
   private readonly publicBaseUrl: string;
 
   constructor(
@@ -54,6 +56,7 @@ export class AvatarService {
     @Inject(S3_PRESIGN_CLIENT) private readonly presignS3: S3Client,
   ) {
     this.bucket = config.s3.bucket;
+    this.uploadBucket = config.s3.uploadBucket;
     this.publicBaseUrl = config.avatarPublicBaseUrl;
   }
 
@@ -64,7 +67,7 @@ export class AvatarService {
   async createUpload(userId: string, contentType: AvatarContentType): Promise<AvatarUploadView> {
     const key = `${UPLOAD_PREFIX}/${userId}/${uuidv7()}`;
     const { url, fields } = await createPresignedPost(this.presignS3, {
-      Bucket: this.bucket,
+      Bucket: this.uploadBucket,
       Key: key,
       Conditions: [
         ['content-length-range', 1, AVATAR_MAX_BYTES],
@@ -99,11 +102,11 @@ export class AvatarService {
         CacheControl: 'public, max-age=31536000, immutable',
       }),
     );
-    await this.remove(uploadKey);
+    await this.removeUpload(uploadKey);
     return key;
   }
 
-  /** Best effort: an orphan object costs storage, not correctness. */
+  /** Deletes a public object. Best effort: an orphan costs storage, not correctness. */
   async remove(key: string): Promise<void> {
     try {
       await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
@@ -112,12 +115,60 @@ export class AvatarService {
     }
   }
 
+  /**
+   * Deletes every object of userId, public avatars and pending originals,
+   * including orphans a best-effort remove left behind. Unlike remove, it
+   * throws on a storage error so the account erasure is retried; an object
+   * already gone counts as deleted. Safe to run again.
+   */
+  async removeAllOf(userId: string): Promise<number> {
+    let removed = 0;
+    for (const [bucket, prefix] of [
+      [this.bucket, `avatars/${userId}/`],
+      [this.uploadBucket, `${UPLOAD_PREFIX}/${userId}/`],
+    ]) {
+      let token: string | undefined;
+      do {
+        const page = await this.s3.send(
+          new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }),
+        );
+        for (const { Key } of page.Contents ?? []) {
+          if (Key !== undefined) {
+            await this.deleteStrict(bucket, Key);
+            removed++;
+          }
+        }
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token !== undefined);
+    }
+    return removed;
+  }
+
+  private async deleteStrict(bucket: string, key: string): Promise<void> {
+    try {
+      await this.s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    } catch (err) {
+      if (!(err instanceof NoSuchKey || (err as { name?: string }).name === 'NoSuchKey')) {
+        throw err;
+      }
+    }
+  }
+
+  /** Deletes a private original once re-encoded or rejected. Best effort. */
+  private async removeUpload(key: string): Promise<void> {
+    try {
+      await this.s3.send(new DeleteObjectCommand({ Bucket: this.uploadBucket, Key: key }));
+    } catch (err) {
+      this.logger.warn({ msg: 'avatar upload not deleted', key, err });
+    }
+  }
+
   private async download(key: string): Promise<Buffer> {
     let body;
     try {
-      const res = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      const res = await this.s3.send(new GetObjectCommand({ Bucket: this.uploadBucket, Key: key }));
       if ((res.ContentLength ?? 0) > AVATAR_MAX_BYTES) {
-        await this.remove(key);
+        await this.removeUpload(key);
         throw new ApiError(422, 'avatar_too_large', 'avatar is larger than 5 MB');
       }
       body = await res.Body?.transformToByteArray();

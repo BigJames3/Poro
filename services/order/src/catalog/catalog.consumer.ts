@@ -4,6 +4,7 @@ import {
   Logger,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  Optional,
 } from '@nestjs/common';
 
 import { appConfig, type AppConfigType } from '../config/app.config';
@@ -13,6 +14,7 @@ import { KafkaEventConsumer, PermanentError } from '../events/event-consumer';
 import { Data, amountField, arrayField, stringField, timeField, uuidField } from '../events/fields';
 import { claim } from '../events/outbox';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsService } from '../metrics/metrics';
 
 export const CATALOG_CONSUMER_GROUP = 'poro-order-catalog';
 export const CATALOG_TOPICS = [TYPE_SHOP_UPDATED, TYPE_PRODUCT_UPDATED, TYPE_PRODUCT_DELETED];
@@ -29,6 +31,7 @@ export class CatalogConsumer implements OnApplicationBootstrap, OnApplicationShu
   constructor(
     private readonly prisma: PrismaService,
     @Inject(appConfig.KEY) private readonly config: AppConfigType,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -38,7 +41,11 @@ export class CatalogConsumer implements OnApplicationBootstrap, OnApplicationShu
     }
     this.consumer = new KafkaEventConsumer(
       this.config.kafkaBrokers,
-      { group: CATALOG_CONSUMER_GROUP, topics: CATALOG_TOPICS },
+      {
+        group: CATALOG_CONSUMER_GROUP,
+        topics: CATALOG_TOPICS,
+        records: this.metrics?.kafkaRecords,
+      },
       (env) => this.handle(env),
     );
     this.consumer.start();

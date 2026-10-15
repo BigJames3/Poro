@@ -11,6 +11,8 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
+
+	"github.com/poro/shared-go/revocation"
 )
 
 const (
@@ -38,9 +40,12 @@ type Config struct {
 	RedisPassword string
 	RedisDB       int
 
-	JWKSURL      string
-	KafkaBrokers []string
-	OtelEndpoint string
+	JWKSURL string
+	// RevocationRedisURL is the registry of revoked sessions written by auth
+	// (ADR-0016). Required outside dev.
+	RevocationRedisURL string
+	KafkaBrokers       []string
+	OtelEndpoint       string
 
 	// Public object URLs: thumbnails and HLS playlists of the video bucket.
 	S3PublicEndpoint string
@@ -77,11 +82,21 @@ func (c *Config) Validate() error {
 	var errs []error
 	switch c.AppEnv {
 	case EnvDev, EnvStaging, EnvProd:
+	case "":
+		// No default: a forgotten APP_ENV must not start a production
+		// service with the shortcuts of local development.
+		errs = append(errs, errors.New("APP_ENV is required: dev, staging or prod"))
 	default:
 		errs = append(errs, fmt.Errorf("APP_ENV must be dev, staging or prod, got %q", c.AppEnv))
 	}
+	if c.PostgresPassword == "" {
+		errs = append(errs, errors.New("POSTGRES_PASSWORD is required"))
+	}
 	if c.JWKSURL == "" {
 		errs = append(errs, errors.New("JWKS_URL is required"))
+	}
+	if err := revocation.CheckURL(c.RevocationRedisURL, c.IsDev()); err != nil {
+		errs = append(errs, err)
 	}
 	if len(c.KafkaBrokers) == 0 {
 		errs = append(errs, errors.New("KAFKA_BROKERS is required"))
@@ -137,9 +152,10 @@ func Load() (*Config, error) {
 		RedisPassword: v.GetString("REDIS_PASSWORD"),
 		RedisDB:       v.GetInt("REDIS_DB"),
 
-		JWKSURL:      v.GetString("JWKS_URL"),
-		KafkaBrokers: splitList(v.GetString("KAFKA_BROKERS")),
-		OtelEndpoint: v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		JWKSURL:            v.GetString("JWKS_URL"),
+		RevocationRedisURL: v.GetString("REVOCATION_REDIS_URL"),
+		KafkaBrokers:       splitList(v.GetString("KAFKA_BROKERS")),
+		OtelEndpoint:       v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),
 
 		S3PublicEndpoint: v.GetString("S3_PUBLIC_ENDPOINT"),
 		S3Bucket:         v.GetString("S3_BUCKET"),
@@ -151,7 +167,6 @@ func Load() (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("APP_ENV", EnvDev)
 	v.SetDefault("APP_PORT", "8088")
 	v.SetDefault("LOG_LEVEL", "debug")
 	v.SetDefault("TRUSTED_PROXIES", "")
@@ -159,7 +174,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("POSTGRES_HOST", "localhost")
 	v.SetDefault("POSTGRES_PORT", "5433")
 	v.SetDefault("POSTGRES_USER", "poro")
-	v.SetDefault("POSTGRES_PASSWORD", "poro_dev_password")
 	v.SetDefault("POSTGRES_DB", "poro_search")
 	v.SetDefault("POSTGRES_SSLMODE", "disable")
 

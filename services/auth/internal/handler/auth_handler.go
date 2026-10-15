@@ -54,10 +54,7 @@ func (h *AuthHandler) RequestOTP(c *fiber.Ctx) error {
 	}
 	res, err := h.auth.RequestOTP(c.UserContext(), req)
 	if err != nil {
-		var throttled *service.ThrottledError
-		if errors.As(err, &throttled) {
-			c.Set(fiber.HeaderRetryAfter, strconv.Itoa(int(math.Ceil(throttled.RetryAfter.Seconds()))))
-		}
+		setRetryAfter(c, err)
 		return mapAuthError(err)
 	}
 	return writeData(c, fiber.StatusOK, res)
@@ -106,6 +103,7 @@ func (h *AuthHandler) LoginEmail(c *fiber.Ctx) error {
 	}
 	res, err := h.auth.LoginEmail(c.UserContext(), req, c.Get(fiber.HeaderUserAgent), c.IP())
 	if err != nil {
+		setRetryAfter(c, err)
 		return mapAuthError(err)
 	}
 	return writeData(c, fiber.StatusOK, res)
@@ -167,8 +165,26 @@ func writeData(c *fiber.Ctx, status int, data any) error {
 	})
 }
 
+// setRetryAfter tells a throttled or locked client when to try again.
+func setRetryAfter(c *fiber.Ctx, err error) {
+	var wait time.Duration
+	var throttled *service.ThrottledError
+	var locked *service.LoginLockedError
+	switch {
+	case errors.As(err, &throttled):
+		wait = throttled.RetryAfter
+	case errors.As(err, &locked):
+		wait = locked.RetryAfter
+	default:
+		return
+	}
+	c.Set(fiber.HeaderRetryAfter, strconv.Itoa(int(math.Ceil(wait.Seconds()))))
+}
+
 func mapAuthError(err error) error {
 	switch {
+	case errors.Is(err, service.ErrLoginLocked):
+		return httpx.NewAPIError(fiber.StatusTooManyRequests, "login_throttled", "too many failed sign-ins, try again later")
 	case errors.Is(err, service.ErrEmailTaken):
 		return httpx.NewAPIError(fiber.StatusConflict, "email_taken", "email already registered")
 	case errors.Is(err, service.ErrAccountBlocked):

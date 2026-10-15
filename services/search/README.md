@@ -20,6 +20,12 @@ Groupe `poro-search-indexer` (inbox `processed_events`, DLQ). Le service ne publ
 | `poro.social.like.*`, `poro.social.comment.*`, `poro.social.share.created` | Compteurs de classement (jamais négatifs) |
 | `poro.social.follow.*` | Nombre d'abonnés des comptes |
 
+Groupe `poro-search-account-erasure` sur `poro.auth.user.deleted`
+([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) :
+le compte est désindexé ; son id seul reste dans `erased_users` pour qu'aucun événement
+tardif (`user.created`, `profile.updated`, `follow.*`) ne le réindexe. Les vidéos partent par
+`poro.video.deleted`.
+
 `hashtags.videos_count` suit en permanence le nombre de vidéos cherchables par tag.
 
 ## API
@@ -46,6 +52,7 @@ Groupe `poro-search-indexer` (inbox `processed_events`, DLQ). Le service ne publ
 | `POSTGRES_*` | `localhost`, `5433`, `poro`, —, `poro_search`, `disable` | Base (extensions `unaccent` et `pg_trgm` créées par la migration) |
 | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB` | `localhost`, `6380`, vide, `7` | Limite de débit |
 | `JWKS_URL` | `http://localhost:8081/.well-known/jwks.json` | Clés publiques d'auth |
+| `REVOCATION_REDIS_URL` | *(vide en dev)* | Registre des sessions révoquées par auth ([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) ; obligatoire hors dev, 503 s'il ne répond pas |
 | `KAFKA_BROKERS` | `localhost:9092` | Indexeur |
 | `S3_PUBLIC_ENDPOINT`, `S3_BUCKET` | `http://localhost:9000`, `poro-videos` | URL des miniatures |
 | `TRUSTED_PROXIES`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `MIGRATIONS_PATH` | | Comme les autres services Go |
