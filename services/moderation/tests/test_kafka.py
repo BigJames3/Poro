@@ -1,5 +1,6 @@
 """End to end over a real broker: events from social reach the scanner, which
-removes a blocking comment, and poison messages land in the DLQ."""
+removes a blocking comment, an account erasure reaches its own group, and
+poison messages land in the DLQ."""
 
 import asyncio
 import dataclasses
@@ -17,6 +18,7 @@ from testcontainers.community.kafka import RedpandaContainer
 
 from moderation.app import create_app
 from moderation.config import Config
+from moderation.erasure import TOPICS as ERASURE_TOPICS
 from moderation.events.consumer import HEADER_CONSUMER_GROUP, HEADER_ERROR
 from moderation.ids import uuid7
 from moderation.scanner import TOPICS
@@ -39,7 +41,7 @@ async def running(broker: str, config: Config, keys: Keys) -> AsyncIterator[AIOK
     await admin.create_topics(
         [
             NewTopic(t, num_partitions=3, replication_factor=1)
-            for topic in TOPICS
+            for topic in (*TOPICS, *ERASURE_TOPICS)
             for t in (topic, f"{topic}.dlq")
         ]
     )
@@ -112,6 +114,36 @@ async def test_blocking_comment_is_removed(
         return count or None
 
     assert await eventually(removed) == 1
+
+
+async def test_account_erasure_is_consumed(
+    running: AIOKafkaProducer, sessions: async_sessionmaker[AsyncSession]
+) -> None:
+    user, comment = uuid7(), uuid7()
+    async with sessions.begin() as session:
+        await session.execute(
+            text(
+                "INSERT INTO content_snapshots (target_type, target_id, owner_id, body, source_at) "
+                "VALUES ('comment', :id, :owner, 'mon numéro : 0707070707', now())"
+            ),
+            {"id": comment, "owner": user},
+        )
+    value = go_envelope(
+        "poro.auth.user.deleted", {"user_id": str(user), "deleted_at": datetime.now(UTC).isoformat()}
+    )
+    await running.send_and_wait("poro.auth.user.deleted", value, key=str(user).encode())
+
+    async def emptied() -> bool | None:
+        async with sessions() as session:
+            body: str | None = (
+                await session.execute(
+                    text("SELECT body FROM content_snapshots WHERE target_id = :id AND owner_id IS NULL"),
+                    {"id": comment},
+                )
+            ).scalar_one_or_none()
+        return True if body == "" else None
+
+    assert await eventually(emptied)
 
 
 async def test_poison_goes_to_the_dlq(broker: str, running: AIOKafkaProducer) -> None:

@@ -84,4 +84,11 @@ func TestS3AgainstSeaweedFS(t *testing.T) {
 	require.NoError(t, store.DeleteSource(ctx, source))
 	_, err = store.HeadSource(ctx, source)
 	require.Error(t, err)
+	require.NoError(t, store.DeleteSource(ctx, source), "deleting a missing source succeeds")
+
+	pending := model.SourceKey(user, uuid.Must(uuid.NewV7()).String(), "mp4")
+	abandoned, err := store.CreateMultipart(ctx, pending, "video/mp4")
+	require.NoError(t, err)
+	require.NoError(t, store.AbortMultipart(ctx, pending, abandoned))
+	require.NoError(t, store.AbortMultipart(ctx, pending, abandoned), "aborting an aborted upload succeeds")
 }

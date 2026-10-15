@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -105,6 +106,14 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init projections consumer: %w", err)
 	}
+	erasure, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   consumer.ErasureGroup,
+		Topics:  consumer.ErasureTopics,
+	}, consumer.NewErasure(pool, log), log)
+	if err != nil {
+		return fmt.Errorf("init account erasure consumer: %w", err)
+	}
 
 	app := fiber.New(fiber.Config{
 		AppName:                 "poro-social",
@@ -138,7 +147,15 @@ func run() error {
 	consumerDone := make(chan struct{})
 	go func() {
 		defer close(consumerDone)
-		_ = projections.Run(ctx)
+		var wg sync.WaitGroup
+		for _, c := range []*kafka.Consumer{projections, erasure} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = c.Run(ctx)
+			}()
+		}
+		wg.Wait()
 	}()
 
 	addr := ":" + cfg.AppPort

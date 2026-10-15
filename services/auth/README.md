@@ -156,8 +156,10 @@ vérifient hors ligne.
    supprimés, statut `DELETED`. L'identifiant reste ; le numéro et l'email redeviennent libres.
    `poro.auth.user.deleted` part dans l'outbox, dans la même transaction.
 
-Les autres services effaceront leurs données à la réception de `poro.auth.user.deleted`
-(PR suivantes) ; pendant les 30 jours, le profil reste visible.
+Les autres services effacent leurs données à la réception de `poro.auth.user.deleted`, chacun
+dans son groupe `poro-<service>-account-erasure`
+([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) ;
+pendant les 30 jours, le profil reste visible.
 
 À la création d'un compte, `poro.auth.user.created` est écrit dans l'outbox (même transaction) ;
 à son effacement, `poro.auth.user.deleted`.

@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   NoSuchKey,
   PutObjectCommand,
   S3Client,
@@ -134,6 +135,34 @@ export class MediaService {
     } catch (err) {
       this.logger.warn({ msg: 'image object not deleted', key, err });
     }
+  }
+
+  /**
+   * Deletes every public object under prefix. Unlike remove() it fails when
+   * storage does, so account erasure is retried until nothing is left.
+   */
+  async removeAll(prefix: string): Promise<void> {
+    await this.removePrefix(this.bucket, prefix);
+  }
+
+  /** Deletes the originals ownerId uploaded but never confirmed. Fails when storage does. */
+  async removeUploadsOf(ownerId: string): Promise<void> {
+    await this.removePrefix(this.uploadBucket, `${UPLOAD_PREFIX}/${ownerId}/`);
+  }
+
+  /** Lists then deletes page by page; deleting what is listed keeps later pages valid. */
+  private async removePrefix(bucket: string, prefix: string): Promise<void> {
+    let token: string | undefined;
+    do {
+      const page = await this.s3.send(
+        new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }),
+      );
+      const keys = (page.Contents ?? []).flatMap((object) => object.Key ?? []);
+      await Promise.all(
+        keys.map((key) => this.s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))),
+      );
+      token = page.IsTruncated === true ? page.NextContinuationToken : undefined;
+    } while (token !== undefined);
   }
 
   /** Deletes a private original once re-encoded or rejected. Best effort. */

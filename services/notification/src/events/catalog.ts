@@ -14,6 +14,8 @@ export const TYPE_ORDER_PLACED = 'poro.order.order.placed';
 export const TYPE_ORDER_SHIPPED = 'poro.order.order.shipped';
 export const TYPE_ORDER_CANCELLED = 'poro.order.order.cancelled';
 export const TYPE_ORDER_COMPLETED = 'poro.order.order.completed';
+// Consumed by its own group (account-erasure.consumer.ts), not by the dispatcher.
+export const TYPE_AUTH_USER_DELETED = 'poro.auth.user.deleted';
 
 export const CONSUMED_TYPES = [
   TYPE_AUTH_USER_CREATED,
@@ -35,6 +37,12 @@ export const CONSUMED_TYPES = [
 export interface AuthUserCreatedV1 {
   user_id: string;
   created_at: string;
+}
+
+/** Published by auth when an account is erased (ADR-0018). */
+export interface AuthUserDeletedV1 {
+  user_id: string;
+  deleted_at: string;
 }
 
 /** A full snapshot: the newest updated_at wins. */
@@ -106,7 +114,7 @@ export interface ModerationContentRemovedV1 {
 export type Currency = 'XOF' | 'XAF' | 'NGN';
 export type PaymentMethod = 'cash_on_delivery' | 'wave' | 'simulated';
 export type CancelReason =
-  'stock_rejected' | 'payment_timeout' | 'buyer_cancelled' | 'seller_cancelled';
+  'stock_rejected' | 'payment_timeout' | 'buyer_cancelled' | 'seller_cancelled' | 'account_deleted';
 
 /** A full snapshot of the public fields of a shop: the newest updated_at wins. */
 export interface ShopUpdatedV1 {

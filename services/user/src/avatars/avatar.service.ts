@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   NoSuchKey,
   PutObjectCommand,
   S3Client,
@@ -111,6 +112,45 @@ export class AvatarService {
       await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
     } catch (err) {
       this.logger.warn({ msg: 'avatar object not deleted', key, err });
+    }
+  }
+
+  /**
+   * Deletes every object of userId, public avatars and pending originals,
+   * including orphans a best-effort remove left behind. Unlike remove, it
+   * throws on a storage error so the account erasure is retried; an object
+   * already gone counts as deleted. Safe to run again.
+   */
+  async removeAllOf(userId: string): Promise<number> {
+    let removed = 0;
+    for (const [bucket, prefix] of [
+      [this.bucket, `avatars/${userId}/`],
+      [this.uploadBucket, `${UPLOAD_PREFIX}/${userId}/`],
+    ]) {
+      let token: string | undefined;
+      do {
+        const page = await this.s3.send(
+          new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }),
+        );
+        for (const { Key } of page.Contents ?? []) {
+          if (Key !== undefined) {
+            await this.deleteStrict(bucket, Key);
+            removed++;
+          }
+        }
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token !== undefined);
+    }
+    return removed;
+  }
+
+  private async deleteStrict(bucket: string, key: string): Promise<void> {
+    try {
+      await this.s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+    } catch (err) {
+      if (!(err instanceof NoSuchKey || (err as { name?: string }).name === 'NoSuchKey')) {
+        throw err;
+      }
     }
   }
 

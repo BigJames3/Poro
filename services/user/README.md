@@ -9,6 +9,9 @@ rôles, sessions) reste dans auth.
 - Décision : [ADR-0006](../../docs/architecture/adr/0006-service-user.md)
 - Événements : [ADR-0005](../../docs/architecture/adr/0005-evenements-json-outbox.md)
   - consommé : `poro.auth.user.created` (groupe `poro-user-profiles`)
+  - consommé : `poro.auth.user.deleted` (groupe `poro-user-account-erasure`,
+    [ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) :
+    profil anonymisé (id et `deleted_at` seuls), pseudo libéré, avatars supprimés du stockage
   - produits : `poro.user.creator.activated`, `poro.user.profile.updated`
     (contrats dans [`packages/contracts/events`](../../packages/contracts/events))
 

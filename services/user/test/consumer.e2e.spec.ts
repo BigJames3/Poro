@@ -1,5 +1,7 @@
+import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { RedpandaContainer, StartedRedpandaContainer } from '@testcontainers/redpanda';
+import { mockClient } from 'aws-sdk-client-mock';
 import { Kafka, Producer, logLevel } from 'kafkajs';
 import { Client } from 'pg';
 import request from 'supertest';
@@ -11,6 +13,8 @@ import { JwksServer, signToken, signingKey } from './support/jwt';
 import { TestDatabase, startDatabase } from './support/postgres';
 
 const TOPIC = 'poro.auth.user.created';
+const DELETED_TOPIC = 'poro.auth.user.deleted';
+const s3 = mockClient(S3Client);
 
 function goEnvelope(userId: string, countryCode: string | null, id = uuidv7()): string {
   return JSON.stringify({
@@ -64,11 +68,15 @@ describe('poro.auth.user.created consumer', () => {
     const admin = kafka.admin();
     await admin.connect();
     await admin.createTopics({
-      topics: [TOPIC, `${TOPIC}.dlq`].map((topic) => ({ topic, numPartitions: 3 })),
+      topics: [TOPIC, `${TOPIC}.dlq`, DELETED_TOPIC, `${DELETED_TOPIC}.dlq`].map((topic) => ({
+        topic,
+        numPartitions: 3,
+      })),
     });
     await admin.disconnect();
     producer = kafka.producer();
     await producer.connect();
+    s3.on(ListObjectsV2Command).resolves({});
 
     pg = new Client({ connectionString: db.url });
     await pg.connect();
@@ -139,6 +147,48 @@ describe('poro.auth.user.created consumer', () => {
         (await profile(userId))?.country_code === 'SN' ? 'SN' : undefined,
       ),
     ).toBe('SN');
+  });
+
+  it('erases the profile on poro.auth.user.deleted', async () => {
+    const userId = uuidv7();
+    const auth = `Bearer ${await signToken(key, { sub: userId })}`;
+    await request(app.getHttpServer())
+      .patch('/api/v1/users/me')
+      .set('Authorization', auth)
+      .send({ username: 'erased.on.kafka', display_name: 'Awa' })
+      .expect(200);
+    const eventId = uuidv7();
+    await producer.send({
+      topic: DELETED_TOPIC,
+      messages: [
+        {
+          key: userId,
+          value: JSON.stringify({
+            id: eventId,
+            type: DELETED_TOPIC,
+            version: 1,
+            source: 'poro-auth',
+            subject: userId,
+            occurred_at: '2026-10-15T08:00:00.123456789Z',
+            data: { user_id: userId, deleted_at: '2026-10-15T08:00:00.123456789Z' },
+          }),
+        },
+      ],
+    });
+
+    const row = await eventually(async () => {
+      const { rows } = await pg.query<{ username: string | null; display_name: string | null }>(
+        `SELECT p.username, p.display_name FROM profiles p
+           JOIN processed_events e ON e.consumer = 'poro-user-account-erasure' AND e.event_id = $2
+          WHERE p.user_id = $1`,
+        [userId, eventId],
+      );
+      return rows.at(0);
+    });
+    expect(row).toEqual({ username: null, display_name: null });
+    expect(
+      (await request(app.getHttpServer()).get('/api/v1/users/by-username/erased.on.kafka')).status,
+    ).toBe(404);
   });
 
   it('dead-letters events it cannot apply', async () => {

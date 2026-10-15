@@ -16,6 +16,7 @@ import { appConfig, type AppConfigType } from './config/app.config';
 import { HealthController } from './health/health.controller';
 import { MetricsController, MetricsService } from './metrics/metrics';
 import { PrismaService } from './prisma/prisma.service';
+import { AccountErasureConsumer } from './notifications/account-erasure.consumer';
 import { NotificationDispatcher } from './notifications/dispatcher';
 import { NotificationsController } from './notifications/notifications.controller';
 import { NotificationsService } from './notifications/notifications.service';
@@ -84,6 +85,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
     TokenVerifier,
     NotificationsService,
     NotificationDispatcher,
+    AccountErasureConsumer,
     PushService,
     PurgeService,
     {

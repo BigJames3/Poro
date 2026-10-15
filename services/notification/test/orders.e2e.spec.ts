@@ -331,6 +331,30 @@ describe('order notifications', () => {
     });
   });
 
+  it('tells both parties of an order cancelled by an account erasure, naming neither', async () => {
+    const order = newOrder();
+    await knownParties(order);
+
+    await dispatcher.handle(cancelled(order, 'account_deleted', true));
+
+    const [buyer] = await notifications(order.buyer_id);
+    expect(buyer).toMatchObject({
+      type: 'order_cancelled',
+      title: 'Commande annulée',
+      body: 'Ta commande chez Chez Fatou est annulée suite à la suppression d’un compte. Ton remboursement est en cours.',
+      actor_id: null,
+      data: { order_id: order.order_id, role: 'buyer' },
+    });
+    const [seller] = await notifications(order.seller_id);
+    expect(seller).toMatchObject({
+      type: 'order_cancelled',
+      title: 'Commande annulée',
+      body: 'Une commande a été annulée suite à la suppression d’un compte.',
+      actor_id: null,
+      data: { order_id: order.order_id, role: 'seller' },
+    });
+  });
+
   it('tells the seller the order is completed', async () => {
     const order = newOrder();
     await knownParties(order);
@@ -398,7 +422,7 @@ describe('order notifications', () => {
     [
       'poro.order.order.cancelled',
       { ...newOrder(), reason: 'lost', paid: false },
-      'reason must be stock_rejected, payment_timeout, buyer_cancelled or seller_cancelled',
+      'reason must be stock_rejected, payment_timeout, buyer_cancelled, seller_cancelled or account_deleted',
     ],
     [
       'poro.order.order.shipped',

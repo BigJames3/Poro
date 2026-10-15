@@ -8,6 +8,8 @@ import type Redis from 'ioredis';
 import { LoggerModule } from 'nestjs-pino';
 
 import { AddressesController } from './addresses/addresses.controller';
+import { AccountErasureConsumer } from './account/account-erasure.consumer';
+import { AccountErasureService } from './account/account-erasure.service';
 import { AddressesService } from './addresses/addresses.service';
 import { AuthGuard } from './auth/auth.guard';
 import { CartController } from './cart/cart.controller';
@@ -102,6 +104,8 @@ class AccountThrottlerGuard extends ThrottlerGuard {
     OrdersService,
     SagaService,
     SagaConsumer,
+    AccountErasureService,
+    AccountErasureConsumer,
     Scheduler,
 
     { provide: APP_GUARD, useClass: AuthGuard },

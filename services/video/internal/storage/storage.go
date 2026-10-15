@@ -21,7 +21,8 @@ type Object struct {
 // public media bucket holds HLS renditions and thumbnails, and the private
 // quarantine bucket holds the media of removed and deleted videos.
 type Storage interface {
-	// Multipart operations upload a source object.
+	// Multipart operations upload a source object. AbortMultipart and
+	// DeleteSource succeed when the upload or the object is already gone.
 	CreateMultipart(ctx context.Context, key, contentType string) (uploadID string, err error)
 	PresignPart(ctx context.Context, key, uploadID string, part int32) (url string, err error)
 	CompleteMultipart(ctx context.Context, key, uploadID string, parts []CompletedPart) error

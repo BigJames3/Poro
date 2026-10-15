@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -116,6 +117,10 @@ func (s *S3) AbortMultipart(ctx context.Context, key, uploadID string) error {
 		Key:      aws.String(key),
 		UploadId: aws.String(uploadID),
 	})
+	var missing *types.NoSuchUpload
+	if errors.As(err, &missing) {
+		return nil // already completed or aborted
+	}
 	if err != nil {
 		return fmt.Errorf("abort multipart: %w", err)
 	}

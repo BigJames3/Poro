@@ -24,6 +24,15 @@ transaction que l'effet, 3 essais puis `<topic>.dlq` (en-têtes `x-poro-*`
 identiques à shared-go). Les événements produits passent par l'outbox et
 `outbox-relay-moderation`. Feed, social et notification appliquent les retraits.
 
+Groupe `poro-moderation-account-erasure` sur `poro.auth.user.deleted`
+([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)), même
+transaction que l'inbox : les signalements du compte reçoivent chacun un `reporter_id` aléatoire
+et perdent leur commentaire ; ses instantanés perdent texte et `owner_id` ; ses dossiers perdent
+`owner_id`. Dossiers et décisions restent (journal de modération) avec des ids opaques : un
+dossier visant le compte garde son id en `target_id`, une décision d'un modérateur effacé garde
+`moderator_id`. L'id seul reste dans `erased_users` : le scanner n'enregistre plus rien d'un
+compte effacé (verrou consultatif par compte entre scan et effacement).
+
 ## Filtre automatique
 
 Règles déterministes, listes dans [`src/moderation/rules/fr.yml`](src/moderation/rules/fr.yml)

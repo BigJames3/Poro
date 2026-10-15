@@ -64,6 +64,7 @@ export class UserCreatedConsumer implements OnApplicationBootstrap, OnApplicatio
         return;
       }
       // A profile may already exist: GET /me creates it when this event is late.
+      // An erased profile is left as is, so a replayed event never refills it.
       await tx.$executeRaw`
         INSERT INTO profiles (user_id, country_code, created_at, updated_at)
         VALUES (${userId}::uuid, ${countryCode}, now(), now())
@@ -72,7 +73,8 @@ export class UserCreatedConsumer implements OnApplicationBootstrap, OnApplicatio
               updated_at = CASE
                 WHEN profiles.country_code IS NULL AND EXCLUDED.country_code IS NOT NULL THEN now()
                 ELSE profiles.updated_at
-              END`;
+              END
+          WHERE profiles.deleted_at IS NULL`;
     });
   }
 }

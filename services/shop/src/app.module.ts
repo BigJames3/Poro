@@ -7,6 +7,8 @@ import { trace } from '@opentelemetry/api';
 import type Redis from 'ioredis';
 import { LoggerModule } from 'nestjs-pino';
 
+import { AccountErasureConsumer } from './account/account-erasure.consumer';
+import { AccountErasureService } from './account/account-erasure.service';
 import { AuthGuard } from './auth/auth.guard';
 import { TokenVerifier } from './auth/token-verifier';
 import { EnvelopeInterceptor } from './common/envelope.interceptor';
@@ -94,6 +96,8 @@ class AccountThrottlerGuard extends ThrottlerGuard {
     ProductsService,
     StockService,
     StockConsumer,
+    AccountErasureService,
+    AccountErasureConsumer,
 
     {
       provide: S3_CLIENT,

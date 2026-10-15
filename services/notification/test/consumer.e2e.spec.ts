@@ -4,7 +4,7 @@ import { Kafka, Producer, logLevel } from 'kafkajs';
 import { Client } from 'pg';
 
 import { uuidv7 } from '../src/common/uuid';
-import { CONSUMED_TYPES } from '../src/events/catalog';
+import { CONSUMED_TYPES, TYPE_AUTH_USER_DELETED } from '../src/events/catalog';
 import { HEADER_CONSUMER_GROUP, HEADER_ERROR } from '../src/events/event-consumer';
 import { createApp } from './support/app';
 import { TestDatabase, startDatabase } from './support/postgres';
@@ -56,10 +56,12 @@ describe('poro-notification-dispatcher consumer', () => {
     const admin = kafka.admin();
     await admin.connect();
     await admin.createTopics({
-      topics: CONSUMED_TYPES.flatMap((topic) => [topic, `${topic}.dlq`]).map((topic) => ({
-        topic,
-        numPartitions: 3,
-      })),
+      topics: [...CONSUMED_TYPES, TYPE_AUTH_USER_DELETED]
+        .flatMap((topic) => [topic, `${topic}.dlq`])
+        .map((topic) => ({
+          topic,
+          numPartitions: 3,
+        })),
     });
     await admin.disconnect();
     producer = kafka.producer();
@@ -139,6 +141,45 @@ describe('poro-notification-dispatcher consumer', () => {
     await eventually(() => Promise.resolve(push.sent.length >= 1 ? true : undefined));
     expect(push.sent).toHaveLength(1);
     expect(push.sent[0].tokens).toEqual(['token-e2e-0000000000001']);
+  });
+
+  it('erases an account on poro.auth.user.deleted', async () => {
+    const userId = uuidv7();
+    await pg.query(
+      `INSERT INTO devices (id, user_id, fcm_token, platform, updated_at)
+       VALUES ($1, $2, 'token-e2e-erased-00000001', 'android', now())`,
+      [uuidv7(), userId],
+    );
+    await pg.query(
+      `INSERT INTO user_projections (user_id, username, display_name, updated_at)
+       VALUES ($1, 'erased', 'Erased', now())`,
+      [userId],
+    );
+    await producer.send({
+      topic: TYPE_AUTH_USER_DELETED,
+      messages: [
+        {
+          key: userId,
+          value: goEnvelope(TYPE_AUTH_USER_DELETED, userId, {
+            user_id: userId,
+            deleted_at: '2026-10-15T08:00:00.123456789Z',
+          }),
+        },
+      ],
+    });
+
+    await eventually(async () => {
+      const { rowCount } = await pg.query('SELECT 1 FROM erased_users WHERE user_id = $1', [
+        userId,
+      ]);
+      return rowCount === 1 ? true : undefined;
+    });
+    const { rows } = await pg.query<{ n: string }>(
+      `SELECT (SELECT count(*) FROM devices WHERE user_id = $1)
+            + (SELECT count(*) FROM user_projections WHERE user_id = $1) AS n`,
+      [userId],
+    );
+    expect(rows[0].n).toBe('0');
   });
 
   it('carries an order from placement to completion over Kafka', async () => {

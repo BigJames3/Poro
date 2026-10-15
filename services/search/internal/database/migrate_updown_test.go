@@ -18,7 +18,7 @@ import (
 
 func TestMain(m *testing.M) { os.Exit(testdb.Run(m)) }
 
-var tables = []string{"videos", "users", "hashtags", "processed_events"}
+var tables = []string{"videos", "users", "hashtags", "processed_events", "erased_users"}
 
 func tableCount(t *testing.T) int {
 	t.Helper()

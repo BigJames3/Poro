@@ -81,6 +81,14 @@ func (m *Memory) AbortMultipart(_ context.Context, _, uploadID string) error {
 	return nil
 }
 
+// HasUpload reports whether a multipart upload is still open.
+func (m *Memory) HasUpload(uploadID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.uploads[uploadID]
+	return ok
+}
+
 func (m *Memory) HeadSource(_ context.Context, key string) (Object, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -106,6 +107,14 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init indexer: %w", err)
 	}
+	eraser, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   consumer.ErasureGroup,
+		Topics:  consumer.ErasureTopics,
+	}, consumer.NewEraser(pool, log), log)
+	if err != nil {
+		return fmt.Errorf("init account erasure: %w", err)
+	}
 
 	svc := service.New(index.NewPostgres(pool), cfg.PublicObjectURL)
 
@@ -137,11 +146,18 @@ func run() error {
 		Limiter: redis,
 	})
 
-	indexerDone := make(chan struct{})
+	var consumers sync.WaitGroup
+	consumers.Add(2)
 	go func() {
-		defer close(indexerDone)
+		defer consumers.Done()
 		_ = indexer.Run(ctx)
 	}()
+	go func() {
+		defer consumers.Done()
+		_ = eraser.Run(ctx)
+	}()
+	indexerDone := make(chan struct{})
+	go func() { consumers.Wait(); close(indexerDone) }()
 
 	addr := ":" + cfg.AppPort
 	errCh := make(chan error, 1)

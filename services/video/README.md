@@ -17,6 +17,7 @@ HLS tourne dans `media-worker` (même module, `cmd/worker`).
 | Consommé (API) | `poro.moderation.content.removed` (vidéo) | `poro-video-moderation` | `moderation_status = removed`, médias en quarantaine |
 | Consommé (API) | `poro.moderation.content.restored` | `poro-video-moderation` | `approved`, médias remis en ligne (sauf vidéo supprimée) |
 | Consommé (API) | `poro.video.deleted` | `poro-video-moderation` | Médias de la vidéo supprimée en quarantaine |
+| Consommé (API) | `poro.auth.user.deleted` | `poro-video-account-erasure` | Toutes les vidéos du compte supprimées, titre et description vidés, un `poro.video.deleted` par vidéo encore en ligne, uploads abandonnés, sources supprimées ([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) |
 
 ## Quarantaine des médias
 

@@ -20,6 +20,12 @@ Groupe `poro-search-indexer` (inbox `processed_events`, DLQ). Le service ne publ
 | `poro.social.like.*`, `poro.social.comment.*`, `poro.social.share.created` | Compteurs de classement (jamais négatifs) |
 | `poro.social.follow.*` | Nombre d'abonnés des comptes |
 
+Groupe `poro-search-account-erasure` sur `poro.auth.user.deleted`
+([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) :
+le compte est désindexé ; son id seul reste dans `erased_users` pour qu'aucun événement
+tardif (`user.created`, `profile.updated`, `follow.*`) ne le réindexe. Les vidéos partent par
+`poro.video.deleted`.
+
 `hashtags.videos_count` suit en permanence le nombre de vidéos cherchables par tag.
 
 ## API

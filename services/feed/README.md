@@ -33,6 +33,12 @@ Groupe `poro-feed-projector` (inbox, DLQ). Le feed ne publie rien.
 | `poro.social.follow.created` / `.deleted` | Abonnements et nombre d'abonnés par auteur |
 | `poro.social.like.*`, `poro.social.comment.*`, `poro.social.share.created` | Compteurs et score de tendance |
 | `poro.user.profile.updated` | Nom, nom affiché et avatar des auteurs (instantané le plus récent) |
+
+Groupe `poro-feed-account-erasure` sur `poro.auth.user.deleted`
+([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) :
+profil d'auteur, abonnements dans les deux sens (`RemoveFollow`) et nombre d'abonnés
+supprimés. L'id seul reste dans `erased_users` pour qu'aucun profil ou abonnement tardif ne
+soit projeté de nouveau. Les vidéos partent par `poro.video.deleted`.
 | `poro.moderation.content.removed` (vidéo) | `moderation_status = 'rejected'` : vidéo masquée de tous les flux, score à zéro ; un `ready` tardif la laisse masquée |
 | `poro.moderation.content.restored` | Vidéo de nouveau `approved` et rescorée (sauf si supprimée entre-temps) |
 

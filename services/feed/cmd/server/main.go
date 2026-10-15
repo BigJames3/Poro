@@ -110,6 +110,14 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init projector: %w", err)
 	}
+	eraser, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   consumer.ErasureGroup,
+		Topics:  consumer.ErasureTopics,
+	}, consumer.NewEraser(pool, log), log)
+	if err != nil {
+		return fmt.Errorf("init account erasure: %w", err)
+	}
 
 	svc := service.New(pool,
 		session.NewStore(redis.Conn(), model.SessionTTL),
@@ -145,10 +153,14 @@ func run() error {
 	})
 
 	var background sync.WaitGroup
-	background.Add(2)
+	background.Add(3)
 	go func() {
 		defer background.Done()
 		_ = projector.Run(ctx)
+	}()
+	go func() {
+		defer background.Done()
+		_ = eraser.Run(ctx)
 	}()
 	go func() {
 		defer background.Done()

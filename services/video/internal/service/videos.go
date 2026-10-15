@@ -307,9 +307,7 @@ func (s *Videos) Delete(ctx context.Context, userID, videoID uuid.UUID) error {
 	if deleted.DeletedAt != nil {
 		deletedAt = deleted.DeletedAt.UTC()
 	}
-	env, err := events.New(events.TypeVideoDeleted, 1, "video", videoID.String(), events.VideoDeletedV1{
-		VideoID: videoID.String(), UserID: userID.String(), DeletedAt: deletedAt,
-	}, deletedAt)
+	env, err := DeletedEvent(videoID.String(), userID.String(), deletedAt)
 	if err != nil {
 		return errInternal.WithCause(err)
 	}
@@ -317,6 +315,13 @@ func (s *Videos) Delete(ctx context.Context, userID, videoID uuid.UUID) error {
 		return errInternal.WithCause(err)
 	}
 	return tx.Commit(ctx)
+}
+
+// DeletedEvent is the poro.video.deleted event of a soft-deleted video.
+func DeletedEvent(videoID, userID string, deletedAt time.Time) (events.Envelope, error) {
+	return events.New(events.TypeVideoDeleted, 1, "video", videoID, events.VideoDeletedV1{
+		VideoID: videoID, UserID: userID, DeletedAt: deletedAt,
+	}, deletedAt)
 }
 
 func (s *Videos) view(row *model.Video, owner bool) *dto.VideoView {

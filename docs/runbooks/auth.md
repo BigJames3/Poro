@@ -82,6 +82,9 @@ UPDATE refresh_tokens SET revoked_at = now() WHERE revoked_at IS NULL;
   bloquée.
 - Vérifier la publication : `SELECT published_at, last_error FROM outbox_events WHERE topic = 'poro.auth.user.deleted' AND event_key = '<uuid>';`
   (`published_at` vide : voir le runbook outbox-relay).
+- Vérifier la propagation : chaque service a un groupe `poro-<service>-account-erasure`.
+  Un échec part en DLQ `poro.auth.user.deleted.dlq` (alerte `EventsDeadLettered`) ; rejouer
+  l'événement est sans danger (ADR-0018).
 - **Annuler à la demande du support** (avant l'échéance seulement) :
   `UPDATE users SET deletion_scheduled_at = NULL WHERE id = '<uuid>' AND deleted_at IS NULL;`
   Après l'effacement, rien n'est récupérable : le compte n'a plus d'identifiant.

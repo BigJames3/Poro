@@ -13,6 +13,7 @@ SOURCE = "moderation"
 # Same rule as shared-go/events: poro.{domain}.{action} or poro.{domain}.{entity}.{action}.
 _TYPE = re.compile(r"^poro(\.[a-z][a-z0-9_]*){2,3}$")
 
+TYPE_USER_DELETED = "poro.auth.user.deleted"
 TYPE_VIDEO_READY = "poro.video.ready"
 TYPE_COMMENT_CREATED = "poro.social.comment.created"
 TYPE_COMMENT_UPDATED = "poro.social.comment.updated"

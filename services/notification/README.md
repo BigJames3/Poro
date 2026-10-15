@@ -28,8 +28,16 @@ n'a aucun effet. Un événement invalide part en DLQ (`<topic>.dlq`).
 | `poro.shop.shop.updated` | — | Projection `shop_projections` (nom, handle) ; le snapshot le plus récent gagne. |
 | `poro.order.order.placed` | `seller_id` et `buyer_id` | Paiement à la livraison seulement. Vendeur : « Nouvelle commande » (acheteur et montant) ; acheteur : « Commande confirmée » (boutique et montant). |
 | `poro.order.order.shipped` | `buyer_id` | « Commande expédiée », avec le suivi s'il est renseigné. |
-| `poro.order.order.cancelled` | selon `reason` | `buyer_cancelled` : le vendeur seulement. `seller_cancelled`, `stock_rejected`, `payment_timeout` : l'acheteur seulement, avec « Ton remboursement est en cours. » si `paid`. |
+| `poro.order.order.cancelled` | selon `reason` | `buyer_cancelled` : le vendeur seulement. `seller_cancelled`, `stock_rejected`, `payment_timeout` : l'acheteur seulement, avec « Ton remboursement est en cours. » si `paid`. `account_deleted` : les deux parties encore présentes, sans nommer personne. |
 | `poro.order.order.completed` | `seller_id` | « Commande terminée » (acheteur et montant). |
+
+Groupe `poro-notification-account-erasure`, `poro.auth.user.deleted`
+([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) :
+appareils, préférences, projection, notifications reçues et notifications où le
+compte est acteur (un groupe de likes qui le compte est supprimé en entier) sont
+effacés dans la transaction de l'inbox. `erased_users` garde l'id seul : aucun
+événement tardif ou rejoué ne recrée ensuite de projection ni de notification
+pour ou sur ce compte.
 
 ## Notifications de commande
 

@@ -21,6 +21,7 @@ import { ProfilesController } from './profiles/profiles.controller';
 import { ProfilesService } from './profiles/profiles.service';
 import { REDIS_CLIENT, RedisModule } from './redis.module';
 import { RevocationModule } from './auth/revocations';
+import { AccountErasureConsumer } from './profiles/account-erasure.consumer';
 import { UserCreatedConsumer } from './profiles/user-created.consumer';
 import { SERVICE_NAME, SERVICE_VERSION } from './version';
 
@@ -83,6 +84,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
     AvatarService,
     ProfilesService,
     UserCreatedConsumer,
+    AccountErasureConsumer,
 
     {
       provide: S3_CLIENT,

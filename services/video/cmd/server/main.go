@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 
 	"github.com/poro/video/internal/config"
 	"github.com/poro/video/internal/database"
+	"github.com/poro/video/internal/erasure"
 	"github.com/poro/video/internal/handler"
 	"github.com/poro/video/internal/middleware"
 	"github.com/poro/video/internal/moderation"
@@ -112,6 +114,14 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init moderation consumer: %w", err)
 	}
+	eraser, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   erasure.Group,
+		Topics:  erasure.Topics,
+	}, erasure.New(pool, repo, store, log).Handle, log)
+	if err != nil {
+		return fmt.Errorf("init account erasure consumer: %w", err)
+	}
 
 	app := fiber.New(fiber.Config{
 		AppName:                 "poro-video",
@@ -142,7 +152,15 @@ func run() error {
 	consumerDone := make(chan struct{})
 	go func() {
 		defer close(consumerDone)
-		_ = moderator.Run(ctx)
+		var wg sync.WaitGroup
+		for _, c := range []*kafka.Consumer{moderator, eraser} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = c.Run(ctx)
+			}()
+		}
+		wg.Wait()
 	}()
 
 	addr := ":" + cfg.AppPort

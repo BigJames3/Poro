@@ -50,6 +50,8 @@ hors ligne avec le JWKS.
   qu'il va disparaître.
 - Un vendeur qui supprime son compte garde sa boutique tant que shop ne consomme pas
   `poro.auth.user.deleted` ; les commandes en cours seront traitées dans cette PR de shop.
+  *Fait par l'[ADR-0018](0018-effacement-du-compte-dans-les-services.md) : chaque service
+  efface ses données à la réception de l'événement.*
 - Après l'effacement, rien n'est récupérable ni restaurable par le support.
 - Il faut un fournisseur SMTP (Brevo, SES…) et un domaine expéditeur configuré (SPF, DKIM,
   DMARC) avant d'ouvrir staging et production.

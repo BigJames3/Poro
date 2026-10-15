@@ -13,7 +13,7 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
 |---|---|---|---|
 | 0 | Intégration des branches en attente | TERMINÉE | les tâches suivantes touchent les mêmes fichiers (compose, CI, configs) |
 | 1 | PORO-007 isoler FFmpeg | TERMINÉE | surface d'attaque la plus exposée (fichiers d'inconnus) |
-| 2 | PORO-002 propager la suppression de compte | À FAIRE | obligation de protection des données, réutilise l'outbox existante |
+| 2 | PORO-002 propager la suppression de compte | TERMINÉE (durée de conservation des commandes : validation juridique) | obligation de protection des données, réutilise l'outbox existante |
 | 3 | PORO-011 CI et images | TERMINÉE (protection de branche : action humaine) | prérequis de toute livraison (staging, CD) |
 | 4 | PORO-009 observabilité | À FAIRE | prérequis d'une exploitation de staging |
 | 5 | PORO-010/012 staging, CD, sauvegardes | TERMINÉE côté code ; mise en service BLOQUÉE (hébergeur, secrets) | dépend de 3 et 4 ; accès hébergeur absents |
@@ -99,6 +99,58 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
   - Il faut reconstruire l'image régulièrement pour les CVE de FFmpeg.
 - **Action humaine** : après `docker compose up -d --build media-worker`, lancer
   `infra/media-worker/check_sandbox.sh`.
+
+## 2. PORO-002 — Propager la suppression de compte — TERMINÉE (une validation juridique)
+
+- **Spécification** : [ADR-0018](architecture/adr/0018-effacement-du-compte-dans-les-services.md).
+  Ce qui est effacé et gardé, service par service, avec la règle des commandes en cours.
+- **Mécanisme** :
+  - un consommateur `poro-<service>-account-erasure` dans les 9 services, sur l'outbox, Kafka,
+    l'inbox et la DLQ existants ;
+  - un message invalide part directement en DLQ ;
+  - les objets S3 sont supprimés après la validation de la base ; l'inbox n'est réclamée qu'une
+    fois le stockage traité ;
+  - les tombstones `erased_users` empêchent un événement tardif de recréer les données ;
+  - les événements de domaine existants sont réutilisés en aval : `video.deleted`,
+    `like/follow/comment.deleted`, `order.cancelled`, `product.updated` et `shop.updated`.
+- **Règles clés** :
+  - **profil** anonymisé, l'ancien pseudo renvoie 404 et redevient libre ;
+  - **vidéos** supprimées : médias en quarantaine, sources supprimées ;
+  - **social** : likes, abonnements, partages et commentaires retirés, compteurs justes ;
+  - **boutique** fermée quel que soit son statut, produits archivés, médias supprimés ;
+  - **commandes** non expédiées annulées (`account_deleted`, remboursement si payée) ;
+    expédiées terminées normalement ; contacts et carnet d'adresses effacés ;
+  - **notification** : jetons et historique supprimés ;
+  - **modération** : signaleur pseudonymisé par un UUID aléatoire, journal conservé.
+- **Contrat** : nouveau motif `account_deleted` dans `poro.order.order.cancelled`. Notification le
+  gère : sans ce changement, ces annulations seraient parties en DLQ.
+- **Tests et résultats** (relancés après la fusion du travail des 4 implémenteurs) :
+  - **Go** :
+    - video, social, feed et search : gofmt, vet, golangci-lint (0) et `go test -race` verts ;
+    - nouveaux tests d'effacement, de rejeu, de second événement, de panne de stockage et
+      d'événements invalides ;
+    - un cas Redpanda par service ;
+    - migrations up et down testées.
+  - **Node** : format, lint et typecheck verts. Tests et couverture :
+
+    | Service | Tests | Couverture |
+    |---|---|---|
+    | user | 134 | 94,7 % |
+    | shop | 168 | 95,1 % |
+    | order | 133 | 96,1 % |
+    | notification | 163 | 96,6 % |
+
+  - **moderation** : ruff, format et mypy verts, 106 tests.
+  - **Stockage réel** (`infra/storage/tests/run.sh`) : vert.
+- **Risques résiduels** :
+  - **Une transaction par compte et par service** : convient au volume du MVP. Passer à un
+    traitement par lots au-delà de 10 000 éléments.
+  - **Partages** : les compteurs dans feed et search ne baissent pas (aucun événement de
+    suppression).
+  - **Notification** : une course théorique entre l'effacement et une notification simultanée
+    reste possible (READ COMMITTED). Les rejeux et les événements tardifs sont couverts.
+- **Décision à valider (juridique)** : durée de conservation des commandes (ids, montants,
+  lignes) et base légale de cette conservation.
 
 ## 3. PORO-011 — CI et images — TERMINÉE (une action humaine)
 
@@ -210,5 +262,6 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
   Object Lock), planifier `backup.sh`, valider RPO/RTO (`docs/runbooks/backup.md`).
 - Staging : choisir l'hébergeur, écrire la couche d'environnement staging, créer l'environnement
   GitHub `staging` (relecteurs, secrets SSH, variables) : `docs/runbooks/deploy.md`.
+- Juridique : durée de conservation des commandes d'un compte effacé (ADR-0018).
 - Après la première publication : rendre les paquets GHCR privés ou publics selon la politique
   du projet (GHCR crée les paquets privés par défaut).
