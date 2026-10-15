@@ -46,6 +46,7 @@ type emailService struct {
 	codes       repository.EmailCodeRepository
 	throttle    OTPThrottle
 	sender      EmailSender
+	sessions    SessionRevoker
 	log         *zap.Logger
 	secret      []byte
 	ttl         time.Duration
@@ -55,7 +56,7 @@ type emailService struct {
 
 // NewEmailService wires email codes. It shares OTP_HMAC_SECRET with SMS codes:
 // the hash binds each code to its purpose, so the two never collide.
-func NewEmailService(cfg *config.Config, users repository.UserRepository, codes repository.EmailCodeRepository, throttle OTPThrottle, sender EmailSender, log *zap.Logger) (EmailService, error) {
+func NewEmailService(cfg *config.Config, users repository.UserRepository, codes repository.EmailCodeRepository, throttle OTPThrottle, sender EmailSender, sessions SessionRevoker, log *zap.Logger) (EmailService, error) {
 	ttl, err := time.ParseDuration(cfg.EmailCodeTTL)
 	if err != nil || ttl <= 0 {
 		return nil, fmt.Errorf("email service: EMAIL_CODE_TTL must be a positive duration, got %q", cfg.EmailCodeTTL)
@@ -63,8 +64,8 @@ func NewEmailService(cfg *config.Config, users repository.UserRepository, codes 
 	if cfg.EmailCodeMaxAttempts <= 0 {
 		return nil, errors.New("email service: EMAIL_CODE_MAX_ATTEMPTS must be positive")
 	}
-	if throttle == nil || sender == nil {
-		return nil, errors.New("email service: throttle and sender are required")
+	if throttle == nil || sender == nil || sessions == nil {
+		return nil, errors.New("email service: throttle, sender and session revoker are required")
 	}
 	secret := []byte(cfg.OtpSecret)
 	if len(secret) == 0 {
@@ -81,6 +82,7 @@ func NewEmailService(cfg *config.Config, users repository.UserRepository, codes 
 		codes:       codes,
 		throttle:    throttle,
 		sender:      sender,
+		sessions:    sessions,
 		log:         log,
 		secret:      secret,
 		ttl:         ttl,
@@ -178,6 +180,12 @@ func (s *emailService) ResetPassword(ctx context.Context, req dto.ResetPasswordR
 	hash, err := argon2id.CreateHash(req.NewPassword, passwordParams)
 	if err != nil {
 		return fmt.Errorf("reset password: hash password: %w", err)
+	}
+	// Every device is signed out before the password changes: once the code
+	// is proven, a failure leaves the account signed out rather than signed in
+	// with a password its owner just replaced.
+	if err := s.sessions.RevokeAllSessions(ctx, user.ID); err != nil {
+		return fmt.Errorf("reset password: %w", err)
 	}
 	if err := s.codes.ResetPassword(ctx, stored, hash, s.now()); err != nil {
 		return fmt.Errorf("reset password: %w", usedCode(err))

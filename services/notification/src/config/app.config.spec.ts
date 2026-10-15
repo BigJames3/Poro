@@ -1,6 +1,7 @@
 import { loadConfig } from './app.config';
 
 const prod = {
+  REVOCATION_REDIS_URL: 'rediss://revocations:6380/0',
   APP_ENV: 'prod',
   DATABASE_URL: 'postgresql://poro:secret@db:5432/poro_notification?sslmode=verify-full',
   REDIS_URL: 'rediss://redis:6379',
@@ -78,6 +79,8 @@ describe('loadConfig', () => {
     [{ CORS_ORIGINS: '*' }, 'CORS_ORIGINS'],
     [{ CORS_ORIGINS: 'http://app.poro.africa' }, 'https outside dev'],
     [{ JWKS_URL: 'nope' }, 'JWKS_URL'],
+    [{ REVOCATION_REDIS_URL: undefined }, 'REVOCATION_REDIS_URL is required outside dev'],
+    [{ REVOCATION_REDIS_URL: 'http://redis:6379' }, 'REVOCATION_REDIS_URL must be'],
     [{ FCM_CREDENTIALS_B64: '%%%' }, 'FCM_CREDENTIALS_B64 must be the base64'],
     [
       {

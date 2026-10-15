@@ -241,6 +241,12 @@ func (s *authService) Refresh(ctx context.Context, req dto.RefreshRequest) (*dto
 				return err
 			}
 			if !retry {
+				// A reused refresh token means it was stolen: the session's
+				// access tokens must stop working everywhere too. The
+				// transaction rolls back if the registry fails.
+				if err := s.tokens.RevokeSessions(ctx, stored.FamilyID); err != nil {
+					return err
+				}
 				revoked, err := tx.RevokeFamily(ctx, stored.FamilyID, now)
 				if err != nil {
 					return err
@@ -330,9 +336,10 @@ func (s *authService) supersedeWithinGrace(ctx context.Context, tx repository.Re
 	return true, nil
 }
 
-// Logout revokes the access token and every refresh token of its device session.
+// Logout ends the device session: every service refuses its access tokens
+// (shared registry) and its refresh tokens are revoked.
 func (s *authService) Logout(ctx context.Context, claims TokenClaims) error {
-	if err := s.tokens.BlacklistToken(ctx, claims.TokenID, time.Until(claims.Exp)); err != nil {
+	if err := s.tokens.RevokeSessions(ctx, claims.SessionID); err != nil {
 		return fmt.Errorf("logout: %w", err)
 	}
 	if _, err := s.refresh.RevokeFamily(ctx, claims.UserID, claims.SessionID); err != nil {

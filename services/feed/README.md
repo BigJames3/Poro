@@ -53,6 +53,7 @@ le service).
 | `POSTGRES_*` | `localhost`, `5433`, `poro`, —, `poro_feed`, `disable` | Base |
 | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB` | `localhost`, `6380`, vide, `4` | Sessions For You, cache, rate limit |
 | `JWKS_URL` | `http://localhost:8081/.well-known/jwks.json` | Clés publiques d'auth |
+| `REVOCATION_REDIS_URL` | *(vide en dev)* | Registre des sessions révoquées par auth ([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) ; obligatoire hors dev, 503 s'il ne répond pas |
 | `KAFKA_BROKERS` | `localhost:9092` | Projections |
 | `S3_PUBLIC_ENDPOINT`, `S3_BUCKET` | `http://localhost:9000`, `poro-videos` | URL publiques des miniatures et playlists HLS |
 | `TRUSTED_PROXIES`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `MIGRATIONS_PATH` | vides, `./migrations` | Comme les autres services |

@@ -70,3 +70,11 @@ lancé par `infra/storage/tests/run.sh` (ignoré sinon).
 - Le CDN (Bunny) peut servir des segments en cache jusqu'à leur expiration ;
   aucune purge automatique.
 - La purge des uploads multipart abandonnés n'est pas encore faite (PORO-008).
+
+## Sessions révoquées
+
+Les access tokens des sessions révoquées par auth (déconnexion, « déconnecter les autres
+appareils », réinitialisation du mot de passe, suppression du compte, vol de refresh token) sont
+refusés grâce au registre partagé `REVOCATION_REDIS_URL`
+([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) : obligatoire hors dev,
+réponse `503` s'il ne répond pas.

@@ -70,6 +70,7 @@ texte de la même cible est signalé par le filtre.
 | `DATABASE_URL` | — | `postgresql://…/poro_moderation?sslmode=…` |
 | `REDIS_URL` | vide | Limites de débit partagées (DB 6) ; en mémoire si vide (dev) |
 | `JWKS_URL` | `http://localhost:8081/.well-known/jwks.json` | Clés publiques d'auth |
+| `REVOCATION_REDIS_URL` | *(vide en dev)* | Registre des sessions révoquées par auth ([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) ; obligatoire hors dev, 503 s'il ne répond pas |
 | `KAFKA_BROKERS` | `localhost:9092` | Brokers |
 | `KAFKA_CONSUMER_ENABLED` | `true` | `false` : HTTP seul |
 | `REPORT_THRESHOLD` | `3` | Signalements distincts pour la priorité haute |

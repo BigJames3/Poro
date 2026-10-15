@@ -15,6 +15,8 @@ export interface AppConfig {
   kafkaBrokers: string[];
   kafkaConsumerEnabled: boolean;
   redisUrl: string | undefined;
+  /** Registry of revoked sessions written by auth (ADR-0016). Required outside dev. */
+  revocationRedisUrl: string | undefined;
   corsOrigins: string[];
   trustProxy: boolean | number | string;
   /** Payment methods buyers may choose at checkout. */
@@ -126,6 +128,18 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     errors.push('REDIS_URL is required outside dev: rate limits must be shared by replicas');
   }
 
+  const revocationRedisUrl =
+    env.REVOCATION_REDIS_URL?.trim() === '' ? undefined : env.REVOCATION_REDIS_URL?.trim();
+  if (
+    revocationRedisUrl !== undefined &&
+    !['redis:', 'rediss:'].includes(parseUrl(revocationRedisUrl)?.protocol ?? '')
+  ) {
+    errors.push('REVOCATION_REDIS_URL must be a redis:// or rediss:// URL');
+  }
+  if (!dev && revocationRedisUrl === undefined) {
+    errors.push('REVOCATION_REDIS_URL is required outside dev: revoked sessions must be refused');
+  }
+
   const corsOrigins = list(env.CORS_ORIGINS);
   for (const origin of corsOrigins) {
     const url = parseUrl(origin);
@@ -199,6 +213,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     kafkaBrokers,
     kafkaConsumerEnabled,
     redisUrl,
+    revocationRedisUrl,
     corsOrigins,
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     paymentMethods,

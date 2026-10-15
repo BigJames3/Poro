@@ -25,6 +25,8 @@ func TestValidate(t *testing.T) {
 			EmailCodeMaxAttempts: 5,
 			SMTPHost:             "smtp.poro.test",
 			SMTPPort:             587,
+
+			RevocationRedisURL: "rediss://revocations.poro.internal:6380/0",
 		}
 	}
 
@@ -32,6 +34,7 @@ func TestValidate(t *testing.T) {
 		AppEnv: EnvDev, SMSProvider: SMSProviderLog, PostgresSSLMode: "disable", KafkaBrokers: []string{"localhost:9092"},
 		AccountDeletionGrace: "720h", AccountPurgeInterval: "1h",
 		EmailProvider: EmailProviderLog, EmailCodeTTL: "15m", EmailCodeMaxAttempts: 5,
+		RevocationRedisURL: DevRevocationRedisURL,
 	}).Validate())
 
 	valid := prod()
@@ -73,6 +76,8 @@ func TestValidate(t *testing.T) {
 		{name: "smtp bad port", mutate: func(c *Config) { c.SMTPPort = 0 }, want: "SMTP_PORT"},
 		{name: "bad email code ttl", mutate: func(c *Config) { c.EmailCodeTTL = "soon" }, want: "EMAIL_CODE_TTL"},
 		{name: "no email attempts", mutate: func(c *Config) { c.EmailCodeMaxAttempts = 0 }, want: "EMAIL_CODE_MAX_ATTEMPTS"},
+		{name: "no revocation registry", mutate: func(c *Config) { c.RevocationRedisURL = "" }, want: "REVOCATION_REDIS_URL"},
+		{name: "revocation registry not redis", mutate: func(c *Config) { c.RevocationRedisURL = "http://redis:6379" }, want: "REVOCATION_REDIS_URL"},
 		{name: "bad calling code", mutate: func(c *Config) { c.OtpAllowedCallingCodes = []string{"+225", "225"} }, want: "OTP_ALLOWED_CALLING_CODES"},
 	}
 	for _, tc := range cases {
@@ -107,6 +112,11 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	require.Equal(t, []string{"localhost:9092"}, cfg.KafkaBrokers)
 	require.Equal(t, []string{"+225", "+221", "+237", "+234"}, cfg.OtpAllowedCallingCodes)
 	require.Equal(t, "postgres://poro:poro_dev_password@localhost:5433/poro_auth?sslmode=disable", cfg.PostgresDSN())
+	require.Equal(t, DevRevocationRedisURL, cfg.RevocationRedisURL, "dev defaults to the Compose Redis, database 15")
+	t.Setenv("REVOCATION_REDIS_URL", "redis://redis:6379/15")
+	cfg, err = Load()
+	require.NoError(t, err)
+	require.Equal(t, "redis://redis:6379/15", cfg.RevocationRedisURL)
 
 	t.Setenv("APP_ENV", EnvProd)
 	_, err = Load()

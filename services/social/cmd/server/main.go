@@ -19,6 +19,7 @@ import (
 	"github.com/poro/shared-go/kafka"
 	"github.com/poro/shared-go/logging"
 	"github.com/poro/shared-go/metrics"
+	"github.com/poro/shared-go/revocation"
 	"github.com/poro/shared-go/tracing"
 
 	"github.com/poro/social/internal/config"
@@ -72,7 +73,21 @@ func run() error {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	jwt, err := jwtauth.NewVerifier(jwtauth.Config{JWKSURL: cfg.JWKSURL})
+	// Revoked sessions are refused (ADR-0016). Only a dev service started on
+	// its own may run without the registry.
+	var revocations jwtauth.Revocations
+	revocationCheck := func(context.Context) error { return nil }
+	if cfg.RevocationRedisURL != "" {
+		registry, err := revocation.Open(cfg.RevocationRedisURL)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = registry.Close() }()
+		revocations, revocationCheck = registry, registry.Ping
+	} else {
+		log.Warn("REVOCATION_REDIS_URL is not set: revoked sessions stay accepted until their tokens expire")
+	}
+	jwt, err := jwtauth.NewVerifier(jwtauth.Config{JWKSURL: cfg.JWKSURL, Revocations: revocations})
 	if err != nil {
 		return fmt.Errorf("init jwks: %w", err)
 	}
@@ -111,8 +126,9 @@ func run() error {
 		// Kafka is left out: likes and comments keep working while the broker is
 		// down, their events wait in the outbox.
 		Health: health.New("social", version, map[string]health.Check{
-			"postgres": pool.Ping,
-			"redis":    func(ctx context.Context) error { return limiter.Conn().Ping(ctx).Err() },
+			"postgres":   pool.Ping,
+			"revocation": revocationCheck,
+			"redis":      func(ctx context.Context) error { return limiter.Conn().Ping(ctx).Err() },
 		}),
 		Metrics: m.Handler(),
 		JWT:     jwt,

@@ -11,6 +11,8 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
+
+	"github.com/poro/shared-go/revocation"
 )
 
 const (
@@ -38,9 +40,12 @@ type Config struct {
 	RedisPassword string
 	RedisDB       int
 
-	JWKSURL      string
-	KafkaBrokers []string
-	OtelEndpoint string
+	JWKSURL string
+	// RevocationRedisURL is the registry of revoked sessions written by auth
+	// (ADR-0016). Required outside dev.
+	RevocationRedisURL string
+	KafkaBrokers       []string
+	OtelEndpoint       string
 
 	// Public object URLs: thumbnails and HLS playlists of the video bucket.
 	S3PublicEndpoint string
@@ -82,6 +87,9 @@ func (c *Config) Validate() error {
 	}
 	if c.JWKSURL == "" {
 		errs = append(errs, errors.New("JWKS_URL is required"))
+	}
+	if err := revocation.CheckURL(c.RevocationRedisURL, c.IsDev()); err != nil {
+		errs = append(errs, err)
 	}
 	if len(c.KafkaBrokers) == 0 {
 		errs = append(errs, errors.New("KAFKA_BROKERS is required"))
@@ -137,9 +145,10 @@ func Load() (*Config, error) {
 		RedisPassword: v.GetString("REDIS_PASSWORD"),
 		RedisDB:       v.GetInt("REDIS_DB"),
 
-		JWKSURL:      v.GetString("JWKS_URL"),
-		KafkaBrokers: splitList(v.GetString("KAFKA_BROKERS")),
-		OtelEndpoint: v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		JWKSURL:            v.GetString("JWKS_URL"),
+		RevocationRedisURL: v.GetString("REVOCATION_REDIS_URL"),
+		KafkaBrokers:       splitList(v.GetString("KAFKA_BROKERS")),
+		OtelEndpoint:       v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),
 
 		S3PublicEndpoint: v.GetString("S3_PUBLIC_ENDPOINT"),
 		S3Bucket:         v.GetString("S3_BUCKET"),

@@ -25,6 +25,8 @@ class Config:
     """SQLAlchemy URL for asyncpg, without sslmode."""
     database_ssl: str
     redis_url: str | None
+    revocation_redis_url: str | None
+    """Registry of revoked sessions written by auth (ADR-0016). Required outside dev."""
     jwks_url: str
     kafka_brokers: list[str]
     kafka_consumer_enabled: bool
@@ -75,6 +77,12 @@ def load_config(env: Mapping[str, str]) -> Config:
     if not dev and redis_url is None:
         errors.append("REDIS_URL is required outside dev: rate limits must be shared by replicas")
 
+    revocation_redis_url = env.get("REVOCATION_REDIS_URL", "").strip() or None
+    if revocation_redis_url is not None and urlsplit(revocation_redis_url).scheme not in ("redis", "rediss"):
+        errors.append("REVOCATION_REDIS_URL must be a redis:// or rediss:// URL")
+    if not dev and revocation_redis_url is None:
+        errors.append("REVOCATION_REDIS_URL is required outside dev: revoked sessions must be refused")
+
     jwks_url = env.get("JWKS_URL", "http://localhost:8081/.well-known/jwks.json")
     if urlsplit(jwks_url).scheme not in ("http", "https"):
         errors.append("JWKS_URL must be an http(s) URL")
@@ -98,6 +106,7 @@ def load_config(env: Mapping[str, str]) -> Config:
         database_url=database_url,
         database_ssl=database_ssl,
         redis_url=redis_url,
+        revocation_redis_url=revocation_redis_url,
         jwks_url=jwks_url,
         kafka_brokers=brokers,
         kafka_consumer_enabled=consumer_enabled,

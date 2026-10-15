@@ -1,6 +1,7 @@
 import { loadConfig } from './app.config';
 
 const prod = {
+  REVOCATION_REDIS_URL: 'rediss://revocations:6380/0',
   APP_ENV: 'prod',
   DATABASE_URL: 'postgresql://poro:secret@db:5432/poro_user?sslmode=verify-full',
   REDIS_URL: 'rediss://redis:6379',
@@ -59,6 +60,8 @@ describe('loadConfig', () => {
     [{ S3_BUCKET: 'poro-public', S3_UPLOAD_BUCKET: 'poro-public' }, 'S3_UPLOAD_BUCKET must differ'],
     [{ S3_SECRET_ACCESS_KEY: undefined }, 'S3_ACCESS_KEY_ID'],
     [{ JWKS_URL: 'nope' }, 'JWKS_URL'],
+    [{ REVOCATION_REDIS_URL: undefined }, 'REVOCATION_REDIS_URL is required outside dev'],
+    [{ REVOCATION_REDIS_URL: 'http://redis:6379' }, 'REVOCATION_REDIS_URL must be'],
     [{ AVATAR_PUBLIC_BASE_URL: 'nope' }, 'AVATAR_PUBLIC_BASE_URL'],
   ])('rejects %p', (override, message) => {
     expect(() => loadConfig({ ...prod, ...override })).toThrow(message);

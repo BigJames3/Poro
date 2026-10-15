@@ -10,7 +10,7 @@ import { Reflector } from '@nestjs/core';
 
 import { ApiError } from '../common/api-error';
 import { AuthUser, PoroRequest } from '../common/request';
-import { KeysUnavailableError, TokenVerifier } from './token-verifier';
+import { KeysUnavailableError, RevocationUnavailableError, TokenVerifier } from './token-verifier';
 
 const IS_PUBLIC = 'poro:isPublic';
 
@@ -53,7 +53,7 @@ export class AuthGuard implements CanActivate {
       req.user = await this.verifier.verify(token);
       return true;
     } catch (err) {
-      if (err instanceof KeysUnavailableError) {
+      if (err instanceof KeysUnavailableError || err instanceof RevocationUnavailableError) {
         throw new ApiError(503, 'unavailable', 'authentication temporarily unavailable', err);
       }
       this.logger.debug({

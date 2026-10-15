@@ -49,6 +49,7 @@ email (`dev email`).
 | `POSTGRES_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_DB` | `localhost` / `5433` / `poro` / `poro_dev_password` / `poro_auth` | Connexion Postgres |
 | `POSTGRES_SSLMODE` | `disable` | `require` ou `verify-*` obligatoire hors `dev` |
 | `REDIS_HOST` / `_PORT` / `_PASSWORD` / `_DB` | `localhost` / `6380` / *(vide)* / `0` | Connexion Redis |
+| `REVOCATION_REDIS_URL` | `redis://localhost:6380/15` en dev | Registre des sessions révoquées, partagé avec tous les services ([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) ; obligatoire hors dev |
 | `JWT_PRIVATE_KEY_PATH` / `JWT_PUBLIC_KEY_PATH` | `./keys/*.pem` | Paire RSA ≥ 2048 bits, vérifiée au démarrage |
 | `JWT_ACCESS_TTL` | `15m` | Durée de l'access token |
 | `JWT_REFRESH_TTL` | `720h` | Durée du refresh token (30 jours) |

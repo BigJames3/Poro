@@ -40,12 +40,12 @@ func TestNewAuth(t *testing.T) {
 		{name: "missing", header: "", status: http.StatusUnauthorized},
 		{name: "wrong scheme", header: "Basic good", status: http.StatusUnauthorized},
 		{name: "invalid token", header: "Bearer bad", status: http.StatusUnauthorized},
-		{name: "blacklisted", header: "Bearer good", setup: func() { tokens.blacklisted = true }, status: http.StatusUnauthorized},
-		{name: "redis down fails closed", header: "Bearer good", setup: func() { tokens.blacklistErr = errors.New("redis") }, status: http.StatusInternalServerError},
+		{name: "revoked session", header: "Bearer good", setup: func() { tokens.revoked = true }, status: http.StatusUnauthorized},
+		{name: "registry down fails closed", header: "Bearer good", setup: func() { tokens.revokedErr = errors.New("redis") }, status: http.StatusServiceUnavailable},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			tokens.blacklisted, tokens.blacklistErr = false, nil
+			tokens.revoked, tokens.revokedErr = false, nil
 			if tc.setup != nil {
 				tc.setup()
 			}
@@ -59,15 +59,15 @@ func TestNewAuth(t *testing.T) {
 			require.NoError(t, resp.Body.Close())
 		})
 	}
-	require.Equal(t, "jti", tokens.checkedID, "the blacklist is keyed by jti")
+	require.Equal(t, claims.SessionID, tokens.checkedSession, "revocation is checked per session (sid)")
 }
 
 type stubTokens struct {
 	service.TokenService
-	claims       *service.TokenClaims
-	blacklisted  bool
-	blacklistErr error
-	checkedID    string
+	claims         *service.TokenClaims
+	revoked        bool
+	revokedErr     error
+	checkedSession uuid.UUID
 }
 
 func (s *stubTokens) ValidateAccessToken(token string) (*service.TokenClaims, error) {
@@ -77,7 +77,7 @@ func (s *stubTokens) ValidateAccessToken(token string) (*service.TokenClaims, er
 	return s.claims, nil
 }
 
-func (s *stubTokens) IsBlacklisted(_ context.Context, tokenID string) (bool, error) {
-	s.checkedID = tokenID
-	return s.blacklisted, s.blacklistErr
+func (s *stubTokens) IsSessionRevoked(_ context.Context, sessionID uuid.UUID) (bool, error) {
+	s.checkedSession = sessionID
+	return s.revoked, s.revokedErr
 }

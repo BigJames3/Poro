@@ -10,6 +10,7 @@ import pytest
 
 from moderation.http.jwks import InvalidTokenError, JwksKeyStore, KeysUnavailableError
 from moderation.http.ratelimit import MemoryLimiter, RedisLimiter
+from moderation.http.revocations import KEY_PREFIX, RedisRevocations, RevocationUnavailableError
 from moderation.logs import JsonFormatter, configure
 from tests.conftest import Keys, run_alembic
 
@@ -90,3 +91,25 @@ def test_json_logs(capsys: pytest.CaptureFixture[str]) -> None:
 def test_migrations_go_down_and_up(database_url: str) -> None:
     run_alembic(database_url, "downgrade", "base")
     run_alembic(database_url, "upgrade", "head")
+
+
+async def test_revocation_registry() -> None:
+    server = fakeredis.FakeServer()
+    registry = RedisRevocations(fakeredis.FakeAsyncRedis(server=server))
+    writer = fakeredis.FakeAsyncRedis(server=server)
+    revoked, other = "0192A3B4-C5D6-7E8F-9A0B-1C2D3E4F5A6B", "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6c"
+    assert KEY_PREFIX == "poro:revoked:sid:", "the layout auth writes"
+    await writer.set(KEY_PREFIX + revoked.lower(), "1", ex=960)
+    assert await registry.is_revoked(revoked)
+    assert not await registry.is_revoked(other)
+
+    server.connected = False
+    with pytest.raises(RevocationUnavailableError):
+        await registry.is_revoked(other)
+    await registry.close()
+    await writer.aclose()
+
+
+def test_revocation_registry_connects_from_url() -> None:
+    registry = RedisRevocations.connect("redis://127.0.0.1:1/15")
+    assert isinstance(registry, RedisRevocations)

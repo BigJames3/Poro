@@ -20,6 +20,7 @@ import { PrismaService } from './prisma/prisma.service';
 import { ProductsController } from './products/products.controller';
 import { ProductsService } from './products/products.service';
 import { REDIS_CLIENT, RedisModule } from './redis.module';
+import { RevocationModule } from './auth/revocations';
 import { AdminShopsController, ShopsController } from './shops/shops.controller';
 import { ShopsService } from './shops/shops.service';
 import { StockConsumer } from './stock/stock.consumer';
@@ -67,6 +68,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
       }),
     }),
     RedisModule,
+    RevocationModule,
     ThrottlerModule.forRootAsync({
       inject: [{ token: REDIS_CLIENT, optional: true }],
       useFactory: (redis?: Redis) => ({

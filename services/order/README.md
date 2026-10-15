@@ -117,3 +117,11 @@ Postgres et Redpanda via testcontainers. Couverture minimale 70 %.
 - Les prix du panier sont indicatifs : le prix réservé fait foi et peut
   différer si le vendeur l'a changé entre-temps.
 - Sans service payment, seules les commandes payées à la livraison aboutissent.
+
+## Sessions révoquées
+
+Les access tokens des sessions révoquées par auth (déconnexion, « déconnecter les autres
+appareils », réinitialisation du mot de passe, suppression du compte, vol de refresh token) sont
+refusés grâce au registre partagé `REVOCATION_REDIS_URL`
+([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) : obligatoire hors dev,
+réponse `503` s'il ne répond pas.

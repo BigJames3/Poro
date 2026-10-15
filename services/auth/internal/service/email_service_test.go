@@ -26,7 +26,27 @@ type emailFixture struct {
 	codes    *fakeEmailCodes
 	throttle *fakeThrottle
 	sender   *fakeEmailSender
+	sessions *fakeSessionRevoker
 	now      time.Time
+}
+
+// fakeSessionRevoker records who was signed out everywhere, and whether the
+// password had already changed at that moment.
+type fakeSessionRevoker struct {
+	users        []uuid.UUID
+	afterChange  []bool
+	passwordHash func(uuid.UUID) string
+	before       map[uuid.UUID]string
+	err          error
+}
+
+func (f *fakeSessionRevoker) RevokeAllSessions(_ context.Context, userID uuid.UUID, _ ...uuid.UUID) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.users = append(f.users, userID)
+	f.afterChange = append(f.afterChange, f.passwordHash(userID) != f.before[userID])
+	return nil
 }
 
 func emailConfig() *config.Config {
@@ -41,8 +61,14 @@ func newEmailFixture(t *testing.T) *emailFixture {
 		sender:   &fakeEmailSender{},
 		now:      time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC),
 	}
+	f.sessions = &fakeSessionRevoker{before: map[uuid.UUID]string{}, passwordHash: func(id uuid.UUID) string {
+		if user := f.users.byID[id]; user != nil && user.PasswordHash != nil {
+			return *user.PasswordHash
+		}
+		return ""
+	}}
 	f.codes = &fakeEmailCodes{users: f.users}
-	svc, err := NewEmailService(emailConfig(), f.users, f.codes, f.throttle, f.sender, zap.NewNop())
+	svc, err := NewEmailService(emailConfig(), f.users, f.codes, f.throttle, f.sender, f.sessions, zap.NewNop())
 	require.NoError(t, err)
 	f.svc = svc.(*emailService)
 	f.svc.now = func() time.Time { return f.now }
@@ -84,16 +110,18 @@ func TestNewEmailServiceRejectsBadSettings(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cfg := emailConfig()
 			mutate(cfg)
-			_, err := NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, zap.NewNop())
+			_, err := NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, &fakeSessionRevoker{}, zap.NewNop())
 			require.Error(t, err)
 		})
 	}
-	_, err := NewEmailService(emailConfig(), newFakeUsers(), &fakeEmailCodes{}, nil, &fakeEmailSender{}, zap.NewNop())
+	_, err := NewEmailService(emailConfig(), newFakeUsers(), &fakeEmailCodes{}, nil, &fakeEmailSender{}, &fakeSessionRevoker{}, zap.NewNop())
 	require.Error(t, err)
+	_, err = NewEmailService(emailConfig(), newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, nil, zap.NewNop())
+	require.Error(t, err, "a reset must be able to sign every device out")
 	cfg := emailConfig()
 	cfg.AppEnv = config.EnvProd
 	cfg.OtpSecret = "0123456789abcdef0123456789abcdef"
-	_, err = NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, zap.NewNop())
+	_, err = NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, &fakeSessionRevoker{}, zap.NewNop())
 	require.NoError(t, err)
 }
 
@@ -247,10 +275,22 @@ func TestForgotAndResetPassword(t *testing.T) {
 
 	err = f.svc.ResetPassword(ctx, dto.ResetPasswordRequest{Email: "awa@poro.test", Code: wrongCode(code), NewPassword: "nouveau-mot-de-passe"})
 	require.ErrorIs(t, err, ErrEmailCodeInvalid)
+	require.Empty(t, f.sessions.users, "a wrong code signs nobody out")
 
+	f.sessions.err = errors.New("registry down")
+	err = f.svc.ResetPassword(ctx, dto.ResetPasswordRequest{Email: "awa@poro.test", Code: code, NewPassword: "nouveau-mot-de-passe"})
+	require.Error(t, err)
+	match, err := argon2id.ComparePasswordAndHash(testPassword, *user.PasswordHash)
+	require.NoError(t, err)
+	require.True(t, match, "the password does not change while devices stay signed in")
+	f.sessions.err = nil
+
+	f.sessions.before[user.ID] = *user.PasswordHash
 	err = f.svc.ResetPassword(ctx, dto.ResetPasswordRequest{Email: "Awa@Poro.test", Code: code, NewPassword: "nouveau-mot-de-passe"})
 	require.NoError(t, err)
-	match, err := argon2id.ComparePasswordAndHash("nouveau-mot-de-passe", *user.PasswordHash)
+	require.Equal(t, []uuid.UUID{user.ID}, f.sessions.users, "every device is signed out, in every service")
+	require.Equal(t, []bool{false}, f.sessions.afterChange, "before the password changes")
+	match, err = argon2id.ComparePasswordAndHash("nouveau-mot-de-passe", *user.PasswordHash)
 	require.NoError(t, err)
 	require.True(t, match)
 	require.NotNil(t, user.EmailVerifiedAt, "receiving the code proves the address")

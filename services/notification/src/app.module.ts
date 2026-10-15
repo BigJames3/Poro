@@ -23,6 +23,7 @@ import { PurgeService } from './notifications/purge.service';
 import { PUSH_SENDER, pushSenderFor } from './push/push.sender';
 import { PushService } from './push/push.service';
 import { REDIS_CLIENT, RedisModule } from './redis.module';
+import { RevocationModule } from './auth/revocations';
 import { SERVICE_NAME, SERVICE_VERSION } from './version';
 
 /** Rate limits per account when authenticated, per client IP otherwise. */
@@ -66,6 +67,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
       }),
     }),
     RedisModule,
+    RevocationModule,
     ThrottlerModule.forRootAsync({
       inject: [{ token: REDIS_CLIENT, optional: true }],
       useFactory: (redis?: Redis) => ({

@@ -19,7 +19,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 
 	"github.com/poro/auth/internal/config"
 )
@@ -30,8 +29,10 @@ const (
 	// TokenAudience is the aud claim every Poro API must require.
 	TokenAudience = "poro-api"
 
-	blacklistKeyPrefix = "auth:jwt:blacklist:"
-	minRSAKeyBits      = 2048
+	minRSAKeyBits = 2048
+	// revocationMargin keeps a revoked session in the registry a little
+	// longer than its last access token, to absorb clock skew between hosts.
+	revocationMargin = time.Minute
 )
 
 // ErrInvalidToken is returned when an access token fails validation.
@@ -42,7 +43,7 @@ type TokenClaims struct {
 	UserID    uuid.UUID
 	Roles     []string
 	SessionID uuid.UUID // refresh token family of the device session
-	TokenID   string    // jti, used for revocation
+	TokenID   string    // jti
 	Exp       time.Time
 }
 
@@ -61,14 +62,22 @@ type JWKSet struct {
 	Keys []JWK `json:"keys"`
 }
 
-// TokenService issues and checks access tokens, and blacklists them on logout.
+// SessionRegistry is the revocation registry shared by every service
+// (ADR-0016); *revocation.Store implements it.
+type SessionRegistry interface {
+	Revoke(ctx context.Context, ttl time.Duration, sessionIDs ...uuid.UUID) error
+	IsRevoked(ctx context.Context, sessionID uuid.UUID) (bool, error)
+}
+
+// TokenService issues and checks access tokens, and revokes device sessions in
+// the shared registry so that every service refuses their access tokens.
 type TokenService interface {
 	GenerateAccessToken(userID uuid.UUID, roles []string, sessionID uuid.UUID) (string, error)
 	GenerateRefreshToken() (raw string, hash string, err error)
 	ValidateAccessToken(token string) (*TokenClaims, error)
 	HashToken(token string) string
-	BlacklistToken(ctx context.Context, tokenID string, ttl time.Duration) error
-	IsBlacklisted(ctx context.Context, tokenID string) (bool, error)
+	RevokeSessions(ctx context.Context, sessionIDs ...uuid.UUID) error
+	IsSessionRevoked(ctx context.Context, sessionID uuid.UUID) (bool, error)
 	JWKS() JWKSet
 }
 
@@ -77,7 +86,7 @@ type tokenService struct {
 	publicKey  *rsa.PublicKey
 	jwk        JWK
 	accessTTL  time.Duration
-	redis      *redis.Client
+	registry   SessionRegistry
 }
 
 type accessClaims struct {
@@ -87,9 +96,9 @@ type accessClaims struct {
 }
 
 // NewTokenService loads the RSA key pair and parses the access-token lifetime.
-// The private and public keys must match. A nil Redis client still allows
-// signing; blacklist checks then fail closed.
-func NewTokenService(cfg *config.Config, rdb *redis.Client) (TokenService, error) {
+// The private and public keys must match. A nil registry still allows
+// signing; revocations and revocation checks then fail closed.
+func NewTokenService(cfg *config.Config, registry SessionRegistry) (TokenService, error) {
 	accessTTL, err := time.ParseDuration(cfg.JWTAccessTTL)
 	if err != nil {
 		return nil, fmt.Errorf("parse access token ttl: %w", err)
@@ -118,7 +127,7 @@ func NewTokenService(cfg *config.Config, rdb *redis.Client) (TokenService, error
 		publicKey:  publicKey,
 		jwk:        newJWK(publicKey),
 		accessTTL:  accessTTL,
-		redis:      rdb,
+		registry:   registry,
 	}, nil
 }
 
@@ -197,28 +206,28 @@ func (s *tokenService) HashToken(token string) string {
 	return HashToken(token)
 }
 
-func (s *tokenService) BlacklistToken(ctx context.Context, tokenID string, ttl time.Duration) error {
-	if s.redis == nil {
-		return fmt.Errorf("blacklist token: redis is not configured")
+// RevokeSessions records sessions in the shared registry for as long as their
+// access tokens can live: every service refuses those tokens from now on.
+func (s *tokenService) RevokeSessions(ctx context.Context, sessionIDs ...uuid.UUID) error {
+	if s.registry == nil {
+		return errors.New("revoke sessions: revocation registry is not configured")
 	}
-	if ttl <= 0 {
-		return nil
-	}
-	if err := s.redis.Set(ctx, blacklistKeyPrefix+tokenID, "1", ttl).Err(); err != nil {
-		return fmt.Errorf("blacklist token: %w", err)
+	if err := s.registry.Revoke(ctx, s.accessTTL+revocationMargin, sessionIDs...); err != nil {
+		return fmt.Errorf("revoke sessions: %w", err)
 	}
 	return nil
 }
 
-func (s *tokenService) IsBlacklisted(ctx context.Context, tokenID string) (bool, error) {
-	if s.redis == nil {
-		return false, fmt.Errorf("check token blacklist: redis is not configured")
+// IsSessionRevoked reports whether a session is in the shared registry.
+func (s *tokenService) IsSessionRevoked(ctx context.Context, sessionID uuid.UUID) (bool, error) {
+	if s.registry == nil {
+		return false, errors.New("check session revocation: revocation registry is not configured")
 	}
-	n, err := s.redis.Exists(ctx, blacklistKeyPrefix+tokenID).Result()
+	revoked, err := s.registry.IsRevoked(ctx, sessionID)
 	if err != nil {
-		return false, fmt.Errorf("check token blacklist: %w", err)
+		return false, fmt.Errorf("check session revocation: %w", err)
 	}
-	return n > 0, nil
+	return revoked, nil
 }
 
 func (s *tokenService) JWKS() JWKSet {
