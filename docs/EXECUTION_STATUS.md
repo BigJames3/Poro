@@ -14,7 +14,7 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
 | 0 | Intégration des branches en attente | TERMINÉE | les tâches suivantes touchent les mêmes fichiers (compose, CI, configs) |
 | 1 | PORO-007 isoler FFmpeg | TERMINÉE | surface d'attaque la plus exposée (fichiers d'inconnus) |
 | 2 | PORO-002 propager la suppression de compte | À FAIRE | obligation de protection des données, réutilise l'outbox existante |
-| 3 | PORO-011 CI et images | À FAIRE | prérequis de toute livraison (staging, CD) |
+| 3 | PORO-011 CI et images | TERMINÉE (protection de branche : action humaine) | prérequis de toute livraison (staging, CD) |
 | 4 | PORO-009 observabilité | À FAIRE | prérequis d'une exploitation de staging |
 | 5 | PORO-010/012 staging, CD, sauvegardes | À FAIRE | dépend de 3 et 4 ; accès hébergeur absents |
 | 6 | PORO-013 Android et connexion API | À FAIRE | code Android hors périmètre autorisé (voir plus bas) |
@@ -100,6 +100,48 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
 - **Action humaine** : après `docker compose up -d --build media-worker`, lancer
   `infra/media-worker/check_sandbox.sh`.
 
+## 3. PORO-011 — CI et images — TERMINÉE (une action humaine)
+
+- **Fichiers** : `.github/workflows/ci.yml`, `.github/workflows/images.yml` (nouveau),
+  `SECURITY.md`.
+- **Changements** :
+  - **`ci-ok`** : un job qui agrège les 18 autres et échoue si l'un a échoué ou a été annulé.
+    Les jobs écartés par le filtre de chemins comptent comme réussis. C'est le seul contrôle à
+    exiger. Jusqu'ici, la protection documentée n'exigeait que `detect-changes` et `security` :
+    une PR aux tests rouges pouvait être fusionnée.
+  - **`repo-checks`** (à chaque changement) : actionlint sur les workflows, `docker compose
+    config` avec `.env.example`, shellcheck des scripts du worker.
+  - **`mobile-build`** : il exécutait `echo` et passait toujours. Il assemble maintenant
+    réellement l'APK debug (`gradlew assembleDebug`, SDK Android installé). Aucun fichier Android
+    n'est modifié.
+  - **Vidéo** : tests en `-race`, comme les autres modules Go.
+  - **`images.yml`** : publication sur GHCR après une CI verte sur un push de `main`, jamais
+    depuis une PR.
+    - Étiquette immuable `sha-<commit>` : jamais `latest`, et une étiquette déjà publiée n'est
+      jamais réécrite.
+    - Scan Trivy bloquant avant la publication, labels OCI (source, révision), attestation de
+      provenance signée.
+    - Droits limités : `packages`, `id-token` et `attestations` en écriture, au niveau du job
+      seulement.
+    - Actions épinglées par SHA, vérifiés sur les dépôts officiels.
+- **Tests et résultats** :
+  - actionlint 1.7.7 (avec shellcheck) : 0 erreur sur les deux workflows.
+  - Logique de `ci-ok` exécutée localement : `success skipped` → 0, `failure` → 1,
+    `cancelled` → 1.
+  - `docker compose config` valide.
+- **Non vérifiable ici** :
+  - Les workflows ne tournent que sur GitHub. La première exécution de `images.yml` aura lieu au
+    premier push sur `main` après la fusion.
+  - Le build Android n'a pas été lancé localement, pour ne rien générer dans
+    `apps/mobile-android`. S'il échoue en CI, c'est l'état réel du projet Android, à traiter par
+    l'équipe mobile (propriétaire du dossier, voir `.github/dependabot.yml`).
+- **Bloqué (droits)** : la protection de branche (`ci-ok` et `security` requis, pas de
+  contournement, pas de force push) demande un administrateur du dépôt. Les outils disponibles ici
+  n'ont pas cette API. La procédure est dans `SECURITY.md`.
+
 ## Interventions humaines requises (cumul)
 
 - Lancer `infra/media-worker/check_sandbox.sh` sur le vrai conteneur après reconstruction.
+- Administrateur GitHub : protection de `main` avec `ci-ok` et `security` requis (`SECURITY.md`).
+- Après la première publication : rendre les paquets GHCR privés ou publics selon la politique
+  du projet (GHCR crée les paquets privés par défaut).
