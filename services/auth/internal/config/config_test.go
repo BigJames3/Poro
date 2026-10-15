@@ -27,16 +27,21 @@ func TestValidate(t *testing.T) {
 			SMTPHost:             "smtp.poro.test",
 			SMTPPort:             587,
 
-			RevocationRedisURL: "rediss://revocations.poro.internal:6380/0",
+			RevocationRedisURL:       "rediss://revocations.poro.internal:6380/0",
+			SMSDailyLimitPerPhone:    10,
+			SMSHourlyLimitPerPrefix:  20,
+			SMSHourlyLimitPerCountry: 1000,
+			SMSDailyLimit:            5000,
+			LoginMaxFailures:         5,
+			LoginFailureWindow:       "15m",
+			LoginLockBase:            "1m",
+			LoginLockMax:             "15m",
 		}
 	}
 
-	require.NoError(t, (&Config{
-		AppEnv: EnvDev, PostgresPassword: "secret", SMSProvider: SMSProviderLog, PostgresSSLMode: "disable", KafkaBrokers: []string{"localhost:9092"},
-		AccountDeletionGrace: "720h", AccountPurgeInterval: "1h",
-		EmailProvider: EmailProviderLog, EmailCodeTTL: "15m", EmailCodeMaxAttempts: 5,
-		RevocationRedisURL: DevRevocationRedisURL,
-	}).Validate())
+	dev := prod()
+	dev.AppEnv, dev.SMSProvider, dev.PostgresSSLMode, dev.EmailProvider = EnvDev, SMSProviderLog, "disable", EmailProviderLog
+	require.NoError(t, dev.Validate())
 
 	valid := prod()
 	valid.SMSProvider = SMSProviderAfricasTalking
@@ -79,6 +84,14 @@ func TestValidate(t *testing.T) {
 		{name: "no email attempts", mutate: func(c *Config) { c.EmailCodeMaxAttempts = 0 }, want: "EMAIL_CODE_MAX_ATTEMPTS"},
 		{name: "no revocation registry", mutate: func(c *Config) { c.RevocationRedisURL = "" }, want: "REVOCATION_REDIS_URL"},
 		{name: "revocation registry not redis", mutate: func(c *Config) { c.RevocationRedisURL = "http://redis:6379" }, want: "REVOCATION_REDIS_URL"},
+		{name: "no sms cap per phone", mutate: func(c *Config) { c.SMSDailyLimitPerPhone = 0 }, want: "SMS_DAILY_LIMIT_PER_PHONE"},
+		{name: "no sms cap per range", mutate: func(c *Config) { c.SMSHourlyLimitPerPrefix = -1 }, want: "SMS_HOURLY_LIMIT_PER_PREFIX"},
+		{name: "no sms cap per country", mutate: func(c *Config) { c.SMSHourlyLimitPerCountry = 0 }, want: "SMS_HOURLY_LIMIT_PER_COUNTRY"},
+		{name: "no daily sms budget", mutate: func(c *Config) { c.SMSDailyLimit = 0 }, want: "SMS_DAILY_LIMIT"},
+		{name: "no login failures", mutate: func(c *Config) { c.LoginMaxFailures = 0 }, want: "LOGIN_MAX_FAILURES"},
+		{name: "bad login window", mutate: func(c *Config) { c.LoginFailureWindow = "a while" }, want: "LOGIN_FAILURE_WINDOW"},
+		{name: "bad lock base", mutate: func(c *Config) { c.LoginLockBase = "0s" }, want: "LOGIN_LOCK_BASE"},
+		{name: "lock base above max", mutate: func(c *Config) { c.LoginLockBase = "30m" }, want: "must not exceed LOGIN_LOCK_MAX"},
 		{name: "bad calling code", mutate: func(c *Config) { c.OtpAllowedCallingCodes = []string{"+225", "225"} }, want: "OTP_ALLOWED_CALLING_CODES"},
 	}
 	for _, tc := range cases {
@@ -111,6 +124,14 @@ func TestLoadReadsEnvironment(t *testing.T) {
 	require.Equal(t, 5, cfg.EmailCodeMaxAttempts)
 	require.Equal(t, 587, cfg.SMTPPort)
 	require.Equal(t, "1h", cfg.AccountPurgeInterval)
+	require.Equal(t, 10, cfg.SMSDailyLimitPerPhone)
+	require.Equal(t, 20, cfg.SMSHourlyLimitPerPrefix)
+	require.Equal(t, 1000, cfg.SMSHourlyLimitPerCountry)
+	require.Equal(t, 5000, cfg.SMSDailyLimit)
+	require.Equal(t, 5, cfg.LoginMaxFailures)
+	require.Equal(t, "15m", cfg.LoginFailureWindow)
+	require.Equal(t, "1m", cfg.LoginLockBase)
+	require.Equal(t, "15m", cfg.LoginLockMax)
 	require.Equal(t, []string{"localhost:9092"}, cfg.KafkaBrokers)
 	require.Equal(t, []string{"+225", "+221", "+237", "+234"}, cfg.OtpAllowedCallingCodes)
 	require.Equal(t, "postgres://poro:poro_dev_password@localhost:5433/poro_auth?sslmode=disable", cfg.PostgresDSN())

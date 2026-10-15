@@ -54,10 +54,10 @@ paths:
           description: "`phone_country_not_supported` (outside the launch countries) or `phone_unreachable` (the SMS provider refuses the number)"
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "503":
-          description: "`sms_unavailable`: provider failure; the client may retry immediately"
+          description: "`sms_unavailable`: provider failure (the client may retry immediately), or the platform's daily SMS budget is spent (ADR-0017): sign in by email until the next UTC day"
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "429":
-          description: "`otp_throttled` (per phone) or `rate_limited` (per IP)"
+          description: "`otp_throttled` (per phone, number range or country: SMS budget, ADR-0017) or `rate_limited` (per IP)"
           headers:
             Retry-After: { schema: { type: integer }, description: "seconds, present for otp_throttled" }
           content:
@@ -140,7 +140,7 @@ paths:
           description: "`invalid_credentials` (same answer for unknown email and wrong password)"
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "403": { $ref: "#/components/responses/Blocked" }
-        "429": { $ref: "#/components/responses/RateLimited" }
+        "429": { $ref: "#/components/responses/LoginThrottled" }
   /api/v1/auth/email/verification/request:
     post:
       tags: [email]
@@ -400,7 +400,9 @@ paths:
           description: "`reauth_required`: the password (email account) or the code (phone account) is missing"
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "429":
-          description: "`otp_too_many_attempts` or `rate_limited`"
+          description: "`otp_too_many_attempts`, `login_throttled` (too many wrong passwords: the same lock as sign-in, header `Retry-After`) or `rate_limited`"
+          headers:
+            Retry-After: { schema: { type: integer }, description: "seconds, present for login_throttled" }
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /api/v1/auth/me/delete/cancel:
     post:
@@ -619,4 +621,13 @@ components:
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
     RateLimited:
       description: "`rate_limited`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    LoginThrottled:
+      description: >-
+        `login_throttled`: too many wrong passwords for this account, from any IP (ADR-0017).
+        Locked 1 minute after 5 failures, doubled by each further failure, 15 minutes at most;
+        the password is not checked while locked. Same answer for unknown addresses.
+        Or `rate_limited` (per IP).
+      headers:
+        Retry-After: { schema: { type: integer }, description: "seconds, present for login_throttled" }
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }

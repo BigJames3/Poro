@@ -27,6 +27,7 @@ type emailFixture struct {
 	throttle *fakeThrottle
 	sender   *fakeEmailSender
 	sessions *fakeSessionRevoker
+	logins   LoginGuard
 	now      time.Time
 }
 
@@ -59,6 +60,7 @@ func newEmailFixture(t *testing.T) *emailFixture {
 		users:    newFakeUsers(),
 		throttle: &fakeThrottle{},
 		sender:   &fakeEmailSender{},
+		logins:   mustLoginGuard(t),
 		now:      time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC),
 	}
 	f.sessions = &fakeSessionRevoker{before: map[uuid.UUID]string{}, passwordHash: func(id uuid.UUID) string {
@@ -68,7 +70,7 @@ func newEmailFixture(t *testing.T) *emailFixture {
 		return ""
 	}}
 	f.codes = &fakeEmailCodes{users: f.users}
-	svc, err := NewEmailService(emailConfig(), f.users, f.codes, f.throttle, f.sender, f.sessions, zap.NewNop())
+	svc, err := NewEmailService(emailConfig(), f.users, f.codes, f.throttle, f.sender, f.sessions, f.logins, zap.NewNop())
 	require.NoError(t, err)
 	f.svc = svc.(*emailService)
 	f.svc.now = func() time.Time { return f.now }
@@ -110,18 +112,20 @@ func TestNewEmailServiceRejectsBadSettings(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cfg := emailConfig()
 			mutate(cfg)
-			_, err := NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, &fakeSessionRevoker{}, zap.NewNop())
+			_, err := NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, &fakeSessionRevoker{}, mustLoginGuard(t), zap.NewNop())
 			require.Error(t, err)
 		})
 	}
-	_, err := NewEmailService(emailConfig(), newFakeUsers(), &fakeEmailCodes{}, nil, &fakeEmailSender{}, &fakeSessionRevoker{}, zap.NewNop())
+	_, err := NewEmailService(emailConfig(), newFakeUsers(), &fakeEmailCodes{}, nil, &fakeEmailSender{}, &fakeSessionRevoker{}, mustLoginGuard(t), zap.NewNop())
 	require.Error(t, err)
-	_, err = NewEmailService(emailConfig(), newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, nil, zap.NewNop())
+	_, err = NewEmailService(emailConfig(), newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, nil, mustLoginGuard(t), zap.NewNop())
 	require.Error(t, err, "a reset must be able to sign every device out")
+	_, err = NewEmailService(emailConfig(), newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, &fakeSessionRevoker{}, nil, zap.NewNop())
+	require.Error(t, err, "a reset must be able to lift a login lock")
 	cfg := emailConfig()
 	cfg.AppEnv = config.EnvProd
 	cfg.OtpSecret = "0123456789abcdef0123456789abcdef"
-	_, err = NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, &fakeSessionRevoker{}, zap.NewNop())
+	_, err = NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, &fakeSessionRevoker{}, mustLoginGuard(t), zap.NewNop())
 	require.NoError(t, err)
 }
 

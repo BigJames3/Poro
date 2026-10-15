@@ -71,6 +71,7 @@ type OTPService interface {
 type otpService struct {
 	repo         repository.OTPRepository
 	throttle     OTPThrottle
+	budget       SMSBudget
 	sender       SMSSender
 	log          *zap.Logger
 	secret       []byte
@@ -81,7 +82,7 @@ type otpService struct {
 
 // NewOTPService builds an OTP service. In dev an empty OTP secret is replaced
 // by a random one, so codes do not survive a restart.
-func NewOTPService(cfg *config.Config, repo repository.OTPRepository, throttle OTPThrottle, sender SMSSender, log *zap.Logger) (OTPService, error) {
+func NewOTPService(cfg *config.Config, repo repository.OTPRepository, throttle OTPThrottle, budget SMSBudget, sender SMSSender, log *zap.Logger) (OTPService, error) {
 	ttl, err := time.ParseDuration(cfg.OtpTTL)
 	if err != nil {
 		return nil, fmt.Errorf("parse otp ttl: %w", err)
@@ -89,8 +90,8 @@ func NewOTPService(cfg *config.Config, repo repository.OTPRepository, throttle O
 	if ttl <= 0 {
 		return nil, fmt.Errorf("parse otp ttl: must be positive")
 	}
-	if throttle == nil || sender == nil {
-		return nil, fmt.Errorf("otp service: throttle and sender are required")
+	if throttle == nil || budget == nil || sender == nil {
+		return nil, fmt.Errorf("otp service: throttle, sms budget and sender are required")
 	}
 	secret := []byte(cfg.OtpSecret)
 	if len(secret) == 0 {
@@ -109,6 +110,7 @@ func NewOTPService(cfg *config.Config, repo repository.OTPRepository, throttle O
 	return &otpService{
 		repo:         repo,
 		throttle:     throttle,
+		budget:       budget,
 		sender:       sender,
 		log:          log,
 		secret:       secret,
@@ -125,8 +127,21 @@ func (s *otpService) RequestOTP(ctx context.Context, phone string) (int, error) 
 	if err := s.throttle.Allow(ctx, phone); err != nil {
 		return 0, fmt.Errorf("request otp: %w", err)
 	}
+	country := s.callingCode(phone)
+	if err := s.budget.Spend(ctx, phone, country); err != nil {
+		// Refused by the budget: no SMS goes out, so the phone may ask again
+		// once the budget allows it.
+		s.releaseCooldown(ctx, phone)
+		if errors.Is(err, ErrSMSBudgetExhausted) {
+			s.log.Error("daily sms budget exhausted: no otp is sent until tomorrow (UTC)")
+		} else {
+			s.log.Warn("otp refused by the sms budget", zap.String("phone", MaskPhone(phone)), zap.Error(err))
+		}
+		return 0, fmt.Errorf("request otp: %w", err)
+	}
 	code, err := newOTPCode()
 	if err != nil {
+		s.refund(ctx, phone, country)
 		return 0, fmt.Errorf("request otp: %w", err)
 	}
 
@@ -139,14 +154,15 @@ func (s *otpService) RequestOTP(ctx context.Context, phone string) (int, error) 
 		CreatedAt:   now,
 	}
 	if err := s.repo.Create(ctx, otp); err != nil {
+		s.refund(ctx, phone, country)
 		return 0, fmt.Errorf("request otp: %w", err)
 	}
 	if err := s.sender.SendOTP(ctx, phone, code, s.ttl); err != nil {
-		if relErr := s.throttle.Release(ctx, phone); relErr != nil {
-			s.log.Warn("otp cooldown release failed", zap.String("phone", MaskPhone(phone)), zap.Error(relErr))
-		}
+		s.releaseCooldown(ctx, phone)
+		s.refund(ctx, phone, country)
 		return 0, fmt.Errorf("request otp: send sms: %w", err)
 	}
+	s.budget.Delivered(country)
 
 	expiresIn := int(s.ttl.Seconds())
 	s.log.Info("otp issued", zap.String("phone", MaskPhone(phone)), zap.Int("expires_in", expiresIn))
@@ -200,6 +216,31 @@ func (s *otpService) VerifyOTP(ctx context.Context, phone, code string) (bool, e
 
 // countryAllowed matches E.164 calling codes by prefix, which is unambiguous
 // because calling codes are prefix-free. No configured code allows every country.
+func (s *otpService) releaseCooldown(ctx context.Context, phone string) {
+	if err := s.throttle.Release(ctx, phone); err != nil {
+		s.log.Warn("otp cooldown release failed", zap.String("phone", MaskPhone(phone)), zap.Error(err))
+	}
+}
+
+// refund gives the SMS back to the budget when it was not sent. A failure
+// only makes the budget stricter, so it is logged.
+func (s *otpService) refund(ctx context.Context, phone, country string) {
+	if err := s.budget.Refund(ctx, phone, country); err != nil {
+		s.log.Warn("sms budget refund failed", zap.String("phone", MaskPhone(phone)), zap.Error(err))
+	}
+}
+
+// callingCode is the allowed calling code the phone starts with, the country
+// of the budget. Without an allow list every number shares one bucket.
+func (s *otpService) callingCode(phone string) string {
+	for _, code := range s.callingCodes {
+		if strings.HasPrefix(phone, code) {
+			return code
+		}
+	}
+	return "other"
+}
+
 func (s *otpService) countryAllowed(phone string) bool {
 	if len(s.callingCodes) == 0 {
 		return true

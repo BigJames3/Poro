@@ -63,6 +63,7 @@ type authService struct {
 	refresh    repository.RefreshTokenRepository
 	otp        OTPService
 	tokens     TokenService
+	logins     LoginGuard
 	log        *zap.Logger
 	accessTTL  time.Duration
 	refreshTTL time.Duration
@@ -71,7 +72,10 @@ type authService struct {
 
 // NewAuthService wires the repositories and token services.
 // FullName from email registration is ignored: profiles belong to the User service.
-func NewAuthService(cfg *config.Config, users repository.UserRepository, refresh repository.RefreshTokenRepository, otp OTPService, tokens TokenService, log *zap.Logger) (AuthService, error) {
+func NewAuthService(cfg *config.Config, users repository.UserRepository, refresh repository.RefreshTokenRepository, otp OTPService, tokens TokenService, logins LoginGuard, log *zap.Logger) (AuthService, error) {
+	if logins == nil {
+		return nil, errors.New("auth service: login guard is required")
+	}
 	accessTTL, err := time.ParseDuration(cfg.JWTAccessTTL)
 	if err != nil {
 		return nil, fmt.Errorf("parse access token ttl: %w", err)
@@ -94,6 +98,7 @@ func NewAuthService(cfg *config.Config, users repository.UserRepository, refresh
 		refresh:    refresh,
 		otp:        otp,
 		tokens:     tokens,
+		logins:     logins,
 		log:        log,
 		accessTTL:  accessTTL,
 		refreshTTL: refreshTTL,
@@ -174,26 +179,35 @@ func (s *authService) RegisterEmail(ctx context.Context, req dto.RegisterEmailRe
 }
 
 func (s *authService) LoginEmail(ctx context.Context, req dto.LoginEmailRequest, userAgent, ip string) (*dto.AuthResponse, error) {
-	user, err := s.users.GetByEmail(ctx, NormalizeEmail(req.Email))
+	email := NormalizeEmail(req.Email)
+	// A locked account is refused before its password is checked, so the
+	// lock cannot be used to keep guessing.
+	if err := s.logins.Check(ctx, email); err != nil {
+		return nil, fmt.Errorf("login email: %w", err)
+	}
+	user, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
 			burnPasswordCheck(req.Password)
-			return nil, ErrInvalidCredentials
+			return nil, s.loginFailed(ctx, email)
 		}
 		return nil, fmt.Errorf("login email: %w", err)
 	}
 	if user.PasswordHash == nil {
 		burnPasswordCheck(req.Password)
-		return nil, ErrInvalidCredentials
+		return nil, s.loginFailed(ctx, email)
 	}
 	match, err := argon2id.ComparePasswordAndHash(req.Password, *user.PasswordHash)
 	if err != nil {
 		return nil, fmt.Errorf("login email: compare password: %w", err)
 	}
 	if !match {
-		return nil, ErrInvalidCredentials
+		return nil, s.loginFailed(ctx, email)
 	}
 	if err := s.ensureActive(ctx, user); err != nil {
+		return nil, fmt.Errorf("login email: %w", err)
+	}
+	if err := s.logins.Reset(ctx, email); err != nil {
 		return nil, fmt.Errorf("login email: %w", err)
 	}
 
@@ -203,6 +217,15 @@ func (s *authService) LoginEmail(ctx context.Context, req dto.LoginEmailRequest,
 	}
 	s.log.Info("email login succeeded", zap.String("user_id", user.ID.String()))
 	return res, nil
+}
+
+// loginFailed counts a wrong password against the account, known or not, so
+// the answer is the same either way.
+func (s *authService) loginFailed(ctx context.Context, email string) error {
+	if err := s.logins.Fail(ctx, email); err != nil {
+		return fmt.Errorf("login email: %w", err)
+	}
+	return ErrInvalidCredentials
 }
 
 // Refresh rotates a refresh token inside one transaction.

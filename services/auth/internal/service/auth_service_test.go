@@ -33,7 +33,7 @@ func TestNewAuthServiceRejectsBadTTL(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewAuthService(tc.cfg, newFakeUsers(), newFakeRefresh(), &fakeOTP{}, &fakeTokens{}, zap.NewNop())
+			_, err := NewAuthService(tc.cfg, newFakeUsers(), newFakeRefresh(), &fakeOTP{}, &fakeTokens{}, mustLoginGuard(t), zap.NewNop())
 			require.Error(t, err)
 		})
 	}
@@ -515,7 +515,7 @@ func newAuthService(t *testing.T, users *fakeUsers, refresh *fakeRefresh, otp OT
 	t.Helper()
 	svc, err := NewAuthService(
 		&config.Config{JWTAccessTTL: "15m", JWTRefreshTTL: "720h", JWTRefreshReuseGrace: "30s"},
-		users, refresh, otp, tokens, zap.NewNop(),
+		users, refresh, otp, tokens, mustLoginGuard(t), zap.NewNop(),
 	)
 	require.NoError(t, err)
 	return svc
@@ -525,7 +525,7 @@ func newAuthServiceWithGrace(t *testing.T, users *fakeUsers, refresh *fakeRefres
 	t.Helper()
 	svc, err := NewAuthService(
 		&config.Config{JWTAccessTTL: "15m", JWTRefreshTTL: "720h", JWTRefreshReuseGrace: grace},
-		users, refresh, &fakeOTP{}, tokens, zap.NewNop(),
+		users, refresh, &fakeOTP{}, tokens, mustLoginGuard(t), zap.NewNop(),
 	)
 	require.NoError(t, err)
 	return svc

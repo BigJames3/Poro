@@ -53,8 +53,10 @@ UPDATE refresh_tokens SET revoked_at = now() WHERE revoked_at IS NULL;
 - **Pic de `session_revoked`** : réutilisation de refresh tokens détectée. Soit un vol, soit un
   client qui envoie des refresh en parallèle. Vérifier la version de l'application ; le client
   doit sérialiser ses refresh (voir ADR-0002).
-- **Pic de `otp_throttled` / coût SMS** : ajuster `OTP_REQUEST_COOLDOWN` et
-  `OTP_MAX_REQUESTS_PER_HOUR` ; les compteurs sont dans Redis (`auth:otp:*`).
+- **Pic de `otp_throttled` / coût SMS** : voir « Budget SMS » plus bas.
+- **Pic de `login_throttled`** : comptes verrouillés après des mots de passe faux (ADR-0017). Un
+  pic sur beaucoup de comptes signale une attaque par dictionnaire ; sur un seul compte, quelqu'un
+  vise ce compte. Voir « Verrouillage de la connexion » plus bas.
 
 ## Emails (vérification, mot de passe oublié)
 
@@ -104,8 +106,50 @@ Chaque SMS accepté produit un log `sms otp sent` avec `message_id`, utile pour 
 auprès du fournisseur. Les numéros sont masqués.
 
 **Suspicion de SMS pumping** (hausse soudaine du volume de `otp issued` vers des numéros
-consécutifs ou un seul opérateur) : réduire `OTP_ALLOWED_CALLING_CODES` au pays concerné ou
-abaisser `OTP_MAX_REQUESTS_PER_HOUR`, puis redémarrer.
+consécutifs ou un seul opérateur) : le budget SMS la borne déjà (ci-dessous). Pour aller plus
+loin, réduire `OTP_ALLOWED_CALLING_CODES` au pays concerné ou abaisser les plafonds, puis
+redémarrer.
+
+## Budget SMS (ADR-0017)
+
+| Plafond | Variable | Défaut | Clé Redis |
+|---|---|---|---|
+| Numéro, jour UTC | `SMS_DAILY_LIMIT_PER_PHONE` | 10 | `auth:sms:phone:<numéro>:<AAAAMMJJ>` |
+| Plage (numéro sans les 3 derniers chiffres), heure | `SMS_HOURLY_LIMIT_PER_PREFIX` | 20 | `auth:sms:prefix:<plage>:<AAAAMMJJHH>` |
+| Indicatif pays, heure | `SMS_HOURLY_LIMIT_PER_COUNTRY` | 1 000 | `auth:sms:country:<indicatif>:<AAAAMMJJHH>` |
+| Global, jour UTC | `SMS_DAILY_LIMIT` | 5 000 | `auth:sms:global:<AAAAMMJJ>` |
+
+Métriques : `auth_sms_sent_total{country}` et `auth_sms_blocked_total{reason}` (`phone_daily`,
+`prefix_hourly`, `country_hourly`, `global_daily`).
+
+| Symptôme | Cause | Action |
+|---|---|---|
+| Log d'erreur `daily sms budget exhausted`, OTP en 503 `sms_unavailable` | budget global du jour atteint : attaque ou croissance réelle | regarder `auth_sms_sent_total` par pays ; attaque : laisser le disjoncteur jusqu'à minuit UTC ; croissance : relever `SMS_DAILY_LIMIT` et redémarrer |
+| `auth_sms_blocked_total{reason="prefix_hourly"}` en hausse | une plage de numéros reçoit des codes en rafale (pumping typique) | rien à faire, la plage est bornée ; signaler les numéros au fournisseur |
+| `country_hourly` atteint pendant un lancement marketing | trafic réel dans un pays | relever `SMS_HOURLY_LIMIT_PER_COUNTRY` |
+
+Consulter un compteur :
+
+```powershell
+docker compose exec redis redis-cli GET auth:sms:global:$(Get-Date -AsUTC -Format yyyyMMdd)
+```
+
+## Verrouillage de la connexion (ADR-0017)
+
+Après 5 mots de passe faux en 15 minutes pour une même adresse, quelle que soit l'IP, la
+connexion est bloquée 1 minute, puis 2, 4, 8 et jusqu'à 15 minutes par échec supplémentaire
+(`LOGIN_MAX_FAILURES`, `LOGIN_FAILURE_WINDOW`, `LOGIN_LOCK_BASE`, `LOGIN_LOCK_MAX`). La re-saisie
+du mot de passe avant suppression du compte partage ce verrou.
+
+- **Un utilisateur légitime est bloqué** : il peut attendre la fin du blocage, se connecter par
+  OTP, ou réinitialiser son mot de passe, ce qui lève le blocage.
+- **Débloquer manuellement** (support) : les clés sont l'empreinte SHA-256 de l'adresse
+  normalisée (minuscules, sans espaces).
+
+```bash
+h=$(printf '%s' 'awa@poro.test' | sha256sum | cut -d' ' -f1)
+docker compose exec redis redis-cli DEL auth:login:fail:$h auth:login:lock:$h
+```
 
 ## Rate limiting derrière un proxy
 

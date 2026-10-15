@@ -76,7 +76,10 @@ func (m *mailbox) count() int {
 
 // TestEmailAccountLifecycle drives the HTTP API end to end: sign-up, email
 // verification, sessions, forgotten password, and a cancelled deletion.
-func TestEmailAccountLifecycle(t *testing.T) {
+// startAuthAPI wires the auth HTTP API on a real Postgres and an in-memory
+// Redis, with every limit at its production default.
+func startAuthAPI(t *testing.T) (*client, *mailbox, *miniredis.Miniredis) {
+	t.Helper()
 	pool := startPostgres(t)
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -87,6 +90,8 @@ func TestEmailAccountLifecycle(t *testing.T) {
 		AppEnv: config.EnvDev, JWTAccessTTL: "15m", JWTRefreshTTL: "720h", JWTRefreshReuseGrace: "30s",
 		OtpTTL: "5m", OtpMaxAttempts: 3, OtpRequestCooldown: "60s", OtpMaxRequestsPerHour: 5,
 		EmailCodeTTL: "15m", EmailCodeMaxAttempts: 5,
+		SMSDailyLimitPerPhone: 10, SMSHourlyLimitPerPrefix: 20, SMSHourlyLimitPerCountry: 1000, SMSDailyLimit: 5000,
+		LoginMaxFailures: 5, LoginFailureWindow: "15m", LoginLockBase: "1m", LoginLockMax: "15m",
 	}
 	cfg.JWTPrivateKeyPath, cfg.JWTPublicKeyPath = writeKeys(t)
 	registry, err := revocation.Open("redis://" + mr.Addr() + "/15")
@@ -100,17 +105,27 @@ func TestEmailAccountLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	users := repository.NewUserRepository(pool)
 	refresh := repository.NewRefreshTokenRepository(pool)
-	otp, err := service.NewOTPService(cfg, repository.NewOTPRepository(pool), otpThrottle, noSMS{}, log)
+	smsBudget, err := service.NewRedisSMSBudget(cfg, rdb, nil)
 	require.NoError(t, err)
-	authSvc, err := service.NewAuthService(cfg, users, refresh, otp, tokens, log)
+	logins, err := service.NewRedisLoginGuard(cfg, rdb)
 	require.NoError(t, err)
-	accounts, err := service.NewAccountService(users, refresh, otp, tokens, 720*time.Hour, log)
+	otp, err := service.NewOTPService(cfg, repository.NewOTPRepository(pool), otpThrottle, smsBudget, noSMS{}, log)
+	require.NoError(t, err)
+	authSvc, err := service.NewAuthService(cfg, users, refresh, otp, tokens, logins, log)
+	require.NoError(t, err)
+	accounts, err := service.NewAccountService(users, refresh, otp, tokens, logins, 720*time.Hour, log)
 	require.NoError(t, err)
 	mails := &mailbox{got: make(chan struct{}, 10)}
-	emails, err := service.NewEmailService(cfg, users, repository.NewEmailCodeRepository(pool), emailThrottle, mails, accounts, log)
+	emails, err := service.NewEmailService(cfg, users, repository.NewEmailCodeRepository(pool), emailThrottle, mails, accounts, logins, log)
 	require.NoError(t, err)
 
-	app := fiber.New(fiber.Config{ErrorHandler: httpx.ErrorHandler(log)})
+	// As behind the gateway: the client IP comes from X-Forwarded-For.
+	app := fiber.New(fiber.Config{
+		ErrorHandler:            httpx.ErrorHandler(log),
+		ProxyHeader:             fiber.HeaderXForwardedFor,
+		EnableTrustedProxyCheck: true,
+		TrustedProxies:          []string{"0.0.0.0"},
+	})
 	app.Use(httpx.RequestID())
 	routes.Register(app, routes.Dependencies{
 		Auth:    handler.NewAuthHandler(authSvc).SendVerificationOnSignup(emails, log),
@@ -121,7 +136,11 @@ func TestEmailAccountLifecycle(t *testing.T) {
 		JWKS:    handler.NewJWKSHandler(tokens),
 		Tokens:  tokens,
 	})
-	api := &client{t: t, app: app}
+	return &client{t: t, app: app}, mails, mr
+}
+
+func TestEmailAccountLifecycle(t *testing.T) {
+	api, mails, mr := startAuthAPI(t)
 
 	// Sign-up sends the verification email in the background.
 	status, body := api.call(http.MethodPost, "/api/v1/auth/email/register", "",
@@ -215,6 +234,7 @@ func TestEmailAccountLifecycle(t *testing.T) {
 type client struct {
 	t   *testing.T
 	app *fiber.App
+	ip  string // sent as X-Forwarded-For when set
 }
 
 // call returns the status and the data object, or the error object on failure.
@@ -247,18 +267,28 @@ func (c *client) list(method, path, token string) (int, []map[string]any) {
 
 func (c *client) do(method, path, token, payload string) (int, []byte) {
 	c.t.Helper()
+	status, _, raw := c.send(method, path, token, payload)
+	return status, raw
+}
+
+// send returns the status, the headers and the body of the response.
+func (c *client) send(method, path, token, payload string) (int, http.Header, []byte) {
+	c.t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(payload))
 	req.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 	req.Header.Set(fiber.HeaderUserAgent, "PoroAndroid/1.0")
 	if token != "" {
 		req.Header.Set(fiber.HeaderAuthorization, "Bearer "+token)
 	}
+	if c.ip != "" {
+		req.Header.Set(fiber.HeaderXForwardedFor, c.ip)
+	}
 	resp, err := c.app.Test(req, -1)
 	require.NoError(c.t, err)
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(resp.Body)
 	require.NoError(c.t, err)
-	return resp.StatusCode, raw
+	return resp.StatusCode, resp.Header, raw
 }
 
 func other(code string) string {
