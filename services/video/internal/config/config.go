@@ -101,8 +101,15 @@ func (c *Config) Validate() error {
 	var errs []error
 	switch c.AppEnv {
 	case EnvDev, EnvStaging, EnvProd:
+	case "":
+		// No default: a forgotten APP_ENV must not start a production
+		// service with the shortcuts of local development.
+		errs = append(errs, errors.New("APP_ENV is required: dev, staging or prod"))
 	default:
 		errs = append(errs, fmt.Errorf("APP_ENV must be dev, staging or prod, got %q", c.AppEnv))
+	}
+	if c.PostgresPassword == "" {
+		errs = append(errs, errors.New("POSTGRES_PASSWORD is required"))
 	}
 	if c.JWKSURL == "" {
 		errs = append(errs, errors.New("JWKS_URL is required"))
@@ -125,10 +132,10 @@ func (c *Config) Validate() error {
 	if c.S3PublicEndpoint == "" {
 		errs = append(errs, errors.New("S3_PUBLIC_ENDPOINT is required"))
 	}
+	if c.S3AccessKey == "" || c.S3SecretKey == "" {
+		errs = append(errs, errors.New("S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required"))
+	}
 	if !c.IsDev() {
-		if c.S3AccessKey == "" || c.S3SecretKey == "" {
-			errs = append(errs, errors.New("S3 credentials are required outside dev"))
-		}
 		switch c.PostgresSSLMode {
 		case "require", "verify-ca", "verify-full":
 		default:
@@ -201,7 +208,6 @@ func Load() (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("APP_ENV", EnvDev)
 	v.SetDefault("APP_PORT", "8083")
 	v.SetDefault("LOG_LEVEL", "debug")
 	v.SetDefault("TRUSTED_PROXIES", "")
@@ -209,7 +215,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("POSTGRES_HOST", "localhost")
 	v.SetDefault("POSTGRES_PORT", "5433")
 	v.SetDefault("POSTGRES_USER", "poro")
-	v.SetDefault("POSTGRES_PASSWORD", "poro_dev_password")
 	v.SetDefault("POSTGRES_DB", "poro_video")
 	v.SetDefault("POSTGRES_SSLMODE", "disable")
 
@@ -228,8 +233,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("S3_BUCKET", "poro-videos")
 	v.SetDefault("S3_SOURCE_BUCKET", "poro-video-sources")
 	v.SetDefault("S3_QUARANTINE_BUCKET", "poro-quarantine")
-	v.SetDefault("S3_ACCESS_KEY_ID", "poro_dev")
-	v.SetDefault("S3_SECRET_ACCESS_KEY", "poro_dev_secret")
 	v.SetDefault("S3_FORCE_PATH_STYLE", true)
 
 	v.SetDefault("FFMPEG_BIN", "ffmpeg")

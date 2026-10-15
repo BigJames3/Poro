@@ -22,6 +22,10 @@ Copy-Item .env.example .env
 docker compose up -d
 ```
 
+Chaque service exige `APP_ENV` (`dev`, `staging` ou `prod`) et ses secrets (mot de passe Postgres,
+clés S3) : aucune valeur par défaut dans le code, pour qu'un oubli ne lance jamais la production
+en mode dev. Compose les fournit ; pour lancer un service seul, copier son `.env.example`.
+
 Mise à jour d'un `.env` existant : le stockage objet exige un identifiant S3 par service
 (`S3_USER_*`, `S3_VIDEO_*`, `S3_SHOP_*`, voir `.env.example` et le
 [runbook](docs/runbooks/storage.md)).

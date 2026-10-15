@@ -83,8 +83,12 @@ function parseTrustProxy(raw: string | undefined): boolean | number | string {
  */
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const errors: string[] = [];
-  const appEnv = (env.APP_ENV ?? 'dev') as AppEnv;
-  if (!APP_ENVS.includes(appEnv)) {
+  // No default: a forgotten APP_ENV must not start a production service with
+  // the shortcuts of local development.
+  const appEnv = (env.APP_ENV?.trim() ?? '') as AppEnv;
+  if ((appEnv as string) === '') {
+    errors.push('APP_ENV is required: dev, staging or prod');
+  } else if (!APP_ENVS.includes(appEnv)) {
     errors.push(`APP_ENV must be dev, staging or prod, got "${appEnv}"`);
   }
   const dev = appEnv === 'dev';

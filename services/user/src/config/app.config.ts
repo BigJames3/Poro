@@ -66,8 +66,12 @@ function parseTrustProxy(raw: string | undefined): boolean | number | string {
  */
 export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
   const errors: string[] = [];
-  const appEnv = (env.APP_ENV ?? 'dev') as AppEnv;
-  if (!APP_ENVS.includes(appEnv)) {
+  // No default: a forgotten APP_ENV must not start a production service with
+  // the shortcuts of local development.
+  const appEnv = (env.APP_ENV?.trim() ?? '') as AppEnv;
+  if ((appEnv as string) === '') {
+    errors.push('APP_ENV is required: dev, staging or prod');
+  } else if (!APP_ENVS.includes(appEnv)) {
     errors.push(`APP_ENV must be dev, staging or prod, got "${appEnv}"`);
   }
   const dev = appEnv === 'dev';
@@ -142,8 +146,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     region: env.S3_REGION ?? 'us-east-1',
     bucket: env.S3_BUCKET ?? 'poro-avatars',
     uploadBucket: env.S3_UPLOAD_BUCKET ?? 'poro-avatar-uploads',
-    accessKeyId: env.S3_ACCESS_KEY_ID ?? (dev ? 'poro_dev' : ''),
-    secretAccessKey: env.S3_SECRET_ACCESS_KEY ?? (dev ? 'poro_dev_secret' : ''),
+    accessKeyId: env.S3_ACCESS_KEY_ID ?? '',
+    secretAccessKey: env.S3_SECRET_ACCESS_KEY ?? '',
     forcePathStyle: (env.S3_FORCE_PATH_STYLE ?? 'true') !== 'false',
   };
   for (const [name, value] of [
@@ -166,7 +170,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     errors.push('S3_UPLOAD_BUCKET must differ from S3_BUCKET: originals must not be public');
   }
   if (s3.accessKeyId === '' || s3.secretAccessKey === '') {
-    errors.push('S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required outside dev');
+    errors.push('S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required');
   }
 
   const avatarPublicBaseUrl = (
