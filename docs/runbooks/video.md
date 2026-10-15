@@ -59,6 +59,29 @@ vidéo supprimée entre-temps.
 - Le CDN peut servir les segments déjà en cache jusqu'à l'expiration de leur TTL :
   purger le préfixe dans Bunny si l'urgence l'exige.
 
+## Échec du transcodage (`invalid_media`, `transcode_failed`)
+
+Le log `video failed` du worker donne la cause interne (`code`, `error`) ; elle n'est jamais
+renvoyée au client.
+
+| Cause dans le log | Signification | Action |
+|---|---|---|
+| `not an mp4, mov or webm file` | octets magiques inconnus (playlist, HTML, fichier corrompu) | aucune : refus voulu |
+| `video codec "…"` / `audio codec "…"` | codec hors liste blanche (ex. ProRes, PCM) | refus voulu ; élargir la liste demande une revue sécurité (ADR-0007) |
+| `4112x16`, `N audio and video streams`, `N streams` | dimensions ou nombre de flux au-delà des limites | refus voulu |
+| `format "…"` | ffprobe ne reconnaît pas le conteneur annoncé | fichier malformé |
+| `ffprobe: … signal: killed` ou `context deadline exceeded` | probe > 30 s ou transcodage > 10 min | vérifier la charge CPU du worker |
+| `signal: killed` sans délai dépassé | FFmpeg tué par la limite mémoire (2 Gio) | `docker inspect poro-media-worker --format '{{.State.OOMKilled}}'` ; fichier suspect, garder la source pour analyse |
+| `storage attempt failed, retrying` (warn) | erreur S3 passagère, réessayée 3 fois | si suivi de `video failed` : vérifier SeaweedFS / S3 |
+
+Vérifier l'isolation du conteneur (après un redéploiement, un changement de compose ou d'image) :
+
+```bash
+infra/media-worker/check_sandbox.sh
+```
+
+Toute ligne `FAIL` est un incident de sécurité : ne pas laisser tourner le worker ainsi.
+
 ## FFmpeg absent
 
 L'image worker installe `ffmpeg`. En local : `ffmpeg` et `ffprobe` sur le PATH,

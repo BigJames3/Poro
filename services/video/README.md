@@ -63,7 +63,26 @@ go test ./... -count=1 -race
 
 Postgres via testcontainers ; S3 via un serveur S3 en mémoire (`gofakes3`).
 `TestS3AgainstSeaweedFS` tourne contre un vrai SeaweedFS avec contrôle d'accès,
-lancé par `infra/storage/tests/run.sh` (ignoré sinon).
+lancé par `infra/storage/tests/run.sh` (ignoré sinon). Les tests de sécurité de
+`internal/transcode` utilisent le vrai `ffmpeg` (ignorés s'il est absent ; installé en CI).
+
+## Isolation de FFmpeg
+
+Le media-worker traite les fichiers envoyés comme hostiles
+([ADR-0007, complément PORO-007](../../docs/architecture/adr/0007-pipeline-video.md)) :
+démuxeur imposé d'après les octets magiques, codecs et dimensions en liste blanche, aucun
+protocole hors `file`, environnement réduit à `PATH`, conteneur sans capacité, en lecture seule,
+avec mémoire, CPU et processus bornés.
+
+| Refus | Code public |
+|---|---|
+| ni MP4/MOV ni WebM/Matroska (playlist, concat, HTML…) | `invalid_media` |
+| codec vidéo hors `h264`, `hevc`, `mpeg4`, `vp8`, `vp9`, `av1` | `invalid_media` |
+| codec audio hors `aac`, `mp3`, `opus`, `vorbis` | `invalid_media` |
+| largeur ou hauteur > 4096 px, > 4 flux audio/vidéo, > 16 flux | `invalid_media` |
+| durée > 3 minutes | `too_long` |
+
+Vérifier le conteneur lancé : `infra/media-worker/check_sandbox.sh`.
 
 ## Limites
 

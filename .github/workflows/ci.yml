@@ -558,7 +558,7 @@ jobs:
           args: --config ../../.golangci.yml
 
       - name: Tests
-        run: go test ./... -count=1 -coverprofile=coverage.out
+        run: go test ./... -count=1 -race -coverprofile=coverage.out
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 

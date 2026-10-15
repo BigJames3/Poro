@@ -857,6 +857,30 @@ services:
     networks:
       - poro-network
     restart: unless-stopped
+    # ffmpeg décode des fichiers non fiables (ADR-0007, PORO-007) : utilisateur
+    # non root (image), aucune capacité, pas d'élévation, système de fichiers en
+    # lecture seule sauf /tmp (sources et segments, 256 Mo max par source),
+    # mémoire, CPU, processus et fichiers ouverts bornés, pas de swap ni de core
+    # dump. Le profil seccomp par défaut de Docker reste actif.
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777,noexec,nosuid,nodev
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 2
+    pids_limit: 128
+    ulimits:
+      nofile:
+        soft: 1024
+        hard: 1024
+      core:
+        soft: 0
+        hard: 0
 
 # =============================================================
 # VOLUMES PERSISTANTS

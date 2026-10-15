@@ -1,0 +1,105 @@
+# État d'exécution — socle essentiel
+
+Suivi du mandat « finaliser le socle essentiel ». Mis à jour à chaque étape cohérente.
+Statuts : À FAIRE · EN COURS · BLOQUÉE · TERMINÉE.
+
+Branche d'intégration : `feat/socle-essentiel`, partie de `main` (`a949cea`). Elle fusionne
+(commits de fusion, aucun historique réécrit) les branches livrées mais non fusionnées, puis
+porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans demande explicite.
+
+## Ordre d'exécution
+
+| # | Tâche | Statut | Justification de l'ordre |
+|---|---|---|---|
+| 0 | Intégration des branches en attente | TERMINÉE | les tâches suivantes touchent les mêmes fichiers (compose, CI, configs) |
+| 1 | PORO-007 isoler FFmpeg | TERMINÉE | surface d'attaque la plus exposée (fichiers d'inconnus) |
+| 2 | PORO-002 propager la suppression de compte | À FAIRE | obligation de protection des données, réutilise l'outbox existante |
+| 3 | PORO-011 CI et images | À FAIRE | prérequis de toute livraison (staging, CD) |
+| 4 | PORO-009 observabilité | À FAIRE | prérequis d'une exploitation de staging |
+| 5 | PORO-010/012 staging, CD, sauvegardes | À FAIRE | dépend de 3 et 4 ; accès hébergeur absents |
+| 6 | PORO-013 Android et connexion API | À FAIRE | code Android hors périmètre autorisé (voir plus bas) |
+
+## 0. Intégration des branches en attente — TERMINÉE
+
+- **Branches fusionnées** : `docs/audit-etat-avancement`, `fix/storage-access-control`
+  (PORO-001), `fix/session-revocation` (PORO-003), `fix/explicit-app-env` (PORO-004),
+  `feat/auth-abuse-limits` (PORO-005/006).
+- **Conflits résolus** :
+  - `services/video/README.md` ;
+  - `README.md` ;
+  - configs `user` et `shop` : bucket d'uploads conservé, secrets sans valeur par défaut ;
+  - auth `NewEmailService` : reçoit à la fois `SessionRevoker` et `LoginGuard`. Une
+    réinitialisation de mot de passe révoque les sessions **et** lève le verrou de login ;
+    un test refuse chacun des deux absents ;
+  - test de config auth.
+- **Conflit sémantique corrigé** : `storage-migrate` exigeait `POSTGRES_PASSWORD` depuis
+  PORO-004.
+  - Plutôt que lui donner un secret inutile, il valide désormais seulement le stockage
+    (`config.LoadStorage`).
+  - Compose et `infra/storage/tests/run.sh` ne lui passent plus JWKS ni Kafka.
+  - Les specs e2e SeaweedFS fixent `APP_ENV`.
+- **Tests et résultats** :
+  - Go : auth, video, social, feed, search, outbox-relay, shared-go. Build, vet,
+    `go test` et golangci-lint verts ; auth avec `-race`.
+  - Node : user 128, shop 159, order 126, notification 156. Lint, typecheck et Jest verts.
+  - moderation : ruff, format, mypy (`src`) et 95 tests pytest verts.
+  - `infra/storage/tests/run.sh` contre un vrai SeaweedFS : matrice d'accès, migration, e2e
+    user/shop, tous verts.
+- **Risque** : `mypy .` sur `services/moderation/tests` signale 5 erreurs. Elles existent déjà
+  sur `main` et sont hors du périmètre de la CI (`uv run mypy` cible `src`).
+
+## 1. PORO-007 — Isoler FFmpeg — TERMINÉE
+
+- **Fichiers** :
+  - `services/video/internal/transcode/transcode.go` ;
+  - `services/video/internal/media/media.go` ;
+  - `services/video/internal/worker/handler.go` ;
+  - tests `transcode/security_test.go`, `transcode_test.go`, `media_test.go`, `handler_test.go` ;
+  - `docker-compose.yml` (`media-worker`) ;
+  - `infra/media-worker/check_sandbox.sh` ;
+  - CI (`-race` pour la vidéo) ;
+  - ADR-0007 (complément), README vidéo, runbook vidéo.
+- **Changements** :
+  - démuxeur imposé d'après les octets magiques ;
+  - listes blanches codecs, dimensions et flux ; `-map` explicite ;
+  - `-protocol_whitelist file`, `-enable_drefs 0`, `-nostdin`, `-threads 2`, `-max_alloc` ;
+  - environnement réduit à `PATH` ; délais (probe 30 s, 10 min, `WaitDelay`) ;
+  - reprises bornées du stockage, puis `failed` ;
+  - conteneur durci : UID 10001, `cap_drop ALL`, `no-new-privileges`, racine en lecture
+    seule, tmpfs `/tmp` noexec, 2 Gio sans swap, 2 CPU, 128 PID, `nofile`, pas de core.
+- **Bug existant corrigé** : une source non 4:2:0 (HEVC 10 bits des iPhone, 4:4:4) faisait
+  échouer l'encodage baseline. La sortie est maintenant forcée en `yuv420p`.
+- **Tests et résultats** :
+  - **Avec le vrai ffmpeg 6.1.1** :
+    - une playlist pointant vers un serveur local n'est jamais suivie (0 connexion), qu'elle
+      soit envoyée telle quelle, déguisée derrière une signature MP4, ou ouverte avec le
+      mauvais démuxeur ;
+    - un témoin, avec http autorisé, prouve que le serveur détecte bien les connexions ;
+    - codec, résolution, nombre de flux, codec audio et fichier tronqué sont refusés ;
+    - un fichier Matroska valide passe.
+  - **Avec de faux binaires** :
+    - aucun secret dans l'environnement de ffprobe ;
+    - un ffprobe bloqué est tué ;
+    - un chemin contenant `$(…)` n'est jamais interprété.
+  - **Mutation** : chacune des 7 protections retirée une à une fait échouer au moins un test.
+  - **Couverture** : `transcode` 87,5 %, `worker` 77,2 %, `media` 100 %. Le module vidéo est
+    à 64,4 % au total, une dette existante (handlers HTTP 19 %).
+  - **Bac à sable** : `check_sandbox.sh` passe sur un conteneur lancé avec les options du
+    compose. Sur un conteneur par défaut, il signale 12 écarts.
+- **Écarts** :
+  - Le plafond de 4 flux ne compte que l'audio et la vidéo, pour ne pas refuser les `.mov`
+    d'iPhone.
+  - L'image worker n'a pas pu être construite ici : `apk` est inaccessible depuis cet
+    environnement. Le script a donc été validé sur un conteneur témoin, pas sur
+    `poro-media-worker`.
+- **Risques résiduels** :
+  - Le worker garde un accès réseau à Postgres, Kafka et S3. Une exécution de code dans un
+    décodeur l'atteindrait. Étape suivante possible : FFmpeg dans un bac à sable sans réseau
+    (gVisor ou nsjail).
+  - Il faut reconstruire l'image régulièrement pour les CVE de FFmpeg.
+- **Action humaine** : après `docker compose up -d --build media-worker`, lancer
+  `infra/media-worker/check_sandbox.sh`.
+
+## Interventions humaines requises (cumul)
+
+- Lancer `infra/media-worker/check_sandbox.sh` sur le vrai conteneur après reconstruction.
