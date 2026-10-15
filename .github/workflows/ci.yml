@@ -33,6 +33,7 @@ jobs:
       gateway: ${{ steps.filter.outputs.gateway }}
       storage: ${{ steps.filter.outputs.storage }}
       backup: ${{ steps.filter.outputs.backup }}
+      observability: ${{ steps.filter.outputs.observability }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
@@ -117,6 +118,10 @@ jobs:
               - 'docs/api/**'
               - 'docker-compose.yml'
               - 'services/auth/**'
+              - '.github/workflows/ci.yml'
+            observability:
+              - 'infra/observability/**'
+              - 'docker-compose.yml'
               - '.github/workflows/ci.yml'
             backup:
               - 'infra/backup/**'
@@ -247,6 +252,19 @@ jobs:
         run: shellcheck infra/backup/*.sh infra/backup/tests/*.sh
       - name: Backup and restore round trip
         run: infra/backup/tests/run.sh
+
+  observability:
+    # Alert rules unit tests, then Prometheus, Alertmanager and Grafana started
+    # together with the Compose images (PORO-009).
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.observability == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: shellcheck
+        run: shellcheck infra/observability/tests/*.sh
+      - name: Rules, configuration and stack
+        run: infra/observability/tests/run.sh
 
   shared-go:
     needs: detect-changes
@@ -770,6 +788,7 @@ jobs:
       - gateway
       - storage
       - backup
+      - observability
       - shared-go
       - outbox-relay
       - auth

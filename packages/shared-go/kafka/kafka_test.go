@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
@@ -99,7 +100,8 @@ func TestKafka(t *testing.T) {
 
 		var attempts sync.Map
 		var processed atomic.Int32
-		stop := runConsumer(t, broker, "poro-test-dlq", topic, func(_ context.Context, env events.Envelope) error {
+		reg := prometheus.NewRegistry()
+		stop := runConsumerWithMetrics(t, broker, "poro-test-dlq", topic, func(_ context.Context, env events.Envelope) error {
 			n, _ := attempts.LoadOrStore(env.Subject, new(atomic.Int32))
 			n.(*atomic.Int32).Add(1)
 			switch env.Subject {
@@ -110,9 +112,14 @@ func TestKafka(t *testing.T) {
 			}
 			processed.Add(1)
 			return nil
-		})
+		}, reg)
 		require.Eventually(t, func() bool { return processed.Load() == 1 }, 30*time.Second, 50*time.Millisecond)
+		require.Eventually(t, func() bool {
+			return counter(t, reg, topic, kafka.OutcomeDeadLettered) == 3
+		}, 30*time.Second, 50*time.Millisecond)
 		stop()
+		require.Equal(t, 1.0, counter(t, reg, topic, kafka.OutcomeProcessed))
+		require.Equal(t, 2.0, counter(t, reg, topic, kafka.OutcomeRetried), "poison failed 3 times: 2 retries")
 
 		poisonAttempts, _ := attempts.Load("poison")
 		require.Equal(t, int32(3), poisonAttempts.(*atomic.Int32).Load(), "transient errors are retried up to MaxAttempts")
@@ -135,6 +142,15 @@ func TestKafka(t *testing.T) {
 		require.Equal(t, topic, headers[kafka.HeaderOriginalTopic])
 		require.Equal(t, "poro-test-dlq", headers[kafka.HeaderConsumerGroup])
 		require.NotEmpty(t, headers[kafka.HeaderOriginalOffset])
+	})
+
+	t.Run("consumers can share a metrics registry", func(t *testing.T) {
+		reg := prometheus.NewRegistry()
+		for _, group := range []string{"poro-test-a", "poro-test-b"} {
+			_, err := kafka.NewConsumer(kafka.ConsumerConfig{Brokers: []string{broker}, Group: group, Topics: []string{"t"}, Metrics: reg},
+				func(context.Context, events.Envelope) error { return nil }, zap.NewNop())
+			require.NoError(t, err)
+		}
 	})
 
 	t.Run("config is validated", func(t *testing.T) {
@@ -166,8 +182,13 @@ func publish(t *testing.T, p *kafka.Producer, topic string, envs ...events.Envel
 
 func runConsumer(t *testing.T, broker, group, topic string, handler kafka.Handler) func() {
 	t.Helper()
+	return runConsumerWithMetrics(t, broker, group, topic, handler, nil)
+}
+
+func runConsumerWithMetrics(t *testing.T, broker, group, topic string, handler kafka.Handler, reg prometheus.Registerer) func() {
+	t.Helper()
 	c, err := kafka.NewConsumer(kafka.ConsumerConfig{
-		Brokers: []string{broker}, Group: group, Topics: []string{topic}, Backoff: 20 * time.Millisecond,
+		Brokers: []string{broker}, Group: group, Topics: []string{topic}, Backoff: 20 * time.Millisecond, Metrics: reg,
 	}, handler, zap.NewNop())
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -177,6 +198,28 @@ func runConsumer(t *testing.T, broker, group, topic string, handler kafka.Handle
 		cancel()
 		require.NoError(t, <-done)
 	}
+}
+
+// counter reads kafka_consumer_records_total for one topic and outcome.
+func counter(t *testing.T, reg *prometheus.Registry, topic, outcome string) float64 {
+	t.Helper()
+	families, err := reg.Gather()
+	require.NoError(t, err)
+	for _, f := range families {
+		if f.GetName() != "kafka_consumer_records_total" {
+			continue
+		}
+		for _, m := range f.GetMetric() {
+			labels := map[string]string{}
+			for _, l := range m.GetLabel() {
+				labels[l.GetName()] = l.GetValue()
+			}
+			if labels["topic"] == topic && labels["outcome"] == outcome {
+				return m.GetCounter().GetValue()
+			}
+		}
+	}
+	return 0
 }
 
 func readAll(t *testing.T, broker, topic string, n int) []*kgo.Record {
