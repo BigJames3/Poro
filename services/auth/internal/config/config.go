@@ -74,6 +74,18 @@ type Config struct {
 	OtpAllowedCallingCodes []string // +225,+221,+237,+234; empty allows every country
 	SMSProvider            string   // log, africastalking
 
+	// SMS budget (ADR-0017): caps on the OTP SMS sent, against SMS pumping.
+	SMSDailyLimitPerPhone    int // 10 per phone and UTC day
+	SMSHourlyLimitPerPrefix  int // 20 per number range (phone without its last 3 digits) and hour
+	SMSHourlyLimitPerCountry int // 1000 per calling code and hour
+	SMSDailyLimit            int // 5000 for the whole platform and UTC day; reached, no SMS is sent
+
+	// Password sign-in lockout per account (ADR-0017).
+	LoginMaxFailures   int    // 5 failures within LoginFailureWindow lock the account
+	LoginFailureWindow string // 15m since the last failure
+	LoginLockBase      string // 1m for the first lock, doubled by each further failure
+	LoginLockMax       string // 15m at most
+
 	// Africa's Talking
 	AfricasTalkingUsername string // "sandbox" selects the sandbox
 	AfricasTalkingAPIKey   string
@@ -158,10 +170,29 @@ func (c *Config) Validate() error {
 	if c.EmailCodeMaxAttempts <= 0 {
 		errs = append(errs, errors.New("EMAIL_CODE_MAX_ATTEMPTS must be positive"))
 	}
+	for name, value := range map[string]int{
+		"SMS_DAILY_LIMIT_PER_PHONE":    c.SMSDailyLimitPerPhone,
+		"SMS_HOURLY_LIMIT_PER_PREFIX":  c.SMSHourlyLimitPerPrefix,
+		"SMS_HOURLY_LIMIT_PER_COUNTRY": c.SMSHourlyLimitPerCountry,
+		"SMS_DAILY_LIMIT":              c.SMSDailyLimit,
+		"LOGIN_MAX_FAILURES":           c.LoginMaxFailures,
+	} {
+		if value <= 0 {
+			errs = append(errs, fmt.Errorf("%s must be positive, got %d", name, value))
+		}
+	}
+	lockBase, baseErr := time.ParseDuration(c.LoginLockBase)
+	lockMax, maxErr := time.ParseDuration(c.LoginLockMax)
+	if baseErr == nil && maxErr == nil && lockBase > lockMax {
+		errs = append(errs, errors.New("LOGIN_LOCK_BASE must not exceed LOGIN_LOCK_MAX"))
+	}
 	for name, value := range map[string]string{
 		"EMAIL_CODE_TTL":         c.EmailCodeTTL,
 		"ACCOUNT_DELETION_GRACE": c.AccountDeletionGrace,
 		"ACCOUNT_PURGE_INTERVAL": c.AccountPurgeInterval,
+		"LOGIN_FAILURE_WINDOW":   c.LoginFailureWindow,
+		"LOGIN_LOCK_BASE":        c.LoginLockBase,
+		"LOGIN_LOCK_MAX":         c.LoginLockMax,
 	} {
 		if d, err := time.ParseDuration(value); err != nil || d <= 0 {
 			errs = append(errs, fmt.Errorf("%s must be a positive duration, got %q", name, value))
@@ -239,11 +270,21 @@ func Load() (*Config, error) {
 		JWTRefreshTTL:        v.GetString("JWT_REFRESH_TTL"),
 		JWTRefreshReuseGrace: v.GetString("JWT_REFRESH_REUSE_GRACE"),
 
-		OtpTTL:                 v.GetString("OTP_TTL"),
-		OtpMaxAttempts:         v.GetInt("OTP_MAX_ATTEMPTS"),
-		OtpSecret:              v.GetString("OTP_HMAC_SECRET"),
-		OtpRequestCooldown:     v.GetString("OTP_REQUEST_COOLDOWN"),
-		OtpMaxRequestsPerHour:  v.GetInt("OTP_MAX_REQUESTS_PER_HOUR"),
+		OtpTTL:                v.GetString("OTP_TTL"),
+		OtpMaxAttempts:        v.GetInt("OTP_MAX_ATTEMPTS"),
+		OtpSecret:             v.GetString("OTP_HMAC_SECRET"),
+		OtpRequestCooldown:    v.GetString("OTP_REQUEST_COOLDOWN"),
+		OtpMaxRequestsPerHour: v.GetInt("OTP_MAX_REQUESTS_PER_HOUR"),
+
+		SMSDailyLimitPerPhone:    v.GetInt("SMS_DAILY_LIMIT_PER_PHONE"),
+		SMSHourlyLimitPerPrefix:  v.GetInt("SMS_HOURLY_LIMIT_PER_PREFIX"),
+		SMSHourlyLimitPerCountry: v.GetInt("SMS_HOURLY_LIMIT_PER_COUNTRY"),
+		SMSDailyLimit:            v.GetInt("SMS_DAILY_LIMIT"),
+
+		LoginMaxFailures:       v.GetInt("LOGIN_MAX_FAILURES"),
+		LoginFailureWindow:     v.GetString("LOGIN_FAILURE_WINDOW"),
+		LoginLockBase:          v.GetString("LOGIN_LOCK_BASE"),
+		LoginLockMax:           v.GetString("LOGIN_LOCK_MAX"),
 		OtpAllowedCallingCodes: splitList(v.GetString("OTP_ALLOWED_CALLING_CODES")),
 		SMSProvider:            v.GetString("SMS_PROVIDER"),
 
@@ -302,6 +343,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("OTP_HMAC_SECRET", "")
 	v.SetDefault("OTP_REQUEST_COOLDOWN", "60s")
 	v.SetDefault("OTP_MAX_REQUESTS_PER_HOUR", 5)
+	v.SetDefault("SMS_DAILY_LIMIT_PER_PHONE", 10)
+	v.SetDefault("SMS_HOURLY_LIMIT_PER_PREFIX", 20)
+	v.SetDefault("SMS_HOURLY_LIMIT_PER_COUNTRY", 1000)
+	v.SetDefault("SMS_DAILY_LIMIT", 5000)
+	v.SetDefault("LOGIN_MAX_FAILURES", 5)
+	v.SetDefault("LOGIN_FAILURE_WINDOW", "15m")
+	v.SetDefault("LOGIN_LOCK_BASE", "1m")
+	v.SetDefault("LOGIN_LOCK_MAX", "15m")
 	v.SetDefault("OTP_ALLOWED_CALLING_CODES", "+225,+221,+237,+234")
 	v.SetDefault("SMS_PROVIDER", SMSProviderLog)
 

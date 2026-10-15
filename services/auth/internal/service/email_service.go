@@ -46,6 +46,7 @@ type emailService struct {
 	codes       repository.EmailCodeRepository
 	throttle    OTPThrottle
 	sender      EmailSender
+	logins      LoginGuard
 	log         *zap.Logger
 	secret      []byte
 	ttl         time.Duration
@@ -55,7 +56,7 @@ type emailService struct {
 
 // NewEmailService wires email codes. It shares OTP_HMAC_SECRET with SMS codes:
 // the hash binds each code to its purpose, so the two never collide.
-func NewEmailService(cfg *config.Config, users repository.UserRepository, codes repository.EmailCodeRepository, throttle OTPThrottle, sender EmailSender, log *zap.Logger) (EmailService, error) {
+func NewEmailService(cfg *config.Config, users repository.UserRepository, codes repository.EmailCodeRepository, throttle OTPThrottle, sender EmailSender, logins LoginGuard, log *zap.Logger) (EmailService, error) {
 	ttl, err := time.ParseDuration(cfg.EmailCodeTTL)
 	if err != nil || ttl <= 0 {
 		return nil, fmt.Errorf("email service: EMAIL_CODE_TTL must be a positive duration, got %q", cfg.EmailCodeTTL)
@@ -63,8 +64,8 @@ func NewEmailService(cfg *config.Config, users repository.UserRepository, codes 
 	if cfg.EmailCodeMaxAttempts <= 0 {
 		return nil, errors.New("email service: EMAIL_CODE_MAX_ATTEMPTS must be positive")
 	}
-	if throttle == nil || sender == nil {
-		return nil, errors.New("email service: throttle and sender are required")
+	if throttle == nil || sender == nil || logins == nil {
+		return nil, errors.New("email service: throttle, sender and login guard are required")
 	}
 	secret := []byte(cfg.OtpSecret)
 	if len(secret) == 0 {
@@ -81,6 +82,7 @@ func NewEmailService(cfg *config.Config, users repository.UserRepository, codes 
 		codes:       codes,
 		throttle:    throttle,
 		sender:      sender,
+		logins:      logins,
 		log:         log,
 		secret:      secret,
 		ttl:         ttl,
@@ -181,6 +183,11 @@ func (s *emailService) ResetPassword(ctx context.Context, req dto.ResetPasswordR
 	}
 	if err := s.codes.ResetPassword(ctx, stored, hash, s.now()); err != nil {
 		return fmt.Errorf("reset password: %w", usedCode(err))
+	}
+	// The owner proved the address: a lock left by guessing attempts no longer
+	// stands between them and the new password.
+	if err := s.logins.Reset(ctx, *user.Email); err != nil {
+		s.log.Warn("login lock reset failed after a password reset", zap.String("user_id", user.ID.String()), zap.Error(err))
 	}
 	s.log.Info("password reset, sessions revoked", zap.String("user_id", user.ID.String()))
 	return nil

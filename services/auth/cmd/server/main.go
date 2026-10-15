@@ -93,20 +93,28 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init sms sender: %w", err)
 	}
-	otp, err := service.NewOTPService(cfg, repository.NewOTPRepository(pool), throttle, sender, log)
+	smsBudget, err := service.NewRedisSMSBudget(cfg, rdb, m.Registry())
+	if err != nil {
+		return fmt.Errorf("init sms budget: %w", err)
+	}
+	logins, err := service.NewRedisLoginGuard(cfg, rdb)
+	if err != nil {
+		return fmt.Errorf("init login guard: %w", err)
+	}
+	otp, err := service.NewOTPService(cfg, repository.NewOTPRepository(pool), throttle, smsBudget, sender, log)
 	if err != nil {
 		return fmt.Errorf("init otp service: %w", err)
 	}
 	users := repository.NewUserRepository(pool)
 	refresh := repository.NewRefreshTokenRepository(pool)
-	authSvc, err := service.NewAuthService(cfg, users, refresh, otp, tokens, log)
+	authSvc, err := service.NewAuthService(cfg, users, refresh, otp, tokens, logins, log)
 	if err != nil {
 		return fmt.Errorf("init auth service: %w", err)
 	}
 	// Config.Validate already checked both durations.
 	grace, _ := time.ParseDuration(cfg.AccountDeletionGrace)
 	purgeInterval, _ := time.ParseDuration(cfg.AccountPurgeInterval)
-	accountSvc, err := service.NewAccountService(users, refresh, otp, tokens, grace, log)
+	accountSvc, err := service.NewAccountService(users, refresh, otp, tokens, logins, grace, log)
 	if err != nil {
 		return fmt.Errorf("init account service: %w", err)
 	}
@@ -119,7 +127,7 @@ func run() error {
 		return fmt.Errorf("init email sender: %w", err)
 	}
 	emailCodes := repository.NewEmailCodeRepository(pool)
-	emailSvc, err := service.NewEmailService(cfg, users, emailCodes, emailThrottle, emailSender, log)
+	emailSvc, err := service.NewEmailService(cfg, users, emailCodes, emailThrottle, emailSender, logins, log)
 	if err != nil {
 		return fmt.Errorf("init email service: %w", err)
 	}

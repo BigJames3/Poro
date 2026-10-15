@@ -77,6 +77,7 @@ func (h *AccountHandler) DeleteAccount(c *fiber.Ctx) error {
 	}
 	res, err := h.accounts.DeleteAccount(c.UserContext(), *claims, req)
 	if err != nil {
+		setRetryAfter(c, err)
 		return mapAuthError(err)
 	}
 	return writeData(c, fiber.StatusAccepted, res)

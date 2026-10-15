@@ -127,6 +127,12 @@ func TestAccountHandlerErrors(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	require.Equal(t, "invalid_credentials", errorCode(t, resp))
 
+	app = accountApp(t, fail(&service.LoginLockedError{RetryAfter: 4 * time.Minute}), claims)
+	resp = do(t, app, http.MethodPost, "/me/delete", `{"password":"nope"}`, nil)
+	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+	require.Equal(t, "login_throttled", errorCode(t, resp))
+	require.Equal(t, "240", resp.Header.Get(fiber.HeaderRetryAfter))
+
 	app = accountApp(t, fail(service.ErrAccountNotFound), claims)
 	for _, call := range []struct{ method, path string }{
 		{http.MethodGet, "/sessions"},

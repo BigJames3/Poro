@@ -26,6 +26,7 @@ type emailFixture struct {
 	codes    *fakeEmailCodes
 	throttle *fakeThrottle
 	sender   *fakeEmailSender
+	logins   LoginGuard
 	now      time.Time
 }
 
@@ -39,10 +40,11 @@ func newEmailFixture(t *testing.T) *emailFixture {
 		users:    newFakeUsers(),
 		throttle: &fakeThrottle{},
 		sender:   &fakeEmailSender{},
+		logins:   mustLoginGuard(t),
 		now:      time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC),
 	}
 	f.codes = &fakeEmailCodes{users: f.users}
-	svc, err := NewEmailService(emailConfig(), f.users, f.codes, f.throttle, f.sender, zap.NewNop())
+	svc, err := NewEmailService(emailConfig(), f.users, f.codes, f.throttle, f.sender, f.logins, zap.NewNop())
 	require.NoError(t, err)
 	f.svc = svc.(*emailService)
 	f.svc.now = func() time.Time { return f.now }
@@ -84,16 +86,16 @@ func TestNewEmailServiceRejectsBadSettings(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cfg := emailConfig()
 			mutate(cfg)
-			_, err := NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, zap.NewNop())
+			_, err := NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, mustLoginGuard(t), zap.NewNop())
 			require.Error(t, err)
 		})
 	}
-	_, err := NewEmailService(emailConfig(), newFakeUsers(), &fakeEmailCodes{}, nil, &fakeEmailSender{}, zap.NewNop())
+	_, err := NewEmailService(emailConfig(), newFakeUsers(), &fakeEmailCodes{}, nil, &fakeEmailSender{}, mustLoginGuard(t), zap.NewNop())
 	require.Error(t, err)
 	cfg := emailConfig()
 	cfg.AppEnv = config.EnvProd
 	cfg.OtpSecret = "0123456789abcdef0123456789abcdef"
-	_, err = NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, zap.NewNop())
+	_, err = NewEmailService(cfg, newFakeUsers(), &fakeEmailCodes{}, &fakeThrottle{}, &fakeEmailSender{}, mustLoginGuard(t), zap.NewNop())
 	require.NoError(t, err)
 }
 

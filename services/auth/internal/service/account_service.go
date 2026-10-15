@@ -39,6 +39,7 @@ type accountService struct {
 	refresh repository.RefreshTokenRepository
 	otp     OTPService
 	tokens  TokenService
+	logins  LoginGuard
 	log     *zap.Logger
 	grace   time.Duration
 	now     func() time.Time
@@ -46,15 +47,19 @@ type accountService struct {
 
 // NewAccountService wires the account operations. grace is the delay between
 // a deletion request and the erasure of the account.
-func NewAccountService(users repository.UserRepository, refresh repository.RefreshTokenRepository, otp OTPService, tokens TokenService, grace time.Duration, log *zap.Logger) (AccountService, error) {
+func NewAccountService(users repository.UserRepository, refresh repository.RefreshTokenRepository, otp OTPService, tokens TokenService, logins LoginGuard, grace time.Duration, log *zap.Logger) (AccountService, error) {
 	if grace <= 0 {
 		return nil, fmt.Errorf("account deletion grace must be positive, got %s", grace)
+	}
+	if logins == nil {
+		return nil, errors.New("account service: login guard is required")
 	}
 	return &accountService{
 		users:   users,
 		refresh: refresh,
 		otp:     otp,
 		tokens:  tokens,
+		logins:  logins,
 		log:     log,
 		grace:   grace,
 		now:     func() time.Time { return time.Now().UTC() },
@@ -174,14 +179,23 @@ func (s *accountService) reauthenticate(ctx context.Context, user *model.User, r
 		if req.Password == "" {
 			return ErrReauthRequired
 		}
+		// The same lock as sign-in: a stolen session must not become a way
+		// to guess the password.
+		account := passwordAccount(user)
+		if err := s.logins.Check(ctx, account); err != nil {
+			return err
+		}
 		match, err := argon2id.ComparePasswordAndHash(req.Password, *user.PasswordHash)
 		if err != nil {
 			return fmt.Errorf("compare password: %w", err)
 		}
 		if !match {
+			if err := s.logins.Fail(ctx, account); err != nil {
+				return err
+			}
 			return ErrInvalidCredentials
 		}
-		return nil
+		return s.logins.Reset(ctx, account)
 	case user.Phone != nil:
 		if req.OTPCode == "" {
 			return ErrReauthRequired
@@ -191,6 +205,15 @@ func (s *accountService) reauthenticate(ctx context.Context, user *model.User, r
 	default:
 		return ErrReauthRequired
 	}
+}
+
+// passwordAccount names the account of a password user for the login guard:
+// its email address, the name sign-in uses.
+func passwordAccount(user *model.User) string {
+	if user.Email != nil {
+		return *user.Email
+	}
+	return "user:" + user.ID.String()
 }
 
 // deviceLabel names a session: the name the app gave, else its User-Agent.

@@ -23,6 +23,7 @@ type accountFixture struct {
 	refresh *fakeRefresh
 	otp     *fakeOTP
 	tokens  *fakeTokens
+	logins  LoginGuard
 	now     time.Time
 }
 
@@ -33,9 +34,10 @@ func newAccountFixture(t *testing.T) *accountFixture {
 		refresh: newFakeRefresh(),
 		otp:     &fakeOTP{},
 		tokens:  &fakeTokens{},
+		logins:  mustLoginGuard(t),
 		now:     time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC),
 	}
-	svc, err := NewAccountService(f.users, f.refresh, f.otp, f.tokens, testGrace, zap.NewNop())
+	svc, err := NewAccountService(f.users, f.refresh, f.otp, f.tokens, f.logins, testGrace, zap.NewNop())
 	require.NoError(t, err)
 	f.svc = svc.(*accountService)
 	f.svc.now = func() time.Time { return f.now }
@@ -56,7 +58,7 @@ func claimsFor(user *model.User, session uuid.UUID) TokenClaims {
 }
 
 func TestNewAccountServiceRejectsNonPositiveGrace(t *testing.T) {
-	_, err := NewAccountService(newFakeUsers(), newFakeRefresh(), &fakeOTP{}, &fakeTokens{}, 0, zap.NewNop())
+	_, err := NewAccountService(newFakeUsers(), newFakeRefresh(), &fakeOTP{}, &fakeTokens{}, mustLoginGuard(t), 0, zap.NewNop())
 	require.Error(t, err)
 }
 
