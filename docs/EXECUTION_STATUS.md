@@ -17,7 +17,7 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
 | 3 | PORO-011 CI et images | TERMINÉE (protection de branche : action humaine) | prérequis de toute livraison (staging, CD) |
 | 4 | PORO-009 observabilité | TERMINÉE (routage des alertes : action humaine) | prérequis d'une exploitation de staging |
 | 5 | PORO-010/012 staging, CD, sauvegardes | TERMINÉE côté code ; mise en service BLOQUÉE (hébergeur, secrets) | dépend de 3 et 4 ; accès hébergeur absents |
-| 6 | PORO-013 Android et connexion API | À FAIRE | code Android hors périmètre autorisé (voir plus bas) |
+| 6 | PORO-013 Android et connexion API | BLOQUÉE côté Android (périmètre interdit) ; côté backend TERMINÉE | code Android hors périmètre autorisé (voir plus bas) |
 
 ## 0. Intégration des branches en attente — TERMINÉE
 
@@ -289,6 +289,32 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
   Tant que ces éléments manquent, les services refusent de démarrer en `APP_ENV=staging` et le
   workflow s'arrête en listant ce qui manque.
 
+## 6. PORO-013 — Android et connexion API — BLOQUÉE côté Android ; TERMINÉE côté backend
+
+- **Restriction respectée** : `apps/mobile-android/` est hors du périmètre autorisé. C'est une
+  règle permanente du propriétaire, et `.github/dependabot.yml` attribue ce dossier à l'équipe
+  mobile. Aucun fichier Android n'a été modifié ni généré (pas de build local).
+- **Fait côté backend** :
+  - `docs/api/ANDROID-INTEGRATION.md` :
+    - URL de l'API pour l'émulateur et le téléphone (`adb reverse`) ;
+    - enveloppe d'erreur, `X-Request-ID`, `Retry-After` ;
+    - cycle des jetons avec rafraîchissement sérialisé, révocation immédiate ;
+    - suppression de compte ;
+    - upload multipart présigné et formats acceptés ;
+    - enregistrement FCM.
+
+    Les affirmations ont été vérifiées contre les contrats OpenAPI.
+  - **CI** : `mobile-build` assemble réellement l'APK debug, au lieu d'un `echo` qui passait
+    toujours.
+- **Dépendances bloquantes (équipe mobile)** :
+  - code Kotlin applicatif ;
+  - permission `INTERNET` ;
+  - *network security config* de dev ;
+  - projet Firebase et `google-services.json` ;
+  - identifiant d'application définitif (aujourd'hui `com.example.myporo`).
+- **Vérification finale de la gateway** : contrat des 133 routes et e2e avec le vrai service auth,
+  tous deux verts sur la branche intégrée.
+
 ## Interventions humaines requises (cumul)
 
 - Lancer `infra/media-worker/check_sandbox.sh` sur le vrai conteneur après reconstruction.
@@ -299,5 +325,8 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
   GitHub `staging` (relecteurs, secrets SSH, variables) : `docs/runbooks/deploy.md`.
 - Astreinte : canal et webhook Alertmanager pour staging et production.
 - Juridique : durée de conservation des commandes d'un compte effacé (ADR-0018).
+- Équipe mobile : développer l'application selon `docs/api/ANDROID-INTEGRATION.md` ; décider si
+  le build Android réel doit bloquer la CI dès maintenant.
+- Revue et fusion de `feat/socle-essentiel` dans `main` (aucune PR ouverte sans demande).
 - Après la première publication : rendre les paquets GHCR privés ou publics selon la politique
   du projet (GHCR crée les paquets privés par défaut).
