@@ -53,7 +53,9 @@ pass "no backup without encryption"
 
 # 2. Backs up every poro_* database, encrypted.
 dir=$(BACKUP_DIR="$work/b" BACKUP_AGE_RECIPIENTS="$work/recipients.txt" "$root/infra/backup/backup.sh" | tail -1)
-[ -f "$dir/poro_auth.dump.age" ] && [ -f "$dir/poro_order.dump.age" ] || fail "missing dumps in $dir"
+for db in poro_auth poro_order; do
+  [ -f "$dir/$db.dump.age" ] || fail "missing $db dump in $dir"
+done
 [ ! -e "$dir/other_app.dump.age" ] || fail "backed up a database outside poro_*"
 if grep -a -q -e "$secret" -e PGDMP "$dir"/*.dump.age; then fail "plaintext found in the backup"; fi
 [ "$(stat -c %a "$dir")" = 700 ] || fail "backup directory readable by others"

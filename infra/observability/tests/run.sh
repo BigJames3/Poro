@@ -21,7 +21,9 @@ image() { awk -v svc="  $1:" '$0 == svc { found = 1 } found && /image:/ { print 
 prom=$(image prometheus)
 am=$(image alertmanager)
 graf=$(image grafana)
-[ -n "$prom" ] && [ -n "$am" ] && [ -n "$graf" ] || fail "observability images not found in docker-compose.yml"
+for img in "$prom" "$am" "$graf"; do
+  [ -n "$img" ] || fail "observability images not found in docker-compose.yml"
+done
 
 docker run --rm -v "$obs/rules:/rules:ro" -w /rules --entrypoint promtool "$prom" test rules poro.rules.test.yml
 pass "alert rules unit tests"

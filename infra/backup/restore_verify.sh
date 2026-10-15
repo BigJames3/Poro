@@ -20,9 +20,11 @@ die() { echo "restore-verify: $*" >&2; exit 1; }
 log() { echo "restore-verify: $*"; }
 
 dir="${1:-}"
-[ -n "$dir" ] && [ -d "$dir" ] || die "usage: $0 <backup directory>"
+[ -n "$dir" ] || die "usage: $0 <backup directory>"
+[ -d "$dir" ] || die "$dir is not a directory"
 [ -f "$dir/MANIFEST" ] || die "$dir has no MANIFEST: incomplete backup"
-[ -n "${BACKUP_AGE_IDENTITY:-}" ] && [ -s "$BACKUP_AGE_IDENTITY" ] || die "BACKUP_AGE_IDENTITY must name the private key file"
+[ -n "${BACKUP_AGE_IDENTITY:-}" ] || die "BACKUP_AGE_IDENTITY must name the private key file"
+[ -s "$BACKUP_AGE_IDENTITY" ] || die "BACKUP_AGE_IDENTITY ($BACKUP_AGE_IDENTITY) is empty or missing"
 [ "${RESTORE_ALLOW_HOST:-}" = "${PGHOST:-}" ] ||
   die "set RESTORE_ALLOW_HOST=$PGHOST to confirm it is a scratch server"
 for tool in pg_restore psql age sha256sum; do
