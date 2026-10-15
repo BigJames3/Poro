@@ -468,11 +468,10 @@ services:
       dockerfile: services/video/Dockerfile
     container_name: poro-video-storage-migrate
     entrypoint: ["/app/storage-migrate"]
+    # Seulement le stockage : ni base, ni broker, ni JWKS (moindre privilège).
     environment:
       APP_ENV: dev
       LOG_LEVEL: info
-      JWKS_URL: http://auth:8081/.well-known/jwks.json
-      KAFKA_BROKERS: redpanda:29092
       S3_ENDPOINT: http://seaweedfs:8333
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_REGION: us-east-1

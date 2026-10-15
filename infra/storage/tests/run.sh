@@ -99,7 +99,6 @@ sleep 3
 (
   cd "$workdir"
   APP_ENV=dev LOG_LEVEL=info \
-    JWKS_URL=http://127.0.0.1:1/.well-known/jwks.json KAFKA_BROKERS=127.0.0.1:1 \
     S3_ENDPOINT="$endpoint" S3_PUBLIC_ENDPOINT="$endpoint" S3_REGION=us-east-1 \
     S3_BUCKET=poro-videos S3_SOURCE_BUCKET=poro-video-sources S3_QUARANTINE_BUCKET=poro-quarantine \
     S3_ACCESS_KEY_ID="$S3_VIDEO_ACCESS_KEY_ID" S3_SECRET_ACCESS_KEY="$S3_VIDEO_SECRET_ACCESS_KEY" \

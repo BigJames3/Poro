@@ -98,16 +98,7 @@ func (c *Config) IsDev() bool {
 
 // Validate rejects settings that are unsafe or unusable.
 func (c *Config) Validate() error {
-	var errs []error
-	switch c.AppEnv {
-	case EnvDev, EnvStaging, EnvProd:
-	case "":
-		// No default: a forgotten APP_ENV must not start a production
-		// service with the shortcuts of local development.
-		errs = append(errs, errors.New("APP_ENV is required: dev, staging or prod"))
-	default:
-		errs = append(errs, fmt.Errorf("APP_ENV must be dev, staging or prod, got %q", c.AppEnv))
-	}
+	errs := []error{c.ValidateStorage()}
 	if c.PostgresPassword == "" {
 		errs = append(errs, errors.New("POSTGRES_PASSWORD is required"))
 	}
@@ -120,6 +111,21 @@ func (c *Config) Validate() error {
 	if len(c.KafkaBrokers) == 0 {
 		errs = append(errs, errors.New("KAFKA_BROKERS is required"))
 	}
+	if !c.IsDev() {
+		switch c.PostgresSSLMode {
+		case "require", "verify-ca", "verify-full":
+		default:
+			errs = append(errs, errors.New("POSTGRES_SSLMODE must be require, verify-ca or verify-full outside dev"))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// ValidateStorage checks only what object storage needs. Commands that touch
+// nothing but buckets, such as storage-migrate, use it so that they are never
+// handed database or broker credentials they do not use.
+func (c *Config) ValidateStorage() error {
+	errs := []error{c.validateAppEnv()}
 	if c.S3Endpoint == "" || c.S3Bucket == "" {
 		errs = append(errs, errors.New("S3_ENDPOINT and S3_BUCKET are required"))
 	}
@@ -135,18 +141,48 @@ func (c *Config) Validate() error {
 	if c.S3AccessKey == "" || c.S3SecretKey == "" {
 		errs = append(errs, errors.New("S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required"))
 	}
-	if !c.IsDev() {
-		switch c.PostgresSSLMode {
-		case "require", "verify-ca", "verify-full":
-		default:
-			errs = append(errs, errors.New("POSTGRES_SSLMODE must be require, verify-ca or verify-full outside dev"))
-		}
-	}
 	return errors.Join(errs...)
+}
+
+func (c *Config) validateAppEnv() error {
+	switch c.AppEnv {
+	case EnvDev, EnvStaging, EnvProd:
+	case "":
+		// No default: a forgotten APP_ENV must not start a production
+		// service with the shortcuts of local development.
+		return errors.New("APP_ENV is required: dev, staging or prod")
+	default:
+		return fmt.Errorf("APP_ENV must be dev, staging or prod, got %q", c.AppEnv)
+	}
+	return nil
 }
 
 // Load reads configuration from the environment and an optional .env file.
 func Load() (*Config, error) {
+	cfg, err := read()
+	if err != nil {
+		return nil, err
+	}
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	return cfg, nil
+}
+
+// LoadStorage reads the same sources as Load but only requires the object
+// storage settings (see ValidateStorage).
+func LoadStorage() (*Config, error) {
+	cfg, err := read()
+	if err != nil {
+		return nil, err
+	}
+	if err := cfg.ValidateStorage(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	return cfg, nil
+}
+
+func read() (*Config, error) {
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("load dotenv: %w", err)
 	}
@@ -200,9 +236,6 @@ func Load() (*Config, error) {
 
 		FFmpegBin:  v.GetString("FFMPEG_BIN"),
 		FFprobeBin: v.GetString("FFPROBE_BIN"),
-	}
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 	return cfg, nil
 }

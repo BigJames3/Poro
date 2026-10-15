@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -102,4 +103,30 @@ func TestLoadRequiresAppEnvAndSecrets(t *testing.T) {
 	_, err := Load()
 	require.ErrorContains(t, err, "APP_ENV is required")
 	require.ErrorContains(t, err, "POSTGRES_PASSWORD is required")
+}
+
+// storage-migrate only touches buckets: it starts without database, broker or
+// JWKS settings, but still refuses a missing APP_ENV or S3 credentials.
+func TestLoadStorageNeedsOnlyStorageSettings(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", "prod")
+	t.Setenv("POSTGRES_PASSWORD", "")
+	t.Setenv("KAFKA_BROKERS", "")
+	t.Setenv("JWKS_URL", "")
+	t.Setenv("S3_ACCESS_KEY_ID", "k")
+	t.Setenv("S3_SECRET_ACCESS_KEY", "s")
+	cfg, err := LoadStorage()
+	require.NoError(t, err)
+	require.Equal(t, "poro-video-sources", cfg.S3SourceBucket)
+
+	_, err = Load()
+	require.ErrorContains(t, err, "POSTGRES_PASSWORD is required", "the API and the worker still need everything")
+
+	t.Setenv("APP_ENV", "")
+	t.Setenv("S3_SECRET_ACCESS_KEY", "")
+	_, err = LoadStorage()
+	require.ErrorContains(t, err, "APP_ENV is required")
+	require.ErrorContains(t, err, "S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required")
+	_, err = Load()
+	require.Equal(t, 1, strings.Count(err.Error(), "APP_ENV is required"), "reported once")
 }

@@ -21,6 +21,7 @@ suite('shop image storage on SeaweedFS', () => {
 
   it('uploads privately, publishes publicly and deletes the original', async () => {
     const config = loadConfig({
+      APP_ENV: 'dev',
       DATABASE_URL: 'postgresql://poro:x@localhost:5433/poro_shop',
       S3_ENDPOINT: endpoint,
       S3_PUBLIC_ENDPOINT: endpoint,
