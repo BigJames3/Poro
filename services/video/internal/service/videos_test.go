@@ -55,6 +55,9 @@ func TestInitCompleteAndGet(t *testing.T) {
 	view, err := svc.Complete(ctx, user, vid, dto.CompleteRequest{Parts: []dto.CompletePart{{PartNumber: 1, ETag: "etag"}}})
 	require.NoError(t, err)
 	require.Equal(t, model.StatusProcessing, view.Status)
+	source := model.SourceKey(user.String(), init.VideoID, "mp4")
+	require.True(t, mem.HasSource(source), "the upload lands in the private source bucket")
+	require.False(t, mem.Has(source), "and never in the public media bucket")
 
 	var n int
 	require.NoError(t, testdb.Pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events WHERE event_key = $1 AND topic = $2`,

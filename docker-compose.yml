@@ -122,21 +122,24 @@ services:
       - poro-network
     restart: unless-stopped
 
+  # Buckets et contrôle d'accès S3 (ADR-0015) : un utilisateur par service,
+  # limité à ses buckets ; lecture anonyme sur les médias publics seulement.
   seaweedfs-init:
     image: chrislusf/seaweedfs:4.45@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5
     container_name: poro-seaweedfs-init
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -eu
-        until echo "cluster.check" | weed shell -master=seaweedfs:9333 >/dev/null 2>&1; do sleep 2; done
-        for b in poro-avatars poro-videos poro-quarantine poro-shop; do
-          if ! echo "s3.bucket.list" | weed shell -master=seaweedfs:9333 2>/dev/null | grep -q "$$b"; then
-            echo "s3.bucket.create -name $$b" | weed shell -master=seaweedfs:9333
-          fi
-        done
+    entrypoint: ["/bin/sh", "/init.sh"]
+    environment:
+      S3_USER_ACCESS_KEY_ID: ${S3_USER_ACCESS_KEY_ID:?S3_USER_ACCESS_KEY_ID must be set in .env}
+      S3_USER_SECRET_ACCESS_KEY: ${S3_USER_SECRET_ACCESS_KEY:?S3_USER_SECRET_ACCESS_KEY must be set in .env}
+      S3_VIDEO_ACCESS_KEY_ID: ${S3_VIDEO_ACCESS_KEY_ID:?S3_VIDEO_ACCESS_KEY_ID must be set in .env}
+      S3_VIDEO_SECRET_ACCESS_KEY: ${S3_VIDEO_SECRET_ACCESS_KEY:?S3_VIDEO_SECRET_ACCESS_KEY must be set in .env}
+      S3_SHOP_ACCESS_KEY_ID: ${S3_SHOP_ACCESS_KEY_ID:?S3_SHOP_ACCESS_KEY_ID must be set in .env}
+      S3_SHOP_SECRET_ACCESS_KEY: ${S3_SHOP_SECRET_ACCESS_KEY:?S3_SHOP_SECRET_ACCESS_KEY must be set in .env}
+    volumes:
+      - ./infra/storage/init.sh:/init.sh:ro
     depends_on:
-      - seaweedfs
+      seaweedfs:
+        condition: service_healthy
     networks:
       - poro-network
     restart: "no"
@@ -410,8 +413,9 @@ services:
       S3_ENDPOINT: http://seaweedfs:8333
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_BUCKET: poro-avatars
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID must be set in .env}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY must be set in .env}
+      S3_UPLOAD_BUCKET: poro-avatar-uploads
+      S3_ACCESS_KEY_ID: ${S3_USER_ACCESS_KEY_ID:?S3_USER_ACCESS_KEY_ID must be set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_USER_SECRET_ACCESS_KEY:?S3_USER_SECRET_ACCESS_KEY must be set in .env}
       CORS_ORIGINS: ${USER_CORS_ORIGINS:-}
     ports:
       - "127.0.0.1:8082:8082"
@@ -452,6 +456,35 @@ services:
   # SERVICE VIDEO (upload multipart, métadonnées)
   # ─────────────────────────────────────────────
 
+  # Déplace une fois les sources vidéo des anciennes versions vers le bucket
+  # privé (idempotent ; ADR-0015).
+  video-storage-migrate:
+    build:
+      context: .
+      dockerfile: services/video/Dockerfile
+    container_name: poro-video-storage-migrate
+    entrypoint: ["/app/storage-migrate"]
+    environment:
+      APP_ENV: dev
+      LOG_LEVEL: info
+      JWKS_URL: http://auth:8081/.well-known/jwks.json
+      KAFKA_BROKERS: redpanda:29092
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_REGION: us-east-1
+      S3_BUCKET: poro-videos
+      S3_SOURCE_BUCKET: poro-video-sources
+      S3_QUARANTINE_BUCKET: poro-quarantine
+      S3_ACCESS_KEY_ID: ${S3_VIDEO_ACCESS_KEY_ID:?S3_VIDEO_ACCESS_KEY_ID must be set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_VIDEO_SECRET_ACCESS_KEY:?S3_VIDEO_SECRET_ACCESS_KEY must be set in .env}
+      S3_FORCE_PATH_STYLE: "true"
+    depends_on:
+      seaweedfs-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: "no"
+
   video:
     build:
       context: .
@@ -478,11 +511,12 @@ services:
       S3_ENDPOINT: http://seaweedfs:8333
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_REGION: us-east-1
+      # Public : HLS et miniatures seulement. Sources et quarantaine sont privées.
       S3_BUCKET: poro-videos
-      # Médias des vidéos retirées ou supprimées ; privé en production.
+      S3_SOURCE_BUCKET: poro-video-sources
       S3_QUARANTINE_BUCKET: poro-quarantine
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID must be set in .env}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY must be set in .env}
+      S3_ACCESS_KEY_ID: ${S3_VIDEO_ACCESS_KEY_ID:?S3_VIDEO_ACCESS_KEY_ID must be set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_VIDEO_SECRET_ACCESS_KEY:?S3_VIDEO_SECRET_ACCESS_KEY must be set in .env}
       S3_FORCE_PATH_STYLE: "true"
     ports:
       - "127.0.0.1:8083:8083"
@@ -496,6 +530,8 @@ services:
       redpanda-init:
         condition: service_completed_successfully
       seaweedfs-init:
+        condition: service_completed_successfully
+      video-storage-migrate:
         condition: service_completed_successfully
     networks:
       - poro-network
@@ -783,11 +819,12 @@ services:
       S3_ENDPOINT: http://seaweedfs:8333
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_REGION: us-east-1
+      # Public : HLS et miniatures seulement. Sources et quarantaine sont privées.
       S3_BUCKET: poro-videos
-      # Médias des vidéos retirées ou supprimées ; privé en production.
+      S3_SOURCE_BUCKET: poro-video-sources
       S3_QUARANTINE_BUCKET: poro-quarantine
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID must be set in .env}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY must be set in .env}
+      S3_ACCESS_KEY_ID: ${S3_VIDEO_ACCESS_KEY_ID:?S3_VIDEO_ACCESS_KEY_ID must be set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_VIDEO_SECRET_ACCESS_KEY:?S3_VIDEO_SECRET_ACCESS_KEY must be set in .env}
       S3_FORCE_PATH_STYLE: "true"
       FFMPEG_BIN: ffmpeg
       FFPROBE_BIN: ffprobe
@@ -797,6 +834,8 @@ services:
       redpanda-init:
         condition: service_completed_successfully
       seaweedfs-init:
+        condition: service_completed_successfully
+      video-storage-migrate:
         condition: service_completed_successfully
     networks:
       - poro-network
@@ -844,8 +883,9 @@ services:
       S3_ENDPOINT: http://seaweedfs:8333
       S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_BUCKET: poro-shop
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID must be set in .env}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY must be set in .env}
+      S3_UPLOAD_BUCKET: poro-shop-uploads
+      S3_ACCESS_KEY_ID: ${S3_SHOP_ACCESS_KEY_ID:?S3_SHOP_ACCESS_KEY_ID must be set in .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SHOP_SECRET_ACCESS_KEY:?S3_SHOP_SECRET_ACCESS_KEY must be set in .env}
       CORS_ORIGINS: ${SHOP_CORS_ORIGINS:-}
     ports:
       - "127.0.0.1:8090:8090"

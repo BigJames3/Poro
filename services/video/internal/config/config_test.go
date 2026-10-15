@@ -19,6 +19,7 @@ func TestValidate(t *testing.T) {
 			PostgresSSLMode:  "disable",
 
 			S3QuarantineBucket: "poro-quarantine",
+			S3SourceBucket:     "poro-video-sources",
 		}
 	}
 	require.NoError(t, ok().Validate())
@@ -41,6 +42,8 @@ func TestValidate(t *testing.T) {
 		{name: "missing bucket", mutate: func(c *Config) { c.S3Bucket = "" }, want: "S3_BUCKET"},
 		{name: "missing quarantine", mutate: func(c *Config) { c.S3QuarantineBucket = "" }, want: "S3_QUARANTINE_BUCKET"},
 		{name: "public quarantine", mutate: func(c *Config) { c.S3QuarantineBucket = "poro-videos" }, want: "must differ"},
+		{name: "missing source bucket", mutate: func(c *Config) { c.S3SourceBucket = "" }, want: "S3_SOURCE_BUCKET"},
+		{name: "public source bucket", mutate: func(c *Config) { c.S3SourceBucket = "poro-videos" }, want: "S3_SOURCE_BUCKET is required and must differ"},
 		{name: "prod ssl", mutate: func(c *Config) {
 			c.AppEnv = EnvProd
 			c.PostgresSSLMode = "disable"

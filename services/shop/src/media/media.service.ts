@@ -60,6 +60,7 @@ export function s3ClientFor(config: AppConfigType, endpoint: string): S3Client {
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
   private readonly bucket: string;
+  private readonly uploadBucket: string;
   private readonly publicBaseUrl: string;
 
   constructor(
@@ -68,6 +69,7 @@ export class MediaService {
     @Inject(S3_PRESIGN_CLIENT) private readonly presignS3: S3Client,
   ) {
     this.bucket = config.s3.bucket;
+    this.uploadBucket = config.s3.uploadBucket;
     this.publicBaseUrl = config.mediaPublicBaseUrl;
   }
 
@@ -78,7 +80,7 @@ export class MediaService {
   async createUpload(ownerId: string, contentType: ImageContentType): Promise<ImageUploadView> {
     const key = `${UPLOAD_PREFIX}/${ownerId}/${uuidv7()}`;
     const { url, fields } = await createPresignedPost(this.presignS3, {
-      Bucket: this.bucket,
+      Bucket: this.uploadBucket,
       Key: key,
       Conditions: [
         ['content-length-range', 1, IMAGE_MAX_BYTES],
@@ -121,11 +123,11 @@ export class MediaService {
         CacheControl: 'public, max-age=31536000, immutable',
       }),
     );
-    await this.remove(uploadKey);
+    await this.removeUpload(uploadKey);
     return key;
   }
 
-  /** Best effort: an orphan object costs storage, not correctness. */
+  /** Deletes a public object. Best effort: an orphan costs storage, not correctness. */
   async remove(key: string): Promise<void> {
     try {
       await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
@@ -134,12 +136,21 @@ export class MediaService {
     }
   }
 
+  /** Deletes a private original once re-encoded or rejected. Best effort. */
+  private async removeUpload(key: string): Promise<void> {
+    try {
+      await this.s3.send(new DeleteObjectCommand({ Bucket: this.uploadBucket, Key: key }));
+    } catch (err) {
+      this.logger.warn({ msg: 'image upload not deleted', key, err });
+    }
+  }
+
   private async download(key: string): Promise<Buffer> {
     let body;
     try {
-      const res = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      const res = await this.s3.send(new GetObjectCommand({ Bucket: this.uploadBucket, Key: key }));
       if ((res.ContentLength ?? 0) > IMAGE_MAX_BYTES) {
-        await this.remove(key);
+        await this.removeUpload(key);
         throw new ApiError(422, 'image_too_large', 'image is larger than 5 MB');
       }
       body = await res.Body?.transformToByteArray();

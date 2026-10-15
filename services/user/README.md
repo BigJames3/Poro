@@ -43,7 +43,11 @@ npm run start:dev
 
 ## Configuration
 
-Voir `.env.example`. Hors `dev` : TLS Postgres (`sslmode=require` ou `verify-*`),
+Voir `.env.example`. Les originaux d'avatars vont dans le bucket privé
+`S3_UPLOAD_BUCKET` (`poro-avatar-uploads`), l'avatar ré-encodé dans `S3_BUCKET`
+(`poro-avatars`, public) ; identité S3 `poro-user`
+([ADR-0015](../../docs/architecture/adr/0015-controle-acces-stockage-objet.md)).
+Hors `dev` : TLS Postgres (`sslmode=require` ou `verify-*`),
 `REDIS_URL`, HTTPS sur `S3_PUBLIC_ENDPOINT`, CORS en origines https exactes,
 clés S3 obligatoires.
 

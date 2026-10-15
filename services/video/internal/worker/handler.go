@@ -91,7 +91,7 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 	if err != nil {
 		return err
 	}
-	if err := h.store.Get(ctx, data.SourceKey, srcFile); err != nil {
+	if err := h.store.GetSource(ctx, data.SourceKey, srcFile); err != nil {
 		_ = srcFile.Close()
 		return h.fail(ctx, env, videoID, userID, events.VideoFailInvalid, err)
 	}
@@ -190,7 +190,7 @@ func (h *Handler) uploadOutput(ctx context.Context, outDir, userID, videoID stri
 			return err
 		}
 		key := objectKey(userID, videoID, f.Rel)
-		if err := h.store.Put(ctx, key, f.ContentType, bytes.NewReader(raw)); err != nil {
+		if err := h.store.PutMedia(ctx, key, f.ContentType, bytes.NewReader(raw)); err != nil {
 			return err
 		}
 	}
