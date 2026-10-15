@@ -51,6 +51,13 @@ export interface ConsumerOptions {
   topics: string[];
   maxAttempts?: number;
   backoffMs?: number;
+  /** kafka_consumer_records_total: processed, retried (per failed attempt), dead_lettered. */
+  records?: ConsumerRecords;
+}
+
+/** The counter of MetricsService, typed loosely so tests can pass a fake. */
+export interface ConsumerRecords {
+  inc(labels: { group: string; topic: string; outcome: string }): void;
 }
 
 /**
@@ -94,12 +101,18 @@ export class EventProcessor {
       });
       return this.deadLetter(msg, err);
     }
-    const context = { ...where, event_id: env.id, event_type: env.type };
+    const context = {
+      ...where,
+      event_id: env.id,
+      event_type: env.type,
+      event_subject: env.subject,
+    };
 
     let backoff = this.backoffMs;
     for (let attempt = 1; ; attempt++) {
       try {
         await this.handler(env);
+        this.count(msg.topic, 'processed');
         this.logger.debug({ msg: 'event processed', ...context });
         return;
       } catch (err) {
@@ -119,10 +132,15 @@ export class EventProcessor {
           attempt,
           err,
         });
+        this.count(msg.topic, 'retried');
         await this.sleep(backoff);
         backoff *= 2;
       }
     }
+  }
+
+  private count(topic: string, outcome: string): void {
+    this.options.records?.inc({ group: this.options.group, topic, outcome });
   }
 
   private async deadLetter(msg: ConsumedMessage, cause: unknown): Promise<void> {
@@ -147,6 +165,7 @@ export class EventProcessor {
     for (;;) {
       try {
         await this.dlq.send(record);
+        this.count(msg.topic, 'dead_lettered');
         return;
       } catch (err) {
         this.throwIfStopped();

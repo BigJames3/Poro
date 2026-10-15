@@ -110,6 +110,7 @@ func run() error {
 		Brokers: cfg.KafkaBrokers,
 		Group:   moderation.Group,
 		Topics:  moderation.Topics,
+		Metrics: m.Registry(),
 	}, moderation.New(pool, repo, store, log).Handle, log)
 	if err != nil {
 		return fmt.Errorf("init moderation consumer: %w", err)
@@ -118,6 +119,7 @@ func run() error {
 		Brokers: cfg.KafkaBrokers,
 		Group:   erasure.Group,
 		Topics:  erasure.Topics,
+		Metrics: m.Registry(),
 	}, erasure.New(pool, repo, store, log).Handle, log)
 	if err != nil {
 		return fmt.Errorf("init account erasure consumer: %w", err)

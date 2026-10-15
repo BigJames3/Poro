@@ -3,7 +3,9 @@ import json
 from typing import Any
 
 import pytest
+from prometheus_client import REGISTRY
 
+from moderation import SERVICE_NAME
 from moderation.events.consumer import (
     HEADER_CONSUMER_GROUP,
     HEADER_ERROR,
@@ -110,3 +112,31 @@ async def test_stop_interrupts_without_committing() -> None:
     stopped.stop()
     with pytest.raises(StoppedError):
         await stopped.process(record(valid()))
+
+
+async def test_counts_outcomes_like_shared_go() -> None:
+    group = "poro-test-metrics"
+
+    def count(outcome: str) -> float:
+        value = REGISTRY.get_sample_value(
+            "kafka_consumer_records_total",
+            {"service": SERVICE_NAME, "group": group, "topic": "poro.video.ready", "outcome": outcome},
+        )
+        return value or 0.0
+
+    calls = 0
+
+    async def flaky(_: Envelope) -> None:
+        nonlocal calls
+        calls += 1
+        if calls < 2:
+            raise ConnectionError("db hiccup")
+
+    async def permanent(_: Envelope) -> None:
+        raise PermanentError("bad")
+
+    await Processor(group, flaky, Sink(), backoff_s=0.001).process(record(valid()))
+    failing = Processor(group, permanent, Sink(), backoff_s=0.001)
+    await failing.process(record(valid()))
+    await failing.process(record(b"{not json"))
+    assert (count("processed"), count("retried"), count("dead_lettered")) == (1.0, 1.0, 2.0)

@@ -209,7 +209,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
     }
     this.consumer = new KafkaEventConsumer(
       this.config.kafkaBrokers,
-      { group: DISPATCHER_GROUP, topics: [...CONSUMED_TYPES] },
+      { group: DISPATCHER_GROUP, topics: [...CONSUMED_TYPES], records: this.metrics.kafkaRecords },
       (env) => this.handle(env),
     );
     this.consumer.start();

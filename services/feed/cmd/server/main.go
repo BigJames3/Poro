@@ -106,6 +106,7 @@ func run() error {
 		Brokers: cfg.KafkaBrokers,
 		Group:   consumer.Group,
 		Topics:  consumer.Topics,
+		Metrics: m.Registry(),
 	}, consumer.NewProjector(pool, log), log)
 	if err != nil {
 		return fmt.Errorf("init projector: %w", err)
@@ -114,6 +115,7 @@ func run() error {
 		Brokers: cfg.KafkaBrokers,
 		Group:   consumer.ErasureGroup,
 		Topics:  consumer.ErasureTopics,
+		Metrics: m.Registry(),
 	}, consumer.NewEraser(pool, log), log)
 	if err != nil {
 		return fmt.Errorf("init account erasure: %w", err)

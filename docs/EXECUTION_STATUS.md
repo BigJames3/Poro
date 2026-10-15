@@ -15,7 +15,7 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
 | 1 | PORO-007 isoler FFmpeg | TERMINÉE | surface d'attaque la plus exposée (fichiers d'inconnus) |
 | 2 | PORO-002 propager la suppression de compte | TERMINÉE (durée de conservation des commandes : validation juridique) | obligation de protection des données, réutilise l'outbox existante |
 | 3 | PORO-011 CI et images | TERMINÉE (protection de branche : action humaine) | prérequis de toute livraison (staging, CD) |
-| 4 | PORO-009 observabilité | À FAIRE | prérequis d'une exploitation de staging |
+| 4 | PORO-009 observabilité | TERMINÉE (routage des alertes : action humaine) | prérequis d'une exploitation de staging |
 | 5 | PORO-010/012 staging, CD, sauvegardes | TERMINÉE côté code ; mise en service BLOQUÉE (hébergeur, secrets) | dépend de 3 et 4 ; accès hébergeur absents |
 | 6 | PORO-013 Android et connexion API | À FAIRE | code Android hors périmètre autorisé (voir plus bas) |
 
@@ -191,6 +191,41 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
   contournement, pas de force push) demande un administrateur du dépôt. Les outils disponibles ici
   n'ont pas cette API. La procédure est dans `SECURITY.md`.
 
+## 4. PORO-009 — Observabilité — TERMINÉE (une action humaine)
+
+- **Fichiers** :
+  - `infra/observability/` : Prometheus, règles et leurs tests, Alertmanager, Grafana ;
+  - `docker-compose.yml` : profil `observability`, uniquement sur 127.0.0.1 ;
+  - `packages/shared-go/kafka` et `packages/shared-go/logging` ;
+  - les consommateurs Node et Python ;
+  - `docs/runbooks/observability.md` ;
+  - CI : job `observability`.
+- **Changements** :
+  - **Collecte** : 19 cibles (APIs, relais outbox, gateway, Redpanda) et un tableau de bord
+    RED, outbox, consommateurs et SMS.
+  - **Alertes** (8) : service tombé, taux de 5xx, latence p95, retard et échecs de l'outbox,
+    DLQ, réessais en boucle, budget SMS.
+  - **Consommateurs** : métrique `kafka_consumer_records_total`, identique en Go, Node et
+    Python.
+  - **Corrélation** : `request_id` côté HTTP ; `event_id` et `event_subject` dans tous les logs
+    des consommateurs.
+  - **Rédaction des logs** : masquage des secrets et données personnelles en Go (champs,
+    messages, erreurs) et en Node (pino).
+- **Tests et résultats** :
+  - `promtool test rules` vert ;
+  - la pile réelle (8 règles, Alertmanager, 19 cibles, tableau de bord, Grafana en lecture
+    seule) : 7 contrôles verts ;
+  - compteurs testés en Go (Redpanda réel), en Node (4 services) et en Python ;
+  - rédaction testée en Go ;
+  - suites Node : user 135, shop 169, order 134, notification 164 ; moderation : 107.
+- **Limites** :
+  - propagation du contexte de trace OpenTelemetry à travers Kafka non faite : il faudrait une
+    colonne dans chaque outbox ; la corrélation passe par `event_subject` et `event_id` ;
+  - media-worker sans endpoint de métriques ;
+  - seuils d'alerte à ajuster au trafic réel.
+- **Action humaine** : choisir le canal d'astreinte et créer le webhook (secret) pour
+  Alertmanager.
+
 ## 5a. PORO-012 — Sauvegardes — TERMINÉE côté code (mise en service : action humaine)
 
 - **Fichiers** : `infra/backup/backup.sh`, `infra/backup/restore_verify.sh`,
@@ -262,6 +297,7 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
   Object Lock), planifier `backup.sh`, valider RPO/RTO (`docs/runbooks/backup.md`).
 - Staging : choisir l'hébergeur, écrire la couche d'environnement staging, créer l'environnement
   GitHub `staging` (relecteurs, secrets SSH, variables) : `docs/runbooks/deploy.md`.
+- Astreinte : canal et webhook Alertmanager pour staging et production.
 - Juridique : durée de conservation des commandes d'un compte effacé (ADR-0018).
 - Après la première publication : rendre les paquets GHCR privés ou publics selon la politique
   du projet (GHCR crée les paquets privés par défaut).

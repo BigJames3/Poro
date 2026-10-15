@@ -4,6 +4,7 @@ import {
   Logger,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  Optional,
 } from '@nestjs/common';
 
 import { appConfig, type AppConfigType } from '../config/app.config';
@@ -12,6 +13,7 @@ import { Envelope } from '../events/envelope';
 import { KafkaEventConsumer, PermanentError } from '../events/event-consumer';
 import { Data, uuidField } from '../events/fields';
 import { ACCOUNT_ERASURE_GROUP, AccountErasureService } from './account-erasure.service';
+import { MetricsService } from '../metrics/metrics';
 
 export const ACCOUNT_ERASURE_TOPICS = [TYPE_AUTH_USER_DELETED];
 
@@ -24,6 +26,7 @@ export class AccountErasureConsumer implements OnApplicationBootstrap, OnApplica
   constructor(
     private readonly erasure: AccountErasureService,
     @Inject(appConfig.KEY) private readonly config: AppConfigType,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -33,7 +36,11 @@ export class AccountErasureConsumer implements OnApplicationBootstrap, OnApplica
     }
     this.consumer = new KafkaEventConsumer(
       this.config.kafkaBrokers,
-      { group: ACCOUNT_ERASURE_GROUP, topics: ACCOUNT_ERASURE_TOPICS },
+      {
+        group: ACCOUNT_ERASURE_GROUP,
+        topics: ACCOUNT_ERASURE_TOPICS,
+        records: this.metrics?.kafkaRecords,
+      },
       (env) => this.handle(env),
     );
     this.consumer.start();

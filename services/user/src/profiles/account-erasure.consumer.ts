@@ -4,6 +4,7 @@ import {
   Logger,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  Optional,
 } from '@nestjs/common';
 
 import { AvatarService } from '../avatars/avatar.service';
@@ -14,6 +15,7 @@ import { Envelope } from '../events/envelope';
 import { KafkaEventConsumer, PermanentError } from '../events/event-consumer';
 import { claim } from '../events/outbox';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsService } from '../metrics/metrics';
 
 export const ACCOUNT_ERASURE_GROUP = 'poro-user-account-erasure';
 
@@ -40,6 +42,7 @@ export class AccountErasureConsumer implements OnApplicationBootstrap, OnApplica
     private readonly prisma: PrismaService,
     private readonly avatars: AvatarService,
     @Inject(appConfig.KEY) private readonly config: AppConfigType,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -48,7 +51,11 @@ export class AccountErasureConsumer implements OnApplicationBootstrap, OnApplica
     }
     this.consumer = new KafkaEventConsumer(
       this.config.kafkaBrokers,
-      { group: ACCOUNT_ERASURE_GROUP, topics: [TYPE_AUTH_USER_DELETED] },
+      {
+        group: ACCOUNT_ERASURE_GROUP,
+        topics: [TYPE_AUTH_USER_DELETED],
+        records: this.metrics?.kafkaRecords,
+      },
       (env) => this.handle(env),
     );
     this.consumer.start();

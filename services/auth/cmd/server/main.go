@@ -153,6 +153,7 @@ func run() error {
 		Brokers: cfg.KafkaBrokers,
 		Group:   consumer.CreatorRolesGroup,
 		Topics:  []string{events.TypeUserCreatorActivated},
+		Metrics: m.Registry(),
 	}, consumer.NewCreatorActivated(pool, log), log)
 	if err != nil {
 		return fmt.Errorf("init creator consumer: %w", err)
@@ -161,6 +162,7 @@ func run() error {
 		Brokers: cfg.KafkaBrokers,
 		Group:   consumer.BusinessRolesGroup,
 		Topics:  []string{events.TypeShopShopCreated},
+		Metrics: m.Registry(),
 	}, consumer.NewShopCreated(pool, log), log)
 	if err != nil {
 		return fmt.Errorf("init business consumer: %w", err)

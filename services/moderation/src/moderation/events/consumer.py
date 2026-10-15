@@ -9,7 +9,9 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, TopicPartition
+from prometheus_client import Counter
 
+from moderation import SERVICE_NAME
 from moderation.events.envelope import Envelope, decode_envelope, dlq_topic
 
 HEADER_ERROR = "x-poro-error"
@@ -20,6 +22,14 @@ HEADER_CONSUMER_GROUP = "x-poro-consumer-group"
 
 Handler = Callable[[Envelope], Awaitable[None]]
 log = logging.getLogger(__name__)
+
+# Same name, labels and outcomes as shared-go/kafka: processed, retried (one
+# per failed attempt) and dead_lettered.
+RECORDS = Counter(
+    "kafka_consumer_records_total",
+    "Kafka records handled by consumer group, topic and outcome.",
+    ["service", "group", "topic", "outcome"],
+)
 
 
 class PermanentError(Exception):
@@ -76,25 +86,31 @@ class Processor:
             log.error("undecodable event, dead-lettering", extra={**where, "error": str(err)})
             await self._dead_letter(record, err)
             return
+        where = {**where, "event_id": str(env.id), "event_type": env.type, "event_subject": env.subject}
         backoff = self._backoff_s
         attempt = 0
         while True:
             attempt += 1
             try:
                 await self._handler(env)
+                self._count(record.topic, "processed")
                 return
             except Exception as err:  # noqa: BLE001 -- any handler failure is retried, then parked.
                 self._raise_if_stopped()
                 if isinstance(err, PermanentError) or attempt >= self._max_attempts:
                     log.error(
                         "event failed, dead-lettering",
-                        extra={**where, "event_id": str(env.id), "attempts": attempt, "error": str(err)},
+                        extra={**where, "attempts": attempt, "error": str(err)},
                     )
                     await self._dead_letter(record, err)
                     return
                 log.warning("event failed, retrying", extra={**where, "attempt": attempt, "error": str(err)})
+                self._count(record.topic, "retried")
                 await self._sleep(backoff)
                 backoff *= 2
+
+    def _count(self, topic: str, outcome: str) -> None:
+        RECORDS.labels(service=SERVICE_NAME, group=self._group, topic=topic, outcome=outcome).inc()
 
     async def _dead_letter(self, record: Record, cause: BaseException) -> None:
         headers = [
@@ -110,6 +126,7 @@ class Processor:
                 await self._dlq.send_and_wait(
                     dlq_topic(record.topic), value=record.value, key=record.key, headers=headers
                 )
+                self._count(record.topic, "dead_lettered")
                 return
             except Exception as err:  # noqa: BLE001 -- the DLQ publish is retried until stop.
                 self._raise_if_stopped()

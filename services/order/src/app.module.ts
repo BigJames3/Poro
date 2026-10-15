@@ -53,7 +53,22 @@ class AccountThrottlerGuard extends ThrottlerGuard {
           base: { service: SERVICE_NAME, version: SERVICE_VERSION },
           genReqId: (req) => requestIdOf(req as PoroRequest),
           customAttributeKeys: { reqId: 'request_id' },
-          redact: ['req.headers.authorization', 'req.headers.cookie'],
+          // Secrets and contact details never reach the logs, whatever object
+          // carries them (same list as shared-go/logging).
+          redact: [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'res.headers["set-cookie"]',
+            '*.password',
+            '*.token',
+            '*.access_token',
+            '*.refresh_token',
+            '*.fcm_token',
+            '*.otp',
+            '*.secret',
+            '*.phone',
+            '*.email',
+          ],
           serializers: {
             req: (req: { id: string; method: string; url: string }) => ({
               id: req.id,

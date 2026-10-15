@@ -4,6 +4,7 @@ import {
   Logger,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  Optional,
 } from '@nestjs/common';
 
 import { isUuid } from '../common/uuid';
@@ -13,6 +14,7 @@ import { Envelope } from '../events/envelope';
 import { KafkaEventConsumer, PermanentError } from '../events/event-consumer';
 import { claim } from '../events/outbox';
 import { PrismaService } from '../prisma/prisma.service';
+import { MetricsService } from '../metrics/metrics';
 
 export const PROFILES_CONSUMER_GROUP = 'poro-user-profiles';
 const COUNTRY_CODE = /^[A-Z]{2}$/;
@@ -26,6 +28,7 @@ export class UserCreatedConsumer implements OnApplicationBootstrap, OnApplicatio
   constructor(
     private readonly prisma: PrismaService,
     @Inject(appConfig.KEY) private readonly config: AppConfigType,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -35,7 +38,11 @@ export class UserCreatedConsumer implements OnApplicationBootstrap, OnApplicatio
     }
     this.consumer = new KafkaEventConsumer(
       this.config.kafkaBrokers,
-      { group: PROFILES_CONSUMER_GROUP, topics: [TYPE_AUTH_USER_CREATED] },
+      {
+        group: PROFILES_CONSUMER_GROUP,
+        topics: [TYPE_AUTH_USER_CREATED],
+        records: this.metrics?.kafkaRecords,
+      },
       (env) => this.handle(env),
     );
     this.consumer.start();

@@ -23,7 +23,7 @@ exposer Prometheus ni Alertmanager publiquement.
 | Trafic, erreurs, latence (RED) | `http_requests_total{service,method,route,status}`, `http_request_duration_seconds` | 10 API (Go, Node, Python), gateway Traefik |
 | Disponibilité | `up` | Prometheus (19 cibles) |
 | Outbox | `outbox_pending`, `outbox_published_total`, `outbox_publish_failures_total` | 7 relais |
-| Consommateurs Kafka | `kafka_consumer_records_total{group,topic,outcome}` : `processed`, `retried`, `dead_lettered` | consommateurs Go (`shared-go/kafka`) |
+| Consommateurs Kafka | `kafka_consumer_records_total{group,topic,outcome}` : `processed`, `retried`, `dead_lettered` | tous les consommateurs des API Go, Node et Python (le media-worker n'expose pas de métriques : ses échecs se lisent dans `poro.video.failed` et ses logs) |
 | Kafka | métriques publiques Redpanda | broker |
 | SMS OTP | `auth_sms_sent_total{country}`, `auth_sms_blocked_total{reason}` | auth |
 | Processus | mémoire, CPU, GC | tous les services |
@@ -55,7 +55,9 @@ Les `/metrics` des services ne sont jamais publiés par la gateway (route intern
 
   Les services gardent leur masquage volontaire (par exemple les derniers chiffres d'un
   téléphone) : la rédaction est le filet de sécurité.
-- Services Node : `pino` masque `authorization` et `cookie` des requêtes.
+- Services Node : `pino` masque `authorization`, `cookie`, `set-cookie` et, dans tout objet
+  journalisé, `password`, `token`, `access_token`, `refresh_token`, `fcm_token`, `otp`,
+  `secret`, `phone` et `email`.
 - Ne jamais logger un corps de requête complet.
 
 ## Alertes (`infra/observability/rules/poro.rules.yml`)
