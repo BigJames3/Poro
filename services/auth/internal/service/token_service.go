@@ -168,6 +168,9 @@ func (s *tokenService) GenerateRefreshToken() (string, string, error) {
 	return raw, HashToken(raw), nil
 }
 
+// tokenClockSkew is the clock difference tolerated between services on exp, nbf and iat.
+const tokenClockSkew = 30 * time.Second
+
 func (s *tokenService) ValidateAccessToken(token string) (*TokenClaims, error) {
 	claims := &accessClaims{}
 	parsed, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
@@ -179,9 +182,12 @@ func (s *tokenService) ValidateAccessToken(token string) (*TokenClaims, error) {
 		jwt.WithIssuer(TokenIssuer),
 		jwt.WithAudience(TokenAudience),
 		jwt.WithExpirationRequired(),
+		// Rejects an iat (and nbf) in the future beyond the clock-skew leeway.
+		jwt.WithIssuedAt(),
+		jwt.WithLeeway(tokenClockSkew),
 		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}),
 	)
-	if err != nil || !parsed.Valid {
+	if err != nil || !parsed.Valid || claims.IssuedAt == nil {
 		return nil, fmt.Errorf("validate access token: %w", ErrInvalidToken)
 	}
 

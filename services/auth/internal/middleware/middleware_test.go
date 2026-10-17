@@ -15,14 +15,17 @@ import (
 
 	"github.com/poro/shared-go/httpx"
 
+	"github.com/poro/auth/internal/model"
+	"github.com/poro/auth/internal/repository"
 	"github.com/poro/auth/internal/service"
 )
 
 func TestNewAuth(t *testing.T) {
 	claims := &service.TokenClaims{UserID: uuid.Must(uuid.NewV7()), SessionID: uuid.Must(uuid.NewV7()), TokenID: "jti", Exp: time.Now().Add(time.Minute)}
 	tokens := &stubTokens{claims: claims}
+	accounts := &stubAccounts{}
 	app := fiber.New(fiber.Config{ErrorHandler: httpx.ErrorHandler(zap.NewNop())})
-	app.Get("/me", NewAuth(tokens), func(c *fiber.Ctx) error {
+	app.Get("/me", NewAuth(tokens, accounts), func(c *fiber.Ctx) error {
 		got, ok := Claims(c)
 		require.True(t, ok)
 		require.Equal(t, claims, got)
@@ -42,10 +45,16 @@ func TestNewAuth(t *testing.T) {
 		{name: "invalid token", header: "Bearer bad", status: http.StatusUnauthorized},
 		{name: "revoked session", header: "Bearer good", setup: func() { tokens.revoked = true }, status: http.StatusUnauthorized},
 		{name: "registry down fails closed", header: "Bearer good", setup: func() { tokens.revokedErr = errors.New("redis") }, status: http.StatusServiceUnavailable},
+		{name: "suspended account", header: "Bearer good", setup: func() { accounts.status = model.StatusSuspended }, status: http.StatusForbidden},
+		{name: "deleted account", header: "Bearer good", setup: func() { accounts.status = model.StatusDeleted }, status: http.StatusForbidden},
+		{name: "pending account", header: "Bearer good", setup: func() { accounts.status = model.StatusPending }, status: http.StatusOK},
+		{name: "unknown account", header: "Bearer good", setup: func() { accounts.err = repository.ErrUserNotFound }, status: http.StatusUnauthorized},
+		{name: "database down fails closed", header: "Bearer good", setup: func() { accounts.err = errors.New("postgres") }, status: http.StatusServiceUnavailable},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			tokens.revoked, tokens.revokedErr = false, nil
+			accounts.status, accounts.err = model.StatusActive, nil
 			if tc.setup != nil {
 				tc.setup()
 			}
@@ -60,6 +69,18 @@ func TestNewAuth(t *testing.T) {
 		})
 	}
 	require.Equal(t, claims.SessionID, tokens.checkedSession, "revocation is checked per session (sid)")
+}
+
+type stubAccounts struct {
+	status model.UserStatus
+	err    error
+}
+
+func (s *stubAccounts) GetByID(_ context.Context, id uuid.UUID) (*model.User, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &model.User{ID: id, Status: s.status}, nil
 }
 
 type stubTokens struct {

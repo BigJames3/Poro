@@ -30,6 +30,7 @@ import (
 
 	"github.com/poro/auth/internal/config"
 	"github.com/poro/auth/internal/handler"
+	"github.com/poro/auth/internal/middleware"
 	"github.com/poro/auth/internal/repository"
 	"github.com/poro/auth/internal/routes"
 	"github.com/poro/auth/internal/service"
@@ -128,13 +129,15 @@ func startAuthAPI(t *testing.T) (*client, *mailbox, *miniredis.Miniredis) {
 	})
 	app.Use(httpx.RequestID())
 	routes.Register(app, routes.Dependencies{
-		Auth:    handler.NewAuthHandler(authSvc).SendVerificationOnSignup(emails, log),
-		Account: handler.NewAccountHandler(accounts),
-		Email:   handler.NewEmailHandler(emails),
-		Health:  health.New("auth", "test", map[string]health.Check{}),
-		Metrics: func(c *fiber.Ctx) error { return c.SendStatus(http.StatusOK) },
-		JWKS:    handler.NewJWKSHandler(tokens),
-		Tokens:  tokens,
+		Auth:     handler.NewAuthHandler(authSvc).SendVerificationOnSignup(emails, log),
+		Account:  handler.NewAccountHandler(accounts),
+		Email:    handler.NewEmailHandler(emails),
+		Health:   health.New("auth", "test", map[string]health.Check{}),
+		Metrics:  func(c *fiber.Ctx) error { return c.SendStatus(http.StatusOK) },
+		JWKS:     handler.NewJWKSHandler(tokens),
+		Tokens:   tokens,
+		Accounts: users,
+		Limiter:  middleware.NewLimiter(rdb),
 	})
 	return &client{t: t, app: app}, mails, mr
 }

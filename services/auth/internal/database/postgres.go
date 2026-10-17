@@ -4,12 +4,21 @@ package database
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
 	"github.com/poro/auth/internal/config"
+)
+
+// Timeouts applied to every pooled connection. Migrations use their own
+// connection and are not bound by them.
+const (
+	StatementTimeout = 5 * time.Second
+	LockTimeout      = 2 * time.Second
+	IdleInTxTimeout  = 30 * time.Second
 )
 
 // NewPostgresPool opens a pgx pool, checks it with Ping, and logs the target.
@@ -24,6 +33,12 @@ func NewPostgresPool(ctx context.Context, cfg *config.Config, log *zap.Logger) (
 	poolCfg.MaxConnLifetime = time.Hour
 	poolCfg.MaxConnIdleTime = 30 * time.Minute
 	poolCfg.HealthCheckPeriod = time.Minute
+	// Server-side bounds: a slow query or a held lock fails fast instead of
+	// tying up a connection, and the caller fails closed (503).
+	params := poolCfg.ConnConfig.RuntimeParams
+	params["statement_timeout"] = strconv.FormatInt(StatementTimeout.Milliseconds(), 10)
+	params["lock_timeout"] = strconv.FormatInt(LockTimeout.Milliseconds(), 10)
+	params["idle_in_transaction_session_timeout"] = strconv.FormatInt(IdleInTxTimeout.Milliseconds(), 10)
 
 	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
