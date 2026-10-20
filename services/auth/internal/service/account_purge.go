@@ -22,25 +22,34 @@ type ExpiredCodes interface {
 	DeleteExpired(ctx context.Context, before time.Time) (int64, error)
 }
 
+// ExpiredSweep deletes rows that expired and no longer serve any purpose,
+// such as OTP codes or refresh tokens (PORO-019).
+type ExpiredSweep struct {
+	Name   string
+	Delete func(ctx context.Context) (int64, error)
+}
+
 // AccountPurgeJob erases the accounts whose deletion date has passed, on
 // every replica: SKIP LOCKED keeps them from erasing the same account.
 type AccountPurgeJob struct {
 	purger   repository.AccountPurger
 	codes    ExpiredCodes
+	sweeps   []ExpiredSweep
 	interval time.Duration
 	log      *zap.Logger
 	now      func() time.Time
 }
 
 // NewAccountPurgeJob returns a job that runs every interval. It also deletes
-// the email codes expired for more than a day.
-func NewAccountPurgeJob(purger repository.AccountPurger, codes ExpiredCodes, interval time.Duration, log *zap.Logger) (*AccountPurgeJob, error) {
+// the email codes expired for more than a day, and runs every sweep.
+func NewAccountPurgeJob(purger repository.AccountPurger, codes ExpiredCodes, interval time.Duration, log *zap.Logger, sweeps ...ExpiredSweep) (*AccountPurgeJob, error) {
 	if interval <= 0 {
 		return nil, fmt.Errorf("account purge interval must be positive, got %s", interval)
 	}
 	return &AccountPurgeJob{
 		purger:   purger,
 		codes:    codes,
+		sweeps:   sweeps,
 		interval: interval,
 		log:      log,
 		now:      func() time.Time { return time.Now().UTC() },
@@ -63,6 +72,7 @@ func (j *AccountPurgeJob) Run(ctx context.Context) {
 		} else if deleted > 0 {
 			j.log.Info("expired email codes deleted", zap.Int64("count", deleted))
 		}
+		j.sweep(ctx)
 		select {
 		case <-ctx.Done():
 			return
@@ -85,6 +95,19 @@ func (j *AccountPurgeJob) RunOnce(ctx context.Context) (int, error) {
 		total += len(ids)
 		if len(ids) < purgeBatchSize {
 			return total, nil
+		}
+	}
+}
+
+// sweep runs every expired-row cleanup; one failing does not stop the others.
+func (j *AccountPurgeJob) sweep(ctx context.Context) {
+	for _, s := range j.sweeps {
+		deleted, err := s.Delete(ctx)
+		switch {
+		case err != nil:
+			j.log.Error("expired rows cleanup failed", zap.String("table", s.Name), zap.Error(err))
+		case deleted > 0:
+			j.log.Info("expired rows deleted", zap.String("table", s.Name), zap.Int64("count", deleted))
 		}
 	}
 }

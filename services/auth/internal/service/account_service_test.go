@@ -377,6 +377,20 @@ func TestAccountPurgeJob(t *testing.T) {
 
 	_, err = NewAccountPurgeJob(purger, codes, 0, zap.NewNop())
 	require.Error(t, err)
+
+	var swept []string
+	failing := ExpiredSweep{Name: "otp_codes", Delete: func(context.Context) (int64, error) {
+		swept = append(swept, "otp_codes")
+		return 0, errors.New("db down")
+	}}
+	working := ExpiredSweep{Name: "refresh_tokens", Delete: func(context.Context) (int64, error) {
+		swept = append(swept, "refresh_tokens")
+		return 7, nil
+	}}
+	job, err = NewAccountPurgeJob(purger, codes, time.Hour, zap.NewNop(), failing, working)
+	require.NoError(t, err)
+	job.Run(ctx)
+	require.Equal(t, []string{"otp_codes", "refresh_tokens"}, swept, "every sweep runs, even after one fails")
 }
 
 type fakePurger struct {

@@ -33,3 +33,23 @@ export async function claim(tx: InboxWriter, consumer: string, eventId: string):
   });
   return count === 1;
 }
+
+type InboxPurger = Pick<Prisma.TransactionClient, '$executeRaw'>;
+
+/** Kafka keeps events 7 days: an older inbox row can no longer stop a duplicate. */
+export const INBOX_RETENTION_MS = 30 * 24 * 3_600_000;
+
+/** Deletes the inbox rows processed before `before`, in batches (PORO-019). */
+export async function purgeProcessedEvents(db: InboxPurger, before: Date): Promise<number> {
+  const batch = 5000;
+  let total = 0;
+  for (;;) {
+    const deleted = await db.$executeRaw`
+      DELETE FROM processed_events WHERE ctid IN (
+        SELECT ctid FROM processed_events WHERE processed_at < ${before} LIMIT ${batch})`;
+    total += deleted;
+    if (deleted < batch) {
+      return total;
+    }
+  }
+}

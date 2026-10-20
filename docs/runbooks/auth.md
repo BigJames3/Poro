@@ -90,7 +90,9 @@ UPDATE refresh_tokens SET revoked_at = now() WHERE revoked_at IS NULL;
   Après l'effacement, rien n'est récupérable : le compte n'a plus d'identifiant.
 - Un utilisateur qui se reconnecte pendant les 30 jours annule sa suppression sans intervention.
 - L'effacement supprime aussi ses codes email ; la même tâche horaire supprime les codes expirés
-  depuis plus d'un jour.
+  depuis plus d'un jour, les codes OTP et les refresh tokens expirés (logs `expired rows deleted`,
+  `table`). Un refresh token révoqué mais pas encore expiré est gardé : il sert à détecter sa
+  réutilisation.
 
 ## SMS (Africa's Talking)
 

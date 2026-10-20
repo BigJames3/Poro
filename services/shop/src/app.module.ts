@@ -18,6 +18,7 @@ import { appConfig, type AppConfigType } from './config/app.config';
 import { HealthController } from './health/health.controller';
 import { MediaService, S3_CLIENT, S3_PRESIGN_CLIENT, s3ClientFor } from './media/media.service';
 import { UploadPurgeTask } from './media/upload-purge.task';
+import { InboxPurgeTask } from './events/inbox-purge.task';
 import { MetricsController, MetricsService } from './metrics/metrics';
 import { PrismaService } from './prisma/prisma.service';
 import { ProductsController } from './products/products.controller';
@@ -109,6 +110,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
     TokenVerifier,
     MediaService,
     UploadPurgeTask,
+    InboxPurgeTask,
     ShopsService,
     ProductsService,
     StockService,

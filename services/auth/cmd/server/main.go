@@ -17,6 +17,7 @@ import (
 	"github.com/poro/shared-go/events"
 	"github.com/poro/shared-go/health"
 	"github.com/poro/shared-go/httpx"
+	"github.com/poro/shared-go/inbox"
 	"github.com/poro/shared-go/kafka"
 	"github.com/poro/shared-go/logging"
 	"github.com/poro/shared-go/metrics"
@@ -110,7 +111,8 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init login guard: %w", err)
 	}
-	otp, err := service.NewOTPService(cfg, repository.NewOTPRepository(pool), throttle, smsBudget, sender, log)
+	otpRepo := repository.NewOTPRepository(pool)
+	otp, err := service.NewOTPService(cfg, otpRepo, throttle, smsBudget, sender, log)
 	if err != nil {
 		return fmt.Errorf("init otp service: %w", err)
 	}
@@ -140,7 +142,10 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init email service: %w", err)
 	}
-	purgeJob, err := service.NewAccountPurgeJob(repository.NewAccountPurger(pool), emailCodes, purgeInterval, log)
+	purgeJob, err := service.NewAccountPurgeJob(repository.NewAccountPurger(pool), emailCodes, purgeInterval, log,
+		service.ExpiredSweep{Name: "otp_codes", Delete: otpRepo.DeleteExpired},
+		service.ExpiredSweep{Name: "refresh_tokens", Delete: refresh.DeleteExpired},
+	)
 	if err != nil {
 		return fmt.Errorf("init account purge: %w", err)
 	}
@@ -205,6 +210,9 @@ func run() error {
 	}()
 
 	addr := ":" + cfg.AppPort
+	// Inbox rows older than the Kafka retention can no longer dedupe anything.
+	go inbox.RunPurge(ctx, pool, time.Hour, log)
+
 	errCh := make(chan error, 1)
 	go func() { errCh <- app.Listen(addr) }()
 	log.Info("auth service started", zap.String("port", cfg.AppPort), zap.String("env", cfg.AppEnv), zap.String("version", version))

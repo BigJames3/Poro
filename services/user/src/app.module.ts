@@ -11,6 +11,7 @@ import { AuthGuard } from './auth/auth.guard';
 import { TokenVerifier } from './auth/token-verifier';
 import { AvatarService, S3_CLIENT, S3_PRESIGN_CLIENT, s3ClientFor } from './avatars/avatar.service';
 import { UploadPurgeTask } from './avatars/upload-purge.task';
+import { InboxPurgeTask } from './events/inbox-purge.task';
 import { EnvelopeInterceptor } from './common/envelope.interceptor';
 import { HttpExceptionFilter } from './common/http-exception.filter';
 import { PoroRequest, requestIdOf } from './common/request';
@@ -99,6 +100,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
     TokenVerifier,
     AvatarService,
     UploadPurgeTask,
+    InboxPurgeTask,
     ProfilesService,
     UserCreatedConsumer,
     AccountErasureConsumer,

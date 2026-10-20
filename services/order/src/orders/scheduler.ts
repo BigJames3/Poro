@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 
 import { appConfig, type AppConfigType } from '../config/app.config';
+import { INBOX_RETENTION_MS, purgeProcessedEvents } from '../events/outbox';
+import { PrismaService } from '../prisma/prisma.service';
 import { SagaService } from './saga.service';
 
 /**
@@ -21,6 +23,7 @@ export class Scheduler implements OnApplicationBootstrap, OnApplicationShutdown 
 
   constructor(
     private readonly saga: SagaService,
+    private readonly prisma: PrismaService,
     @Inject(appConfig.KEY) private readonly config: AppConfigType,
   ) {}
 
@@ -48,6 +51,10 @@ export class Scheduler implements OnApplicationBootstrap, OnApplicationShutdown 
       ['auto_completed', () => this.saga.autoComplete(now)],
       ['contacts_erased', () => this.saga.eraseContacts(now)],
       ['previews_purged', () => this.saga.purgePreviews(now)],
+      [
+        'inbox_purged',
+        () => purgeProcessedEvents(this.prisma, new Date(now.getTime() - INBOX_RETENTION_MS)),
+      ],
     ];
     for (const [name, task] of tasks) {
       try {

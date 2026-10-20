@@ -1,5 +1,7 @@
 """Application factory: wires the database, Redis, JWKS, the consumers and the routes."""
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -16,6 +18,7 @@ from moderation.erasure import GROUP as ERASURE_GROUP
 from moderation.erasure import TOPICS as ERASURE_TOPICS
 from moderation.erasure import Eraser
 from moderation.events.consumer import KafkaConsumer
+from moderation.events.store import run_inbox_purge
 from moderation.http.errors import RequestIdMiddleware, install_error_handlers
 from moderation.http.jwks import JwksKeyStore, TokenVerifier
 from moderation.http.metrics import MetricsMiddleware
@@ -62,9 +65,13 @@ def create_app(config: Config, http_client: httpx.AsyncClient | None = None) -> 
                 consumer.start()
         else:
             log.warning("kafka consumers disabled by KAFKA_CONSUMER_ENABLED=false")
+        purge = asyncio.create_task(run_inbox_purge(app.state.sessions))
         try:
             yield
         finally:
+            purge.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await purge
             for consumer in consumers:
                 await consumer.stop()
             if http_client is None:

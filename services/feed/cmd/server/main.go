@@ -16,6 +16,7 @@ import (
 
 	"github.com/poro/shared-go/health"
 	"github.com/poro/shared-go/httpx"
+	"github.com/poro/shared-go/inbox"
 	"github.com/poro/shared-go/jwtauth"
 	"github.com/poro/shared-go/kafka"
 	"github.com/poro/shared-go/logging"
@@ -174,6 +175,9 @@ func run() error {
 	go func() { background.Wait(); close(backgroundDone) }()
 
 	addr := ":" + cfg.AppPort
+	// Inbox rows older than the Kafka retention can no longer dedupe anything.
+	go inbox.RunPurge(ctx, pool, time.Hour, log)
+
 	errCh := make(chan error, 1)
 	go func() { errCh <- app.Listen(addr) }()
 	log.Info("feed service started", zap.String("port", cfg.AppPort), zap.String("env", cfg.AppEnv), zap.String("version", version))
