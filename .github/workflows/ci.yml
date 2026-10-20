@@ -783,9 +783,9 @@ jobs:
         with: { distribution: "temurin", java-version: "17" }
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
       # The wrapper is committed without the executable bit: run it through bash.
-      - name: Assemble debug build
+      - name: Unit tests and debug build
         working-directory: apps/mobile-android
-        run: bash ./gradlew --no-daemon assembleDebug
+        run: bash ./gradlew --no-daemon testDebugUnitTest assembleDebug
 
   repo-checks:
     # Every change: a broken workflow, docker-compose.yml or infra script
