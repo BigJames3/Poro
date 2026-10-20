@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
@@ -64,6 +65,13 @@ type Config struct {
 
 	FFmpegBin  string
 	FFprobeBin string
+
+	// UploadAbandonAfter is how long an upload may stay unfinished before the
+	// janitor aborts it (PORO-008). Generous on purpose: a slow mobile upload
+	// of 256 MiB must never be cut.
+	UploadAbandonAfter time.Duration
+	// UploadJanitorInterval is the pause between two janitor passes.
+	UploadJanitorInterval time.Duration
 }
 
 // PostgresDSN returns a URL-encoded connection string.
@@ -110,6 +118,12 @@ func (c *Config) Validate() error {
 	}
 	if len(c.KafkaBrokers) == 0 {
 		errs = append(errs, errors.New("KAFKA_BROKERS is required"))
+	}
+	if c.UploadAbandonAfter < time.Hour {
+		errs = append(errs, errors.New("UPLOAD_ABANDON_AFTER must be at least 1h"))
+	}
+	if c.UploadJanitorInterval <= 0 {
+		errs = append(errs, errors.New("UPLOAD_JANITOR_INTERVAL must be positive"))
 	}
 	if !c.IsDev() {
 		switch c.PostgresSSLMode {
@@ -236,6 +250,9 @@ func read() (*Config, error) {
 
 		FFmpegBin:  v.GetString("FFMPEG_BIN"),
 		FFprobeBin: v.GetString("FFPROBE_BIN"),
+
+		UploadAbandonAfter:    v.GetDuration("UPLOAD_ABANDON_AFTER"),
+		UploadJanitorInterval: v.GetDuration("UPLOAD_JANITOR_INTERVAL"),
 	}
 	return cfg, nil
 }
@@ -269,6 +286,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("S3_FORCE_PATH_STYLE", true)
 
 	v.SetDefault("FFMPEG_BIN", "ffmpeg")
+	v.SetDefault("UPLOAD_ABANDON_AFTER", "24h")
+	v.SetDefault("UPLOAD_JANITOR_INTERVAL", "1h")
 	v.SetDefault("FFPROBE_BIN", "ffprobe")
 }
 

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"io"
+	"time"
 )
 
 // CompletedPart is one uploaded multipart part.
@@ -27,6 +28,10 @@ type Storage interface {
 	PresignPart(ctx context.Context, key, uploadID string, part int32) (url string, err error)
 	CompleteMultipart(ctx context.Context, key, uploadID string, parts []CompletedPart) error
 	AbortMultipart(ctx context.Context, key, uploadID string) error
+	// AbortStaleMultiparts aborts every multipart upload of the source bucket
+	// started before `before`, including ones no row knows about (a crash
+	// between creating the upload and saving its row). It returns how many.
+	AbortStaleMultiparts(ctx context.Context, before time.Time) (int, error)
 	HeadSource(ctx context.Context, key string) (Object, error)
 	GetSourceRange(ctx context.Context, key string, start, end int64) ([]byte, error)
 	GetSource(ctx context.Context, key string, dest io.Writer) error

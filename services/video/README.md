@@ -89,7 +89,12 @@ Vérifier le conteneur lancé : `infra/media-worker/check_sandbox.sh`.
 
 - Le CDN (Bunny) peut servir des segments en cache jusqu'à leur expiration ;
   aucune purge automatique.
-- La purge des uploads multipart abandonnés n'est pas encore faite (PORO-008).
+- Un upload jamais finalisé est abandonné après `UPLOAD_ABANDON_AFTER` (24 h) : son upload
+  multipart est annulé, la ligne passe `abandoned` et quitte la liste du propriétaire. La passe
+  tourne toutes les `UPLOAD_JANITOR_INTERVAL` (1 h) sur chaque réplica (`SKIP LOCKED`) et annule
+  aussi les multiparts qu'aucune ligne ne connaît (PORO-008). La taille d'une partie n'est pas
+  plafonnée à la présignature (S3 ne le permet pas pour un `PUT` présigné) : `complete` vérifie
+  la taille totale.
 
 ## Sessions révoquées
 

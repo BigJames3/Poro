@@ -133,6 +133,53 @@ func (r *Videos) ListAllByUser(ctx context.Context, userID uuid.UUID) ([]model.V
 	return out, rows.Err()
 }
 
+// AbandonStaleUploads closes uploads started before `before` and never
+// completed: abort is called for each one while its row is locked (SKIP
+// LOCKED, so several replicas share the work), and the rows whose multipart
+// upload was aborted become abandoned and deleted. A row whose abort failed
+// stays uploading for the next pass. It returns the rows it abandoned.
+func (r *Videos) AbandonStaleUploads(ctx context.Context, before time.Time, limit int, abort func(model.Video) error) ([]model.Video, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	rows, err := tx.Query(ctx, `SELECT `+videoColumns+` FROM videos
+		WHERE status = 'uploading' AND deleted_at IS NULL AND created_at < $1
+		ORDER BY created_at LIMIT $2 FOR UPDATE SKIP LOCKED`, before, limit)
+	if err != nil {
+		return nil, fmt.Errorf("select stale uploads: %w", err)
+	}
+	var stale []model.Video
+	for rows.Next() {
+		v, err := scanVideo(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		stale = append(stale, *v)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	var abandoned []model.Video
+	for _, v := range stale {
+		if err := abort(v); err != nil {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `UPDATE videos SET status = 'abandoned', s3_upload_id = NULL,
+			deleted_at = now(), updated_at = now() WHERE id = $1`, v.ID); err != nil {
+			return nil, fmt.Errorf("mark abandoned: %w", err)
+		}
+		abandoned = append(abandoned, v)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return abandoned, nil
+}
+
 // EraseUser empties the title and description of every video of a user and
 // soft-deletes the ones still live, whatever their status. It returns only
 // the videos it deleted, so a second call returns none.

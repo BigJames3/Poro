@@ -33,6 +33,7 @@ describe('loadConfig', () => {
       redisUrl: undefined,
       corsOrigins: [],
       trustProxy: false,
+      uploadPurgeAfterHours: 24,
       avatarPublicBaseUrl: 'http://localhost:9000/poro-avatars',
       s3: expect.objectContaining({ bucket: 'poro-avatars', uploadBucket: 'poro-avatar-uploads' }),
     });
@@ -80,6 +81,8 @@ describe('loadConfig', () => {
     [{ REVOCATION_REDIS_URL: undefined }, 'REVOCATION_REDIS_URL is required outside dev'],
     [{ REVOCATION_REDIS_URL: 'http://redis:6379' }, 'REVOCATION_REDIS_URL must be'],
     [{ AVATAR_PUBLIC_BASE_URL: 'nope' }, 'AVATAR_PUBLIC_BASE_URL'],
+    [{ UPLOAD_PURGE_AFTER_HOURS: '0' }, 'UPLOAD_PURGE_AFTER_HOURS'],
+    [{ UPLOAD_PURGE_AFTER_HOURS: '1.5' }, 'UPLOAD_PURGE_AFTER_HOURS'],
   ])('rejects %p', (override, message) => {
     expect(() => loadConfig({ ...prod, ...override })).toThrow(message);
   });

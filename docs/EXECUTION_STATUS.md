@@ -315,6 +315,34 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
 - **Vérification finale de la gateway** : contrat des 133 routes et e2e avec le vrai service auth,
   tous deux verts sur la branche intégrée.
 
+## Suite — PORO-008 Purger les uploads abandonnés — TERMINÉE
+
+Branche `feat/socle-suite`, partie de `main` après la fusion de la PR #47.
+
+- **Vidéo** :
+  - le nettoyeur (`UploadJanitor`, toutes les heures) abandonne les uploads non finalisés depuis
+    24 h : le multipart est annulé, la ligne passe `abandoned` et quitte la liste du
+    propriétaire ;
+  - `SKIP LOCKED` permet plusieurs réplicas ;
+  - un multipart qu'aucune ligne ne connaît est annulé aussi ;
+  - une annulation en échec garde la ligne pour la passe suivante.
+- **Écart et constat** : SeaweedFS ne renvoie pas la date `Initiated` des multiparts. L'âge est
+  alors lu dans l'UUIDv7 de la vidéo contenu dans la clé, et un upload d'âge inconnu n'est jamais
+  annulé.
+- **User et shop** : les originaux jamais confirmés sont supprimés au bout de
+  `UPLOAD_PURGE_AFTER_HOURS` (24 h), par une passe horaire.
+- **Plafond par partie** : non faisable à la présignature d'un `PUT` S3. La taille totale est
+  vérifiée à `complete`. C'est documenté.
+- **Tests** :
+  - service vidéo : 3 tests sur Postgres réel (périmé abandonné ; récent et terminé intacts ;
+    orphelin ; échec puis reprise ; arrêt) ;
+  - âge d'un upload d'après l'UUIDv7 ;
+  - user et shop : purge paginée, panne de stockage, minuterie ;
+  - cas réels sur SeaweedFS (vidéo, user, shop) dans `infra/storage/tests/run.sh`.
+  - Suites : video vert (lint 0) ; user 140 tests (95 %) ; shop 174 tests (95,3 %).
+- **Action humaine (production)** : règles de cycle de vie S3 en filet de sécurité
+  (`docs/runbooks/storage.md`).
+
 ## Interventions humaines requises (cumul)
 
 - Lancer `infra/media-worker/check_sandbox.sh` sur le vrai conteneur après reconstruction.

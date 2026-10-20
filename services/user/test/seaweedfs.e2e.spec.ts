@@ -54,6 +54,25 @@ suite('avatar storage on SeaweedFS', () => {
     await expect(
       s3.send(new HeadObjectCommand({ Bucket: 'poro-avatar-uploads', Key: upload.upload_key })),
     ).rejects.toMatchObject({ name: 'NotFound' });
+
+    // An original never confirmed is purged once it is older than the limit
+    // (PORO-008): SeaweedFS lists it with its LastModified date.
+    const abandoned = await avatars.createUpload(userId, 'image/png');
+    const abandonedForm = new FormData();
+    for (const [name, value] of Object.entries(abandoned.fields)) {
+      abandonedForm.append(name, value);
+    }
+    abandonedForm.append('file', new Blob([png], { type: 'image/png' }));
+    expect(
+      (await fetch(abandoned.upload_url, { method: 'POST', body: abandonedForm })).status,
+    ).toBe(204);
+    expect(await avatars.purgeStaleUploads(new Date(Date.now() - 3_600_000))).toBe(0);
+    expect(await avatars.purgeStaleUploads(new Date(Date.now() + 60_000))).toBeGreaterThanOrEqual(
+      1,
+    );
+    await expect(
+      s3.send(new HeadObjectCommand({ Bucket: 'poro-avatar-uploads', Key: abandoned.upload_key })),
+    ).rejects.toMatchObject({ name: 'NotFound' });
     await avatars.remove(key);
     expect(await anonymous(`poro-avatars/${key}`)).toBe(404);
   });

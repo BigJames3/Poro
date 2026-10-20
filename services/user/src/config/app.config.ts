@@ -33,6 +33,8 @@ export interface AppConfig {
   corsOrigins: string[];
   trustProxy: boolean | number | string;
   s3: S3Settings;
+  /** Originals uploaded but never confirmed are deleted after this many hours (PORO-008). */
+  uploadPurgeAfterHours: number;
   avatarPublicBaseUrl: string;
 }
 
@@ -180,6 +182,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     errors.push('AVATAR_PUBLIC_BASE_URL must be a URL');
   }
 
+  const uploadPurgeAfterHours = Number(env.UPLOAD_PURGE_AFTER_HOURS ?? '24');
+  if (!Number.isInteger(uploadPurgeAfterHours) || uploadPurgeAfterHours < 1) {
+    errors.push('UPLOAD_PURGE_AFTER_HOURS must be a whole number of hours, at least 1');
+  }
+
   if (errors.length > 0) {
     throw new Error(`invalid config: ${errors.join('; ')}`);
   }
@@ -196,6 +203,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): AppConfig {
     corsOrigins,
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     s3,
+    uploadPurgeAfterHours,
     avatarPublicBaseUrl,
   };
 }

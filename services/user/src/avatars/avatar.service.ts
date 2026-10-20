@@ -154,6 +154,33 @@ export class AvatarService {
     }
   }
 
+  /**
+   * Deletes the originals uploaded before `before` and never confirmed
+   * (PORO-008): a confirmed upload is deleted right away, so whatever stays
+   * under the upload prefix this long was abandoned. Returns how many.
+   */
+  async purgeStaleUploads(before: Date): Promise<number> {
+    let removed = 0;
+    let token: string | undefined;
+    do {
+      const page = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.uploadBucket,
+          Prefix: `${UPLOAD_PREFIX}/`,
+          ContinuationToken: token,
+        }),
+      );
+      for (const { Key, LastModified } of page.Contents ?? []) {
+        if (Key !== undefined && LastModified !== undefined && LastModified < before) {
+          await this.s3.send(new DeleteObjectCommand({ Bucket: this.uploadBucket, Key }));
+          removed++;
+        }
+      }
+      token = page.IsTruncated === true ? page.NextContinuationToken : undefined;
+    } while (token !== undefined);
+    return removed;
+  }
+
   /** Deletes a private original once re-encoded or rejected. Best effort. */
   private async removeUpload(key: string): Promise<void> {
     try {

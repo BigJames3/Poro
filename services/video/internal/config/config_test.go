@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +25,9 @@ func TestValidate(t *testing.T) {
 
 			S3QuarantineBucket: "poro-quarantine",
 			S3SourceBucket:     "poro-video-sources",
+
+			UploadAbandonAfter:    24 * time.Hour,
+			UploadJanitorInterval: time.Hour,
 		}
 	}
 	require.NoError(t, ok().Validate())
@@ -63,6 +67,8 @@ func TestValidate(t *testing.T) {
 		{name: "missing s3 credentials", mutate: func(c *Config) { c.S3SecretKey = "" }, want: "S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required"},
 		{name: "missing env", mutate: func(c *Config) { c.AppEnv = "" }, want: "APP_ENV is required"},
 		{name: "missing postgres password", mutate: func(c *Config) { c.PostgresPassword = "" }, want: "POSTGRES_PASSWORD is required"},
+		{name: "upload abandoned too soon", mutate: func(c *Config) { c.UploadAbandonAfter = 30 * time.Minute }, want: "UPLOAD_ABANDON_AFTER"},
+		{name: "no janitor interval", mutate: func(c *Config) { c.UploadJanitorInterval = 0 }, want: "UPLOAD_JANITOR_INTERVAL"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -91,6 +97,8 @@ func TestLoadDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "8083", cfg.AppPort)
 	require.Equal(t, "poro_video", cfg.PostgresDB)
+	require.Equal(t, 24*time.Hour, cfg.UploadAbandonAfter)
+	require.Equal(t, time.Hour, cfg.UploadJanitorInterval)
 	_ = os.Unsetenv("APP_ENV")
 }
 

@@ -12,6 +12,8 @@ const (
 	StatusProcessing = "processing"
 	StatusReady      = "ready"
 	StatusFailed     = "failed"
+	// StatusAbandoned is an upload never completed, closed by the janitor.
+	StatusAbandoned = "abandoned"
 
 	ModerationApproved = "approved"
 	ModerationRemoved  = "removed"

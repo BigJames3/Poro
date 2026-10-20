@@ -107,7 +107,8 @@ sleep 3
 check matrix
 
 export S3_INTEGRATION_ENDPOINT="$endpoint"
-(cd "$root/services/video" && go test -count=1 -v -run '^TestS3AgainstSeaweedFS$' ./internal/storage/ | grep -E '^(--- |ok|FAIL)')
+# Without -v: a failure prints its assertion, a success prints one line.
+(cd "$root/services/video" && go test -count=1 -run '^TestS3AgainstSeaweedFS$' ./internal/storage/)
 (cd "$root/services/user" && npx jest --ci test/seaweedfs.e2e.spec.ts)
 (cd "$root/services/shop" && npx jest --ci test/seaweedfs.e2e.spec.ts)
 

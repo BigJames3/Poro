@@ -91,4 +91,21 @@ func TestS3AgainstSeaweedFS(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.AbortMultipart(ctx, pending, abandoned))
 	require.NoError(t, store.AbortMultipart(ctx, pending, abandoned), "aborting an aborted upload succeeds")
+
+	// The upload janitor lists the open multipart uploads of the source
+	// bucket: an upload started now is not stale yet, then is once the
+	// cutoff passes it.
+	orphanKey := model.SourceKey(user, uuid.Must(uuid.NewV7()).String(), "mp4")
+	orphan, err := store.CreateMultipart(ctx, orphanKey, "video/mp4")
+	require.NoError(t, err)
+	n, err = store.AbortStaleMultiparts(ctx, time.Now().Add(-time.Hour))
+	require.NoError(t, err)
+	require.Zero(t, n, "a fresh upload is left alone")
+	n, err = store.AbortStaleMultiparts(ctx, time.Now().Add(time.Minute))
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, n, 1)
+	require.NoError(t, store.AbortMultipart(ctx, orphanKey, orphan), "already aborted by the sweep")
+	n, err = store.AbortStaleMultiparts(ctx, time.Now().Add(time.Minute))
+	require.NoError(t, err)
+	require.Zero(t, n, "nothing left to abort")
 }

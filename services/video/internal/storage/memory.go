@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // Memory is an in-process object store for tests. Its three maps stand for
@@ -22,8 +23,9 @@ type Memory struct {
 }
 
 type memUpload struct {
-	key   string
-	parts map[int32][]byte
+	key       string
+	parts     map[int32][]byte
+	initiated time.Time
 }
 
 // NewMemory builds an empty store.
@@ -35,7 +37,7 @@ func (m *Memory) CreateMultipart(_ context.Context, key, _ string) (string, erro
 	id := fmt.Sprintf("upload-%d", m.seq.Add(1))
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.uploads[id] = &memUpload{key: key, parts: map[int32][]byte{}}
+	m.uploads[id] = &memUpload{key: key, parts: map[int32][]byte{}, initiated: time.Now()}
 	return id, nil
 }
 
@@ -79,6 +81,28 @@ func (m *Memory) AbortMultipart(_ context.Context, _, uploadID string) error {
 	defer m.mu.Unlock()
 	delete(m.uploads, uploadID)
 	return nil
+}
+
+func (m *Memory) AbortStaleMultiparts(_ context.Context, before time.Time) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for id, u := range m.uploads {
+		if u.initiated.Before(before) {
+			delete(m.uploads, id)
+			n++
+		}
+	}
+	return n, nil
+}
+
+// SetUploadInitiated backdates a multipart upload (tests).
+func (m *Memory) SetUploadInitiated(uploadID string, at time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if u, ok := m.uploads[uploadID]; ok {
+		u.initiated = at
+	}
 }
 
 // HasUpload reports whether a multipart upload is still open.

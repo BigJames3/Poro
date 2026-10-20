@@ -151,6 +151,9 @@ func run() error {
 		Limiter: limiter,
 	})
 
+	janitor := service.NewUploadJanitor(repo, store, cfg.UploadAbandonAfter, cfg.UploadJanitorInterval, log)
+	go janitor.Run(ctx)
+
 	consumerDone := make(chan struct{})
 	go func() {
 		defer close(consumerDone)

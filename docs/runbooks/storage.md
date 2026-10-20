@@ -69,6 +69,26 @@ $env:AWS_ACCESS_KEY_ID = "<S3_VIDEO_ACCESS_KEY_ID>"; $env:AWS_SECRET_ACCESS_KEY 
 aws --endpoint-url http://127.0.0.1:9000 s3 ls s3://poro-video-sources/videos/ --recursive
 ```
 
+## Uploads abandonnés (PORO-008)
+
+| Service | Ce qui est nettoyé | Délai | Fréquence |
+|---|---|---|---|
+| video | lignes `uploading` et leurs uploads multipart, plus les multiparts sans ligne | `UPLOAD_ABANDON_AFTER` (24 h) | `UPLOAD_JANITOR_INTERVAL` (1 h) |
+| user | originaux d'avatar jamais confirmés (`poro-avatar-uploads/avatars/uploads/`) | `UPLOAD_PURGE_AFTER_HOURS` (24) | 1 h |
+| shop | originaux d'images jamais confirmés (`poro-shop-uploads/uploads/`) | `UPLOAD_PURGE_AFTER_HOURS` (24) | 1 h |
+
+- Logs : `upload abandoned` (vidéo, `video_id`), `upload janitor pass` (totaux),
+  `stale uploads purged` (user, shop). Un échec est journalisé (`upload janitor pass failed`,
+  `stale upload purge failed`) et la passe suivante réessaie.
+- L'âge d'un multipart vient de sa date `Initiated` quand le stockage la donne. SeaweedFS ne la
+  donne pas : l'âge est alors lu dans l'UUIDv7 de la vidéo contenu dans la clé. Un upload d'âge
+  inconnu n'est jamais annulé.
+- **En production (S3 managé)**, ajouter en plus une règle de cycle de vie, filet de sécurité
+  indépendant du code :
+  - `poro-video-sources` : *AbortIncompleteMultipartUpload* après 2 jours ;
+  - `poro-avatar-uploads` (préfixe `avatars/uploads/`) et `poro-shop-uploads` (préfixe
+    `uploads/`) : expiration après 2 jours.
+
 ## Incidents
 
 | Symptôme | Cause probable | Action |
@@ -78,7 +98,7 @@ aws --endpoint-url http://127.0.0.1:9000 s3 ls s3://poro-video-sources/videos/ -
 | `user`, `shop` ou `video` reçoivent `403 AccessDenied` | Secret modifié sans relancer `seaweedfs-init`, ou l'inverse | Rotation, étapes 2 et 3 |
 | Une miniature ou un HLS renvoie `403` | Objet absent du bucket public : vidéo en quarantaine, ou mauvais bucket | Vérifier `moderation_status` et le bucket |
 | Un upload d'avatar ou de photo échoue juste après la mise à jour | Original supprimé par le nettoyage d'`init.sh` | Recommencer l'upload |
-| Un upload vidéo commencé avant la mise à jour échoue à `complete` | Son upload multipart est resté dans `poro-videos` | Recommencer l'upload ; l'ancien multipart sera purgé avec PORO-008 |
+| Un upload vidéo commencé avant la mise à jour échoue à `complete` | Son upload multipart est resté dans `poro-videos` | Recommencer l'upload ; l'ancien multipart est annulé par le nettoyeur au bout de 24 h |
 | `video-storage-migrate` échoue | SeaweedFS indisponible ou identifiant vidéo refusé | Lire ses logs, corriger, relancer `docker compose up -d` (idempotent) |
 
 ## Tests

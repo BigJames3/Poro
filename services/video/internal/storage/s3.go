@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/google/uuid"
 
 	"github.com/poro/video/internal/config"
 	"github.com/poro/video/internal/model"
@@ -74,6 +75,51 @@ func (s *S3) CreateMultipart(ctx context.Context, key, contentType string) (stri
 		return "", fmt.Errorf("create multipart: %w", err)
 	}
 	return aws.ToString(out.UploadId), nil
+}
+
+func (s *S3) AbortStaleMultiparts(ctx context.Context, before time.Time) (int, error) {
+	aborted := 0
+	in := &s3.ListMultipartUploadsInput{Bucket: aws.String(s.sources)}
+	for {
+		out, err := s.internal.ListMultipartUploads(ctx, in)
+		if err != nil {
+			return aborted, fmt.Errorf("list multipart uploads: %w", err)
+		}
+		for _, u := range out.Uploads {
+			started, ok := uploadStarted(aws.ToString(u.Key), u.Initiated)
+			if !ok || !started.Before(before) {
+				continue
+			}
+			if err := s.AbortMultipart(ctx, aws.ToString(u.Key), aws.ToString(u.UploadId)); err != nil {
+				return aborted, err
+			}
+			aborted++
+		}
+		if !aws.ToBool(out.IsTruncated) {
+			return aborted, nil
+		}
+		in.KeyMarker, in.UploadIdMarker = out.NextKeyMarker, out.NextUploadIdMarker
+	}
+}
+
+// uploadStarted returns when a multipart upload began: the Initiated date
+// when the store reports it (SeaweedFS does not), else the time encoded in
+// the UUIDv7 video id of the source key (videos/{user}/{video}/source.ext).
+// An upload whose age cannot be known is never treated as stale.
+func uploadStarted(key string, initiated *time.Time) (time.Time, bool) {
+	if initiated != nil && !initiated.IsZero() {
+		return *initiated, true
+	}
+	parts := strings.Split(key, "/")
+	if len(parts) != 4 || parts[0]+"/" != model.MediaRoot {
+		return time.Time{}, false
+	}
+	id, err := uuid.Parse(parts[2])
+	if err != nil || id.Version() != 7 {
+		return time.Time{}, false
+	}
+	sec, nsec := id.Time().UnixTime()
+	return time.Unix(sec, nsec), true
 }
 
 func (s *S3) PresignPart(ctx context.Context, key, uploadID string, part int32) (string, error) {
