@@ -13,7 +13,7 @@ COPY services/video /src/services/video
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/video ./cmd/server \
  && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/storage-migrate ./cmd/storage-migrate
 
-FROM alpine:3.22
+FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates wget && adduser -D -u 10001 app
 

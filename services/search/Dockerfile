@@ -12,7 +12,7 @@ RUN go mod download
 COPY services/search /src/services/search
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/search ./cmd/server
 
-FROM alpine:3.22
+FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates wget && adduser -D -u 10001 app
 
