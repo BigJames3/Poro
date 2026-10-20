@@ -1,10 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { JWTPayload, jwtVerify } from 'jose';
 
 import { AuthUser } from '../common/request';
 import { isUuid } from '../common/uuid';
 import { appConfig, type AppConfigType } from '../config/app.config';
 import { JwksKeyStore, KeysUnavailableError } from './jwks';
+import { REVOCATIONS, type Revocations, RevocationUnavailableError } from './revocations';
 
 export const TOKEN_ISSUER = 'poro-auth';
 export const TOKEN_AUDIENCE = 'poro-api';
@@ -17,17 +18,21 @@ export class InvalidTokenError extends Error {
   }
 }
 
-export { KeysUnavailableError };
+export { KeysUnavailableError, RevocationUnavailableError };
 
 /**
- * Verifies auth access tokens offline against the auth JWKS. A token revoked by
- * logout stays accepted here until it expires (15 minutes at most).
+ * Verifies auth access tokens offline against the auth JWKS, then refuses the
+ * tokens of the sessions auth revoked (ADR-0016): logout, "sign out other
+ * devices", password reset, account deletion, stolen refresh token.
  */
 @Injectable()
 export class TokenVerifier {
   private readonly keys: JwksKeyStore;
 
-  constructor(@Inject(appConfig.KEY) config: Pick<AppConfigType, 'jwksUrl'>) {
+  constructor(
+    @Inject(appConfig.KEY) config: Pick<AppConfigType, 'jwksUrl'>,
+    @Optional() @Inject(REVOCATIONS) private readonly revocations?: Revocations,
+  ) {
     this.keys = new JwksKeyStore(config.jwksUrl);
   }
 
@@ -67,6 +72,9 @@ export class TokenVerifier {
     }
     if (typeof payload.sid !== 'string' || typeof payload.jti !== 'string') {
       throw new InvalidTokenError('malformed claims');
+    }
+    if (await this.revocations?.isRevoked(payload.sid)) {
+      throw new InvalidTokenError('session revoked');
     }
     return {
       userId: payload.sub.toLowerCase(),

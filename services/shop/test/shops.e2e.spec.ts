@@ -288,7 +288,7 @@ describe('shop service HTTP API', () => {
       .set('Authorization', auth)
       .send({ content_type: 'image/png' });
     expect(upload.status).toBe(201);
-    expect(upload.body.data.upload_url).toBe('http://localhost:9000/poro-shop');
+    expect(upload.body.data.upload_url).toBe('http://localhost:9000/poro-shop-uploads');
     const uploadKey = upload.body.data.upload_key as string;
     const png = await sharp({
       create: { width: 900, height: 600, channels: 3, background: '#123' },
@@ -304,7 +304,12 @@ describe('shop service HTTP API', () => {
       .set('Authorization', auth)
       .send({ upload_key: uploadKey });
     expect(set.status).toBe(200);
+    expect(s3.commandCalls(GetObjectCommand)[0].args[0].input).toMatchObject({
+      Bucket: 'poro-shop-uploads',
+      Key: uploadKey,
+    });
     const put = s3.commandCalls(PutObjectCommand)[0].args[0].input;
+    expect(put.Bucket).toBe('poro-shop');
     expect(put.Key).toMatch(new RegExp(`^shops/${String(shop.shop_id)}/[0-9a-f-]{36}\\.webp$`));
     expect(await sharp(put.Body as Buffer).metadata()).toMatchObject({ width: 512, height: 512 });
     expect(set.body.data.logo_url).toBe(`${CDN}/${String(put.Key)}`);
@@ -319,9 +324,9 @@ describe('shop service HTTP API', () => {
       .delete('/api/v1/shops/me/logo')
       .set('Authorization', auth);
     expect(removed.body.data.logo_url).toBeNull();
-    expect(s3.commandCalls(DeleteObjectCommand).map((c) => c.args[0].input.Key)).toEqual([
-      uploadKey,
-      put.Key,
+    expect(s3.commandCalls(DeleteObjectCommand).map((c) => c.args[0].input)).toEqual([
+      { Bucket: 'poro-shop-uploads', Key: uploadKey },
+      { Bucket: 'poro-shop', Key: put.Key },
     ]);
     expect(userId).toBeDefined();
   });

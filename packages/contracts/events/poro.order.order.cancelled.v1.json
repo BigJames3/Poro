@@ -22,7 +22,7 @@
         "buyer_id": { "type": "string", "format": "uuid" },
         "shop_id": { "type": "string", "format": "uuid" },
         "seller_id": { "type": "string", "format": "uuid" },
-        "reason": { "enum": ["stock_rejected", "payment_timeout", "buyer_cancelled", "seller_cancelled"] },
+        "reason": { "enum": ["stock_rejected", "payment_timeout", "buyer_cancelled", "seller_cancelled", "account_deleted"] },
         "paid": { "type": "boolean" },
         "cancelled_at": { "type": "string", "format": "date-time" }
       }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/poro/shared-go/kafka"
 	"github.com/poro/shared-go/logging"
 	"github.com/poro/shared-go/metrics"
+	"github.com/poro/shared-go/revocation"
 	"github.com/poro/shared-go/tracing"
 
 	"github.com/poro/search/internal/config"
@@ -73,7 +75,21 @@ func run() error {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	jwt, err := jwtauth.NewVerifier(jwtauth.Config{JWKSURL: cfg.JWKSURL})
+	// Revoked sessions are refused (ADR-0016). Only a dev service started on
+	// its own may run without the registry.
+	var revocations jwtauth.Revocations
+	revocationCheck := func(context.Context) error { return nil }
+	if cfg.RevocationRedisURL != "" {
+		registry, err := revocation.Open(cfg.RevocationRedisURL)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = registry.Close() }()
+		revocations, revocationCheck = registry, registry.Ping
+	} else {
+		log.Warn("REVOCATION_REDIS_URL is not set: revoked sessions stay accepted until their tokens expire")
+	}
+	jwt, err := jwtauth.NewVerifier(jwtauth.Config{JWKSURL: cfg.JWKSURL, Revocations: revocations})
 	if err != nil {
 		return fmt.Errorf("init jwks: %w", err)
 	}
@@ -87,9 +103,19 @@ func run() error {
 		Brokers: cfg.KafkaBrokers,
 		Group:   consumer.Group,
 		Topics:  consumer.Topics,
+		Metrics: m.Registry(),
 	}, consumer.NewIndexer(pool, log), log)
 	if err != nil {
 		return fmt.Errorf("init indexer: %w", err)
+	}
+	eraser, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   consumer.ErasureGroup,
+		Topics:  consumer.ErasureTopics,
+		Metrics: m.Registry(),
+	}, consumer.NewEraser(pool, log), log)
+	if err != nil {
+		return fmt.Errorf("init account erasure: %w", err)
 	}
 
 	svc := service.New(index.NewPostgres(pool), cfg.PublicObjectURL)
@@ -113,19 +139,27 @@ func run() error {
 		Search: handler.New(svc),
 		// Kafka is left out: search keeps serving the last indexed state.
 		Health: health.New("search", version, map[string]health.Check{
-			"postgres": pool.Ping,
-			"redis":    func(ctx context.Context) error { return redis.Conn().Ping(ctx).Err() },
+			"postgres":   pool.Ping,
+			"revocation": revocationCheck,
+			"redis":      func(ctx context.Context) error { return redis.Conn().Ping(ctx).Err() },
 		}),
 		Metrics: m.Handler(),
 		JWT:     jwt,
 		Limiter: redis,
 	})
 
-	indexerDone := make(chan struct{})
+	var consumers sync.WaitGroup
+	consumers.Add(2)
 	go func() {
-		defer close(indexerDone)
+		defer consumers.Done()
 		_ = indexer.Run(ctx)
 	}()
+	go func() {
+		defer consumers.Done()
+		_ = eraser.Run(ctx)
+	}()
+	indexerDone := make(chan struct{})
+	go func() { consumers.Wait(); close(indexerDone) }()
 
 	addr := ":" + cfg.AppPort
 	errCh := make(chan error, 1)

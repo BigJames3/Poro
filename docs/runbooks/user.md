@@ -55,3 +55,10 @@ consommateur auth `poro-auth-creator-roles` / DLQ `poro.user.creator.activated.d
 Image `user-migrate` : `prisma migrate deploy` sur `poro_user`. Un volume Postgres
 existant n'a pas `poro_user` : le job `postgres-init` fait `CREATE DATABASE` de
 façon idempotente.
+
+## Démarrage refusé : `APP_ENV is required`
+
+`APP_ENV` n'a pas de valeur par défaut, pas plus que le mot de passe Postgres ou les clés S3 :
+un oubli arrête le service au lieu de le lancer avec les raccourcis du mode dev (TLS facultatif,
+Redis facultatif, secrets de développement). Fixer `APP_ENV=dev`, `staging` ou `prod` et fournir
+les secrets (compose, `.env` copié de `.env.example`, ou gestionnaire de secrets).

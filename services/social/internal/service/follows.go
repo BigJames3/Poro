@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -55,22 +56,27 @@ func (s *Social) Unfollow(ctx context.Context, follower, following uuid.UUID) (*
 		if err := knownUser(ctx, tx, following); err != nil {
 			return err
 		}
-		removed, err := repository.DeleteFollow(ctx, tx, follower, following)
-		if err != nil || !removed {
-			return err
-		}
-		if err := repository.AddFollowCounters(ctx, tx, follower, following, -1); err != nil {
-			return err
-		}
-		now := s.clock()
-		return emit(ctx, tx, events.TypeSocialFollowDeleted, follower.String(), events.SocialFollowDeletedV1{
-			FollowerID: follower.String(), FollowingID: following.String(), DeletedAt: now,
-		}, now)
+		return removeFollow(ctx, tx, follower, following, s.clock())
 	})
 	if err != nil {
 		return nil, err
 	}
 	return s.UserStats(ctx, following, &follower)
+}
+
+// removeFollow deletes a follow, updates both counters and publishes
+// follow.deleted. A missing follow changes nothing.
+func removeFollow(ctx context.Context, tx pgx.Tx, follower, following uuid.UUID, now time.Time) error {
+	removed, err := repository.DeleteFollow(ctx, tx, follower, following)
+	if err != nil || !removed {
+		return err
+	}
+	if err := repository.AddFollowCounters(ctx, tx, follower, following, -1); err != nil {
+		return err
+	}
+	return emit(ctx, tx, events.TypeSocialFollowDeleted, follower.String(), events.SocialFollowDeletedV1{
+		FollowerID: follower.String(), FollowingID: following.String(), DeletedAt: now,
+	}, now)
 }
 
 // UserStats returns the follow counters of a known account. viewer may be nil.

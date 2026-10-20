@@ -58,6 +58,10 @@ type Config struct {
 	RedisPassword string
 	RedisDB       int // 0
 
+	// RevocationRedisURL is the registry of revoked sessions shared with every
+	// service (ADR-0016). Auth writes it, so it is always required.
+	RevocationRedisURL string
+
 	// JWT
 	JWTPrivateKeyPath    string // ./keys/private.pem
 	JWTPublicKeyPath     string // ./keys/public.pem
@@ -73,6 +77,18 @@ type Config struct {
 	OtpMaxRequestsPerHour  int      // 5
 	OtpAllowedCallingCodes []string // +225,+221,+237,+234; empty allows every country
 	SMSProvider            string   // log, africastalking
+
+	// SMS budget (ADR-0017): caps on the OTP SMS sent, against SMS pumping.
+	SMSDailyLimitPerPhone    int // 10 per phone and UTC day
+	SMSHourlyLimitPerPrefix  int // 20 per number range (phone without its last 3 digits) and hour
+	SMSHourlyLimitPerCountry int // 1000 per calling code and hour
+	SMSDailyLimit            int // 5000 for the whole platform and UTC day; reached, no SMS is sent
+
+	// Password sign-in lockout per account (ADR-0017).
+	LoginMaxFailures   int    // 5 failures within LoginFailureWindow lock the account
+	LoginFailureWindow string // 15m since the last failure
+	LoginLockBase      string // 1m for the first lock, doubled by each further failure
+	LoginLockMax       string // 15m at most
 
 	// Africa's Talking
 	AfricasTalkingUsername string // "sandbox" selects the sandbox
@@ -117,6 +133,10 @@ func (c *Config) RedisAddr() string {
 	return net.JoinHostPort(c.RedisHost, c.RedisPort)
 }
 
+// DevRevocationRedisURL is the registry of a local development setup: the
+// Compose Redis, database 15. Outside dev, REVOCATION_REDIS_URL must be set.
+const DevRevocationRedisURL = "redis://localhost:6380/15"
+
 // IsDev reports whether the service runs in the local development environment.
 func (c *Config) IsDev() bool {
 	return c.AppEnv == EnvDev
@@ -128,8 +148,15 @@ func (c *Config) Validate() error {
 	var errs []error
 	switch c.AppEnv {
 	case EnvDev, EnvStaging, EnvProd:
+	case "":
+		// No default: a forgotten APP_ENV must not start a production
+		// service with the shortcuts of local development.
+		errs = append(errs, errors.New("APP_ENV is required: dev, staging or prod"))
 	default:
 		errs = append(errs, fmt.Errorf("APP_ENV must be dev, staging or prod, got %q", c.AppEnv))
+	}
+	if c.PostgresPassword == "" {
+		errs = append(errs, errors.New("POSTGRES_PASSWORD is required"))
 	}
 	switch c.SMSProvider {
 	case SMSProviderLog:
@@ -158,10 +185,29 @@ func (c *Config) Validate() error {
 	if c.EmailCodeMaxAttempts <= 0 {
 		errs = append(errs, errors.New("EMAIL_CODE_MAX_ATTEMPTS must be positive"))
 	}
+	for name, value := range map[string]int{
+		"SMS_DAILY_LIMIT_PER_PHONE":    c.SMSDailyLimitPerPhone,
+		"SMS_HOURLY_LIMIT_PER_PREFIX":  c.SMSHourlyLimitPerPrefix,
+		"SMS_HOURLY_LIMIT_PER_COUNTRY": c.SMSHourlyLimitPerCountry,
+		"SMS_DAILY_LIMIT":              c.SMSDailyLimit,
+		"LOGIN_MAX_FAILURES":           c.LoginMaxFailures,
+	} {
+		if value <= 0 {
+			errs = append(errs, fmt.Errorf("%s must be positive, got %d", name, value))
+		}
+	}
+	lockBase, baseErr := time.ParseDuration(c.LoginLockBase)
+	lockMax, maxErr := time.ParseDuration(c.LoginLockMax)
+	if baseErr == nil && maxErr == nil && lockBase > lockMax {
+		errs = append(errs, errors.New("LOGIN_LOCK_BASE must not exceed LOGIN_LOCK_MAX"))
+	}
 	for name, value := range map[string]string{
 		"EMAIL_CODE_TTL":         c.EmailCodeTTL,
 		"ACCOUNT_DELETION_GRACE": c.AccountDeletionGrace,
 		"ACCOUNT_PURGE_INTERVAL": c.AccountPurgeInterval,
+		"LOGIN_FAILURE_WINDOW":   c.LoginFailureWindow,
+		"LOGIN_LOCK_BASE":        c.LoginLockBase,
+		"LOGIN_LOCK_MAX":         c.LoginLockMax,
 	} {
 		if d, err := time.ParseDuration(value); err != nil || d <= 0 {
 			errs = append(errs, fmt.Errorf("%s must be a positive duration, got %q", name, value))
@@ -169,6 +215,9 @@ func (c *Config) Validate() error {
 	}
 	if len(c.KafkaBrokers) == 0 {
 		errs = append(errs, errors.New("KAFKA_BROKERS is required"))
+	}
+	if u, err := url.Parse(c.RevocationRedisURL); err != nil || (u.Scheme != "redis" && u.Scheme != "rediss") || u.Host == "" {
+		errs = append(errs, errors.New("REVOCATION_REDIS_URL must be a redis:// or rediss:// URL"))
 	}
 	for _, code := range c.OtpAllowedCallingCodes {
 		if !callingCodePattern.MatchString(code) {
@@ -233,17 +282,29 @@ func Load() (*Config, error) {
 		RedisPassword: v.GetString("REDIS_PASSWORD"),
 		RedisDB:       v.GetInt("REDIS_DB"),
 
+		RevocationRedisURL: v.GetString("REVOCATION_REDIS_URL"),
+
 		JWTPrivateKeyPath:    v.GetString("JWT_PRIVATE_KEY_PATH"),
 		JWTPublicKeyPath:     v.GetString("JWT_PUBLIC_KEY_PATH"),
 		JWTAccessTTL:         v.GetString("JWT_ACCESS_TTL"),
 		JWTRefreshTTL:        v.GetString("JWT_REFRESH_TTL"),
 		JWTRefreshReuseGrace: v.GetString("JWT_REFRESH_REUSE_GRACE"),
 
-		OtpTTL:                 v.GetString("OTP_TTL"),
-		OtpMaxAttempts:         v.GetInt("OTP_MAX_ATTEMPTS"),
-		OtpSecret:              v.GetString("OTP_HMAC_SECRET"),
-		OtpRequestCooldown:     v.GetString("OTP_REQUEST_COOLDOWN"),
-		OtpMaxRequestsPerHour:  v.GetInt("OTP_MAX_REQUESTS_PER_HOUR"),
+		OtpTTL:                v.GetString("OTP_TTL"),
+		OtpMaxAttempts:        v.GetInt("OTP_MAX_ATTEMPTS"),
+		OtpSecret:             v.GetString("OTP_HMAC_SECRET"),
+		OtpRequestCooldown:    v.GetString("OTP_REQUEST_COOLDOWN"),
+		OtpMaxRequestsPerHour: v.GetInt("OTP_MAX_REQUESTS_PER_HOUR"),
+
+		SMSDailyLimitPerPhone:    v.GetInt("SMS_DAILY_LIMIT_PER_PHONE"),
+		SMSHourlyLimitPerPrefix:  v.GetInt("SMS_HOURLY_LIMIT_PER_PREFIX"),
+		SMSHourlyLimitPerCountry: v.GetInt("SMS_HOURLY_LIMIT_PER_COUNTRY"),
+		SMSDailyLimit:            v.GetInt("SMS_DAILY_LIMIT"),
+
+		LoginMaxFailures:       v.GetInt("LOGIN_MAX_FAILURES"),
+		LoginFailureWindow:     v.GetString("LOGIN_FAILURE_WINDOW"),
+		LoginLockBase:          v.GetString("LOGIN_LOCK_BASE"),
+		LoginLockMax:           v.GetString("LOGIN_LOCK_MAX"),
 		OtpAllowedCallingCodes: splitList(v.GetString("OTP_ALLOWED_CALLING_CODES")),
 		SMSProvider:            v.GetString("SMS_PROVIDER"),
 
@@ -267,6 +328,9 @@ func Load() (*Config, error) {
 		OtelEndpoint: v.GetString("OTEL_EXPORTER_OTLP_ENDPOINT"),
 	}
 
+	if cfg.RevocationRedisURL == "" && cfg.IsDev() {
+		cfg.RevocationRedisURL = DevRevocationRedisURL
+	}
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
@@ -274,7 +338,6 @@ func Load() (*Config, error) {
 }
 
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("APP_ENV", EnvDev)
 	v.SetDefault("APP_PORT", "8081")
 	v.SetDefault("LOG_LEVEL", "debug")
 	v.SetDefault("TRUSTED_PROXIES", "")
@@ -282,7 +345,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("POSTGRES_HOST", "localhost")
 	v.SetDefault("POSTGRES_PORT", "5433")
 	v.SetDefault("POSTGRES_USER", "poro")
-	v.SetDefault("POSTGRES_PASSWORD", "poro_dev_password")
 	v.SetDefault("POSTGRES_DB", "poro_auth")
 	v.SetDefault("POSTGRES_SSLMODE", "disable")
 
@@ -302,6 +364,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("OTP_HMAC_SECRET", "")
 	v.SetDefault("OTP_REQUEST_COOLDOWN", "60s")
 	v.SetDefault("OTP_MAX_REQUESTS_PER_HOUR", 5)
+	v.SetDefault("SMS_DAILY_LIMIT_PER_PHONE", 10)
+	v.SetDefault("SMS_HOURLY_LIMIT_PER_PREFIX", 20)
+	v.SetDefault("SMS_HOURLY_LIMIT_PER_COUNTRY", 1000)
+	v.SetDefault("SMS_DAILY_LIMIT", 5000)
+	v.SetDefault("LOGIN_MAX_FAILURES", 5)
+	v.SetDefault("LOGIN_FAILURE_WINDOW", "15m")
+	v.SetDefault("LOGIN_LOCK_BASE", "1m")
+	v.SetDefault("LOGIN_LOCK_MAX", "15m")
 	v.SetDefault("OTP_ALLOWED_CALLING_CODES", "+225,+221,+237,+234")
 	v.SetDefault("SMS_PROVIDER", SMSProviderLog)
 

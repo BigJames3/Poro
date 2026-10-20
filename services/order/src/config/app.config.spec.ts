@@ -1,6 +1,7 @@
 import { loadConfig } from './app.config';
 
 const prod = {
+  REVOCATION_REDIS_URL: 'rediss://revocations:6380/0',
   APP_ENV: 'prod',
   DATABASE_URL: 'postgresql://poro:secret@db:5432/poro_order?sslmode=verify-full',
   REDIS_URL: 'rediss://redis:6379',
@@ -12,7 +13,10 @@ const prod = {
 
 describe('loadConfig', () => {
   it('has safe dev defaults', () => {
-    const config = loadConfig({ DATABASE_URL: 'postgresql://poro:x@localhost:5433/poro_order' });
+    const config = loadConfig({
+      APP_ENV: 'dev',
+      DATABASE_URL: 'postgresql://poro:x@localhost:5433/poro_order',
+    });
     expect(config).toMatchObject({
       env: 'dev',
       port: 8091,
@@ -45,6 +49,12 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...prod, TRUST_PROXY: 'loopback' }).trustProxy).toBe('loopback');
   });
 
+  it.each([undefined, '', '  '])('refuses to start with APP_ENV %p', (appEnv) => {
+    expect(() => loadConfig({ ...prod, APP_ENV: appEnv })).toThrow(
+      'APP_ENV is required: dev, staging or prod',
+    );
+  });
+
   it.each([
     [{ APP_ENV: 'production' }, 'APP_ENV'],
     [{ PORT: '70000' }, 'PORT'],
@@ -57,6 +67,8 @@ describe('loadConfig', () => {
     [{ CORS_ORIGINS: '*' }, 'CORS_ORIGINS'],
     [{ CORS_ORIGINS: 'http://app.poro.africa' }, 'https outside dev'],
     [{ JWKS_URL: 'nope' }, 'JWKS_URL'],
+    [{ REVOCATION_REDIS_URL: undefined }, 'REVOCATION_REDIS_URL is required outside dev'],
+    [{ REVOCATION_REDIS_URL: 'http://redis:6379' }, 'REVOCATION_REDIS_URL must be'],
     [{ PAYMENT_METHODS: 'cash_on_delivery,paypal' }, 'unknown method'],
     [{ PAYMENT_METHODS: 'simulated' }, 'only allowed in dev'],
     [{ PAYMENT_METHODS: ' , ' }, 'at least one method'],

@@ -8,6 +8,8 @@ import type Redis from 'ioredis';
 import { LoggerModule } from 'nestjs-pino';
 
 import { AddressesController } from './addresses/addresses.controller';
+import { AccountErasureConsumer } from './account/account-erasure.consumer';
+import { AccountErasureService } from './account/account-erasure.service';
 import { AddressesService } from './addresses/addresses.service';
 import { AuthGuard } from './auth/auth.guard';
 import { CartController } from './cart/cart.controller';
@@ -29,6 +31,7 @@ import { SagaService } from './orders/saga.service';
 import { Scheduler } from './orders/scheduler';
 import { PrismaService } from './prisma/prisma.service';
 import { REDIS_CLIENT, RedisModule } from './redis.module';
+import { RevocationModule } from './auth/revocations';
 import { SERVICE_NAME, SERVICE_VERSION } from './version';
 
 /** Rate limits per account when authenticated, per client IP otherwise. */
@@ -50,7 +53,22 @@ class AccountThrottlerGuard extends ThrottlerGuard {
           base: { service: SERVICE_NAME, version: SERVICE_VERSION },
           genReqId: (req) => requestIdOf(req as PoroRequest),
           customAttributeKeys: { reqId: 'request_id' },
-          redact: ['req.headers.authorization', 'req.headers.cookie'],
+          // Secrets and contact details never reach the logs, whatever object
+          // carries them (same list as shared-go/logging).
+          redact: [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'res.headers["set-cookie"]',
+            '*.password',
+            '*.token',
+            '*.access_token',
+            '*.refresh_token',
+            '*.fcm_token',
+            '*.otp',
+            '*.secret',
+            '*.phone',
+            '*.email',
+          ],
           serializers: {
             req: (req: { id: string; method: string; url: string }) => ({
               id: req.id,
@@ -72,6 +90,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
       }),
     }),
     RedisModule,
+    RevocationModule,
     ThrottlerModule.forRootAsync({
       inject: [{ token: REDIS_CLIENT, optional: true }],
       useFactory: (redis?: Redis) => ({
@@ -100,6 +119,8 @@ class AccountThrottlerGuard extends ThrottlerGuard {
     OrdersService,
     SagaService,
     SagaConsumer,
+    AccountErasureService,
+    AccountErasureConsumer,
     Scheduler,
 
     { provide: APP_GUARD, useClass: AuthGuard },

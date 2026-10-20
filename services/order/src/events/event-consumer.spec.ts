@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 
 import { uuidv7 } from '../common/uuid';
+import { MetricsService } from '../metrics/metrics';
 import { newEnvelope } from './envelope';
 import {
   ConsumedMessage,
@@ -120,5 +121,48 @@ describe('EventProcessor', () => {
     processor.stop();
     await expect(pending).rejects.toBeInstanceOf(ConsumerStoppedError);
     expect(dlq.sent).toHaveLength(0);
+  });
+});
+
+describe('EventProcessor metrics', () => {
+  const logger = new Logger('test');
+
+  async function counts(metrics: MetricsService): Promise<Record<string, number>> {
+    const metric = await metrics.kafkaRecords.get();
+    return Object.fromEntries(
+      metric.values.map((v) => [String((v.labels as Record<string, unknown>).outcome), v.value]),
+    );
+  }
+
+  it('counts processed, retried and dead-lettered records like shared-go/kafka', async () => {
+    const metrics = new MetricsService();
+    const options = {
+      group: 'poro-test-group',
+      topics: ['t'],
+      backoffMs: 1,
+      records: metrics.kafkaRecords,
+    };
+    let calls = 0;
+    const flaky = new EventProcessor(
+      options,
+      () => (++calls < 2 ? Promise.reject(new Error('db')) : Promise.resolve()),
+      new FakeDlq(),
+      logger,
+    );
+    await flaky.process(eventMessage());
+    const failing = new EventProcessor(
+      options,
+      () => Promise.reject(new PermanentError('bad')),
+      new FakeDlq(),
+      logger,
+    );
+    await failing.process(eventMessage());
+    await failing.process(message(Buffer.from('not json')));
+
+    expect(await counts(metrics)).toEqual({ processed: 1, retried: 1, dead_lettered: 2 });
+    const metric = await metrics.kafkaRecords.get();
+    expect((metric.values[0]?.labels as Record<string, unknown> | undefined)?.group).toBe(
+      'poro-test-group',
+    );
   });
 });

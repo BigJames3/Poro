@@ -8,6 +8,8 @@ import (
 )
 
 func TestLoad(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", "dev")
 	t.Setenv("RELAY_SOURCE", "auth")
 	t.Setenv("POSTGRES_DB", "poro_auth")
 	t.Setenv("POSTGRES_PASSWORD", "p@ss/word")
@@ -38,7 +40,18 @@ func TestValidate(t *testing.T) {
 	for _, want := range []string{"APP_ENV", "RELAY_SOURCE", "POSTGRES_DB", "KAFKA_BROKERS", "RELAY_BATCH_SIZE", "RELAY_POLL_INTERVAL", "RELAY_RETENTION"} {
 		require.ErrorContains(t, err, want)
 	}
-	ok := &Config{AppEnv: "prod", Source: "user", PostgresDB: "poro_user", PostgresSSLMode: "verify-full",
+	ok := &Config{AppEnv: "prod", Source: "user", PostgresDB: "poro_user", PostgresPassword: "secret", PostgresSSLMode: "verify-full",
 		KafkaBrokers: []string{"k:9092"}, BatchSize: 100, PollInterval: time.Second, Retention: time.Hour}
 	require.NoError(t, ok.Validate())
+}
+
+// A forgotten APP_ENV or database password stops the service instead of
+// starting it with the shortcuts of local development.
+func TestLoadRequiresAppEnvAndSecrets(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", "")
+	t.Setenv("POSTGRES_PASSWORD", "")
+	_, err := Load()
+	require.ErrorContains(t, err, "APP_ENV is required")
+	require.ErrorContains(t, err, "POSTGRES_PASSWORD is required")
 }

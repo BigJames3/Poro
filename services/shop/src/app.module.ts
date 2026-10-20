@@ -7,6 +7,8 @@ import { trace } from '@opentelemetry/api';
 import type Redis from 'ioredis';
 import { LoggerModule } from 'nestjs-pino';
 
+import { AccountErasureConsumer } from './account/account-erasure.consumer';
+import { AccountErasureService } from './account/account-erasure.service';
 import { AuthGuard } from './auth/auth.guard';
 import { TokenVerifier } from './auth/token-verifier';
 import { EnvelopeInterceptor } from './common/envelope.interceptor';
@@ -20,6 +22,7 @@ import { PrismaService } from './prisma/prisma.service';
 import { ProductsController } from './products/products.controller';
 import { ProductsService } from './products/products.service';
 import { REDIS_CLIENT, RedisModule } from './redis.module';
+import { RevocationModule } from './auth/revocations';
 import { AdminShopsController, ShopsController } from './shops/shops.controller';
 import { ShopsService } from './shops/shops.service';
 import { StockConsumer } from './stock/stock.consumer';
@@ -45,7 +48,22 @@ class AccountThrottlerGuard extends ThrottlerGuard {
           base: { service: SERVICE_NAME, version: SERVICE_VERSION },
           genReqId: (req) => requestIdOf(req as PoroRequest),
           customAttributeKeys: { reqId: 'request_id' },
-          redact: ['req.headers.authorization', 'req.headers.cookie'],
+          // Secrets and contact details never reach the logs, whatever object
+          // carries them (same list as shared-go/logging).
+          redact: [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'res.headers["set-cookie"]',
+            '*.password',
+            '*.token',
+            '*.access_token',
+            '*.refresh_token',
+            '*.fcm_token',
+            '*.otp',
+            '*.secret',
+            '*.phone',
+            '*.email',
+          ],
           serializers: {
             req: (req: { id: string; method: string; url: string }) => ({
               id: req.id,
@@ -67,6 +85,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
       }),
     }),
     RedisModule,
+    RevocationModule,
     ThrottlerModule.forRootAsync({
       inject: [{ token: REDIS_CLIENT, optional: true }],
       useFactory: (redis?: Redis) => ({
@@ -92,6 +111,8 @@ class AccountThrottlerGuard extends ThrottlerGuard {
     ProductsService,
     StockService,
     StockConsumer,
+    AccountErasureService,
+    AccountErasureConsumer,
 
     {
       provide: S3_CLIENT,

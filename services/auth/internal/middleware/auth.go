@@ -8,15 +8,19 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/poro/shared-go/httpx"
+
 	"github.com/poro/auth/internal/service"
 )
 
 // LocalClaims is the Fiber local key for the verified *service.TokenClaims.
 const LocalClaims = "authClaims"
 
-// NewAuth requires a valid access token that is not blacklisted.
-// A blacklist check that cannot reach Redis fails closed with an internal error.
+// NewAuth requires a valid access token whose session was not revoked
+// (ADR-0016). A registry that cannot be read fails closed with 503, as in
+// every other service.
 func NewAuth(tokens service.TokenService) fiber.Handler {
+	unavailable := httpx.NewAPIError(fiber.StatusServiceUnavailable, "unavailable", "authentication temporarily unavailable")
 	return func(c *fiber.Ctx) error {
 		raw, err := bearerToken(c.Get(fiber.HeaderAuthorization))
 		if err != nil {
@@ -27,12 +31,12 @@ func NewAuth(tokens service.TokenService) fiber.Handler {
 		if err != nil {
 			return unauthorized(err)
 		}
-		blacklisted, err := tokens.IsBlacklisted(c.UserContext(), claims.TokenID)
+		revoked, err := tokens.IsSessionRevoked(c.UserContext(), claims.SessionID)
 		if err != nil {
-			return fmt.Errorf("check access token blacklist: %w", err)
+			return unavailable.WithCause(err)
 		}
-		if blacklisted {
-			return unauthorized(errors.New("access token is blacklisted"))
+		if revoked {
+			return unauthorized(errors.New("session revoked"))
 		}
 
 		c.Locals(LocalClaims, claims)

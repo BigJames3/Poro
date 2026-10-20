@@ -17,6 +17,19 @@ const DAY_MS = 86_400_000;
 
 type Tx = Prisma.TransactionClient;
 
+/** Erases the delivery contact of the orders matching condition that still hold one. */
+export function eraseOrderContacts(
+  db: Pick<Tx, '$executeRaw'>,
+  now: Date,
+  condition: Prisma.Sql,
+): Promise<number> {
+  return db.$executeRaw`
+    UPDATE orders SET contact_name = NULL, contact_phone = NULL, city = NULL, address = NULL,
+                      landmark = NULL, latitude = NULL, longitude = NULL,
+                      location_accuracy_m = NULL, contact_erased_at = ${now}, updated_at = ${now}
+    WHERE contact_erased_at IS NULL AND ${condition}`;
+}
+
 /**
  * Moves orders along on the answers of shop and payment, and on time:
  * unpaid orders expire, shipped orders complete, old contacts are erased.
@@ -167,13 +180,12 @@ export class SagaService {
   /** Erases delivery contacts of orders that ended longer ago than CONTACT_RETENTION_DAYS. */
   async eraseContacts(now: Date = new Date()): Promise<number> {
     const before = new Date(now.getTime() - this.config.contactRetentionDays * DAY_MS);
-    return this.prisma.$executeRaw`
-      UPDATE orders SET contact_name = NULL, contact_phone = NULL, city = NULL, address = NULL,
-                        landmark = NULL, latitude = NULL, longitude = NULL,
-                        location_accuracy_m = NULL, contact_erased_at = ${now}, updated_at = ${now}
-      WHERE contact_erased_at IS NULL
-        AND ((status = 'completed' AND completed_at <= ${before})
-          OR (status = 'cancelled' AND cancelled_at <= ${before}))`;
+    return eraseOrderContacts(
+      this.prisma,
+      now,
+      Prisma.sql`((status = 'completed' AND completed_at <= ${before})
+               OR (status = 'cancelled' AND cancelled_at <= ${before}))`,
+    );
   }
 
   /** Deletes previews a day after they expired: they hold delivery contacts. */

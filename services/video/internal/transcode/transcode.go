@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,10 +13,35 @@ import (
 	"strings"
 	"time"
 
+	"github.com/poro/video/internal/media"
 	"github.com/poro/video/internal/model"
 )
 
-const timeout = 10 * time.Minute
+// Limits on what the worker agrees to decode (ADR-0007). Uploads are
+// untrusted: everything outside these lists is refused before ffmpeg decodes
+// a single frame.
+const (
+	timeout      = 10 * time.Minute
+	probeTimeout = 30 * time.Second
+	// waitDelay bounds how long a killed ffmpeg may keep its pipes open.
+	waitDelay = 5 * time.Second
+
+	maxDimension = 4096
+	// maxAVStreams counts the audio and video streams of the source; cover
+	// art and data tracks (timecode, phone metadata) are never decoded and
+	// only count toward maxStreams.
+	maxAVStreams = 4
+	maxStreams   = 16
+	// threads caps the decoder and encoder threads of one ffmpeg process.
+	threads = "2"
+	// maxAlloc refuses any single allocation above 512 MiB inside ffmpeg.
+	maxAlloc = "536870912"
+)
+
+var (
+	videoCodecs = map[string]bool{"h264": true, "hevc": true, "mpeg4": true, "vp8": true, "vp9": true, "av1": true}
+	audioCodecs = map[string]bool{"aac": true, "mp3": true, "opus": true, "vorbis": true}
+)
 
 // Output is the HLS ladder and thumbnail produced from a source file.
 type Output struct {
@@ -39,14 +65,29 @@ type Transcoder interface {
 
 type probeJSON struct {
 	Format struct {
-		Duration string `json:"duration"`
+		FormatName string `json:"format_name"`
+		Duration   string `json:"duration"`
 	} `json:"format"`
-	Streams []struct {
-		CodecType string `json:"codec_type"`
-		Width     int    `json:"width"`
-		Height    int    `json:"height"`
-		Channels  int    `json:"channels"`
-	} `json:"streams"`
+	Streams []probeStream `json:"streams"`
+}
+
+type probeStream struct {
+	Index       int    `json:"index"`
+	CodecType   string `json:"codec_type"`
+	CodecName   string `json:"codec_name"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	Channels    int    `json:"channels"`
+	Disposition struct {
+		AttachedPic int `json:"attached_pic"`
+	} `json:"disposition"`
+}
+
+// selection is the part of a source the worker decodes.
+type selection struct {
+	width, height int
+	video         int // stream index
+	audio         int // stream index, -1 without audio
 }
 
 type rung struct {
@@ -84,14 +125,20 @@ func (f *FFmpeg) Transcode(ctx context.Context, srcPath, workDir, userID, videoI
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	probe, err := f.probe(ctx, srcPath)
+	demuxer, err := sniff(srcPath)
 	if err != nil {
 		return nil, err
 	}
-	w, h, hasAudio, err := videoStream(probe)
+	probe, err := f.probe(ctx, demuxer, srcPath)
 	if err != nil {
 		return nil, err
 	}
+	sel, err := selectStreams(demuxer, probe)
+	if err != nil {
+		return nil, err
+	}
+	w, h, hasAudio := sel.width, sel.height, sel.audio >= 0
+	input := inputArgs(demuxer, srcPath)
 	dur, err := parseDuration(probe.Format.Duration)
 	if err != nil {
 		return nil, err
@@ -132,15 +179,17 @@ func (f *FFmpeg) Transcode(ctx context.Context, srcPath, workDir, userID, videoI
 			return nil, err
 		}
 		playlist := filepath.Join(rungDir, "index.m3u8")
-		args := []string{
-			"-y", "-i", srcPath,
+		args := append(globalArgs(), input...)
+		args = append(args, mapArgs(sel)...)
+		args = append(args,
+			"-threads", threads,
 			"-vf", fmt.Sprintf("scale=-2:%d", height),
-			"-c:v", "libx264", "-preset", "veryfast", "-profile:v", "baseline", "-level", "3.0",
+			"-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-profile:v", "baseline", "-level", "3.0",
 			"-b:v", strconv.Itoa(r.vBitrate), "-maxrate", strconv.Itoa(r.vBitrate),
-			"-bufsize", strconv.Itoa(r.vBitrate * 2), "-g", "48", "-keyint_min", "48", "-sc_threshold", "0",
+			"-bufsize", strconv.Itoa(r.vBitrate*2), "-g", "48", "-keyint_min", "48", "-sc_threshold", "0",
 			"-hls_time", "4", "-hls_playlist_type", "vod",
 			"-hls_segment_filename", filepath.Join(rungDir, "seg_%03d.ts"),
-		}
+		)
 		if hasAudio {
 			args = append(args, "-c:a", "aac", "-b:a", strconv.Itoa(r.aBitrate), "-ac", "2")
 		} else {
@@ -187,22 +236,72 @@ func (f *FFmpeg) Transcode(ctx context.Context, srcPath, workDir, userID, videoI
 		ss = "0"
 	}
 	thumb := filepath.Join(workDir, "thumb.jpg")
-	if err := run(ctx, f.ffmpeg, "-y", "-ss", ss, "-i", srcPath, "-frames:v", "1", "-vf", "scale=640:-2", "-q:v", "4", thumb); err != nil {
+	thumbArgs := append(globalArgs(), "-ss", ss)
+	thumbArgs = append(thumbArgs, input...)
+	thumbArgs = append(thumbArgs, "-map", "0:"+strconv.Itoa(sel.video), "-threads", threads,
+		"-frames:v", "1", "-vf", "scale=640:-2", "-q:v", "4", thumb)
+	if err := run(ctx, f.ffmpeg, thumbArgs...); err != nil {
 		return nil, fmt.Errorf("%w: thumbnail: %w", ErrTranscode, err)
 	}
 	out.Files = append(out.Files, File{Rel: "thumb.jpg", ContentType: "image/jpeg"})
 	return out, nil
 }
 
-func (f *FFmpeg) probe(ctx context.Context, src string) (probeJSON, error) {
+// sniff picks the demuxer from the first bytes of the file, as the API did
+// when it accepted the upload: the object may have changed since.
+func sniff(srcPath string) (string, error) {
+	f, err := os.Open(filepath.Clean(srcPath))
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	head := make([]byte, 12)
+	n, _ := io.ReadFull(f, head)
+	demuxer := media.Container(head[:n])
+	if demuxer == "" {
+		return "", fmt.Errorf("%w: not an mp4, mov or webm file", ErrInvalid)
+	}
+	return demuxer, nil
+}
+
+// inputArgs opens the source with a forced demuxer and local file access
+// only. Without them a crafted file could make ffmpeg read a playlist, a
+// concat list or an external data reference, and fetch URLs or local files
+// on the worker's behalf.
+func inputArgs(demuxer, srcPath string) []string {
+	args := []string{"-protocol_whitelist", "file", "-f", demuxer}
+	if demuxer == media.DemuxerMOV {
+		args = append(args, "-enable_drefs", "0", "-use_absolute_path", "0")
+	}
+	return append(args, "-i", "file:"+srcPath)
+}
+
+// globalArgs never read stdin, overwrite outputs this package created, and
+// keep memory and threads bounded.
+func globalArgs() []string {
+	return []string{"-nostdin", "-hide_banner", "-nostats", "-loglevel", "error", "-y", "-max_alloc", maxAlloc, "-threads", threads}
+}
+
+// mapArgs decodes only the selected streams: data tracks, subtitles and
+// cover art never reach a decoder.
+func mapArgs(sel selection) []string {
+	args := []string{"-map", "0:" + strconv.Itoa(sel.video)}
+	if sel.audio >= 0 {
+		args = append(args, "-map", "0:"+strconv.Itoa(sel.audio))
+	}
+	return args
+}
+
+func (f *FFmpeg) probe(ctx context.Context, demuxer, src string) (probeJSON, error) {
+	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
+	defer cancel()
 	var stdout, stderr bytes.Buffer
-	// The binary comes from configuration and src is a file this worker wrote:
-	// arguments are passed without a shell.
-	cmd := exec.CommandContext(ctx, f.ffprobe, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", src) //nolint:gosec // G204: configured binary, local file
+	args := append([]string{"-v", "error", "-max_alloc", maxAlloc, "-print_format", "json", "-show_format", "-show_streams"}, inputArgs(demuxer, src)...)
+	cmd := command(ctx, f.ffprobe, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return probeJSON{}, fmt.Errorf("%w: ffprobe: %w", ErrInvalid, err)
+		return probeJSON{}, fmt.Errorf("%w: ffprobe: %s: %w", ErrInvalid, truncate(stderr.String()), err)
 	}
 	var p probeJSON
 	if err := json.Unmarshal(stdout.Bytes(), &p); err != nil {
@@ -215,31 +314,75 @@ func (f *FFmpeg) probe(ctx context.Context, src string) (probeJSON, error) {
 // package from paths under the worker's own directory, never through a shell.
 func run(ctx context.Context, bin string, args ...string) error {
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // G204: configured binary, arguments built here
+	cmd := command(ctx, bin, args...)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if len(msg) > 200 {
-			msg = msg[:200]
-		}
-		return fmt.Errorf("%s: %w", msg, err)
+		return fmt.Errorf("%s: %w", truncate(stderr.String()), err)
 	}
 	return nil
 }
 
-func videoStream(p probeJSON) (w, h int, audio bool, err error) {
+// command starts ffmpeg or ffprobe without a shell and with an environment
+// reduced to PATH: the worker's storage and database credentials are never
+// visible to the process that parses untrusted files. A cancelled context
+// kills it, and waitDelay bounds the wait for its pipes.
+func command(ctx context.Context, bin string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // G204: configured binary, arguments built by this package
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH")}
+	cmd.Dir = os.TempDir()
+	cmd.WaitDelay = waitDelay
+	return cmd
+}
+
+func truncate(msg string) string {
+	msg = strings.TrimSpace(msg)
+	if len(msg) > 200 {
+		msg = msg[:200]
+	}
+	return msg
+}
+
+// selectStreams checks the probe against the decoding limits and picks the
+// first video stream and the first audio stream.
+func selectStreams(demuxer string, p probeJSON) (selection, error) {
+	if !strings.HasPrefix(p.Format.FormatName, demuxer) {
+		return selection{}, fmt.Errorf("%w: format %q", ErrInvalid, p.Format.FormatName)
+	}
+	if len(p.Streams) > maxStreams {
+		return selection{}, fmt.Errorf("%w: %d streams", ErrInvalid, len(p.Streams))
+	}
+	sel := selection{video: -1, audio: -1}
+	av := 0
 	for _, s := range p.Streams {
-		if s.CodecType == "audio" {
-			audio = true
-		}
-		if s.CodecType == "video" && w == 0 {
-			w, h = s.Width, s.Height
+		switch {
+		case s.CodecType == "video" && s.Disposition.AttachedPic == 0:
+			if !videoCodecs[s.CodecName] {
+				return selection{}, fmt.Errorf("%w: video codec %q", ErrInvalid, s.CodecName)
+			}
+			if s.Width < 2 || s.Height < 2 || s.Width > maxDimension || s.Height > maxDimension {
+				return selection{}, fmt.Errorf("%w: %dx%d", ErrInvalid, s.Width, s.Height)
+			}
+			if sel.video < 0 {
+				sel.video, sel.width, sel.height = s.Index, s.Width, s.Height
+			}
+			av++
+		case s.CodecType == "audio":
+			if !audioCodecs[s.CodecName] {
+				return selection{}, fmt.Errorf("%w: audio codec %q", ErrInvalid, s.CodecName)
+			}
+			if sel.audio < 0 {
+				sel.audio = s.Index
+			}
+			av++
 		}
 	}
-	if w < 2 || h < 2 {
-		return 0, 0, false, ErrInvalid
+	if av > maxAVStreams {
+		return selection{}, fmt.Errorf("%w: %d audio and video streams", ErrInvalid, av)
 	}
-	return w, h, audio, nil
+	if sel.video < 0 {
+		return selection{}, fmt.Errorf("%w: no video stream", ErrInvalid)
+	}
+	return sel, nil
 }
 
 func parseDuration(s string) (time.Duration, error) {

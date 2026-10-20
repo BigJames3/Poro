@@ -24,7 +24,7 @@ import (
 
 // The E2E path of search: a profile and a video published on a real broker
 // reach the index through the real consumer group, then a moderation removal
-// takes the video out of the results.
+// takes the video out of the results and the erasure group de-indexes the author.
 func TestEventsOverKafkaReachTheIndex(t *testing.T) {
 	testdb.Available(t)
 	if testing.Short() {
@@ -45,7 +45,7 @@ func TestEventsOverKafkaReachTheIndex(t *testing.T) {
 	require.NoError(t, err)
 	defer admin.Close()
 	var topics []string
-	for _, topic := range consumer.Topics {
+	for _, topic := range append(append([]string{}, consumer.Topics...), consumer.ErasureTopics...) {
 		topics = append(topics, topic, events.DLQTopic(topic))
 	}
 	resp, err := kadm.NewClient(admin).CreateTopics(ctx, 1, 1, nil, topics...)
@@ -59,8 +59,13 @@ func TestEventsOverKafkaReachTheIndex(t *testing.T) {
 		consumer.NewIndexer(testdb.Pool, zap.NewNop()), zap.NewNop())
 	require.NoError(t, err)
 	done := make(chan struct{})
+	eraser, err := kafka.NewConsumer(kafka.ConsumerConfig{Brokers: []string{broker}, Group: consumer.ErasureGroup, Topics: consumer.ErasureTopics},
+		consumer.NewEraser(testdb.Pool, zap.NewNop()), zap.NewNop())
+	require.NoError(t, err)
+	erased := make(chan struct{})
 	go func() { defer close(done); _ = c.Run(runCtx) }()
-	t.Cleanup(func() { stop(); <-done })
+	go func() { defer close(erased); _ = eraser.Run(runCtx) }()
+	t.Cleanup(func() { stop(); <-done; <-erased })
 
 	producer, err := kafka.NewProducer([]string{broker})
 	require.NoError(t, err)
@@ -95,4 +100,10 @@ func TestEventsOverKafkaReachTheIndex(t *testing.T) {
 		page, err := idx.Videos(ctx, word, 0, 5)
 		return err == nil && len(page.Items) == 0
 	}, time.Minute, 200*time.Millisecond, "a removed video leaves the results")
+
+	publish(events.TypeAuthUserDeleted, author.String(), events.AuthUserDeletedV1{UserID: author.String(), DeletedAt: time.Now()})
+	require.Eventually(t, func() bool {
+		page, err := idx.Users(ctx, name, 0, 5)
+		return err == nil && len(page.Items) == 0
+	}, time.Minute, 200*time.Millisecond, "the erasure group de-indexes the account")
 }

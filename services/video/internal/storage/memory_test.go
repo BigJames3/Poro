@@ -18,17 +18,19 @@ func TestMemoryMultipart(t *testing.T) {
 	require.Contains(t, url, id)
 	m.PutPart(id, 1, []byte("hello"))
 	require.NoError(t, m.CompleteMultipart(ctx, "k", id, []CompletedPart{{Number: 1, ETag: "e"}}))
-	obj, err := m.Head(ctx, "k")
+	require.True(t, m.HasSource("k"))
+	require.False(t, m.Has("k"), "a source never lands in the public bucket")
+	obj, err := m.HeadSource(ctx, "k")
 	require.NoError(t, err)
 	require.Equal(t, int64(5), obj.Size)
-	got, err := m.GetRange(ctx, "k", 0, 4)
+	got, err := m.GetSourceRange(ctx, "k", 0, 4)
 	require.NoError(t, err)
 	require.Equal(t, "hello", string(got))
 	var buf bytes.Buffer
-	require.NoError(t, m.Get(ctx, "k", &buf))
+	require.NoError(t, m.GetSource(ctx, "k", &buf))
 	require.Equal(t, "hello", buf.String())
-	require.NoError(t, m.Delete(ctx, "k"))
-	_, err = m.Head(ctx, "k")
+	require.NoError(t, m.DeleteSource(ctx, "k"))
+	_, err = m.HeadSource(ctx, "k")
 	require.Error(t, err)
 }
 
@@ -41,9 +43,13 @@ func TestMemoryAbort(t *testing.T) {
 	require.Error(t, m.CompleteMultipart(ctx, "k", id, nil))
 }
 
-func TestMemoryPut(t *testing.T) {
+func TestMemoryPutMedia(t *testing.T) {
 	ctx := context.Background()
 	m := NewMemory()
-	require.NoError(t, m.Put(ctx, "a", "text/plain", bytes.NewReader([]byte("z"))))
+	require.NoError(t, m.PutMedia(ctx, "a", "text/plain", bytes.NewReader([]byte("z"))))
 	require.Equal(t, []byte("z"), m.Bytes("a"))
+	require.False(t, m.HasSource("a"))
+	m.PutSource("s", []byte("src"))
+	require.True(t, m.HasSource("s"))
+	require.False(t, m.Has("s"))
 }

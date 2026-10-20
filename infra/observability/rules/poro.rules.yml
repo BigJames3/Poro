@@ -1,0 +1,83 @@
+# Alerts for PORO (PORO-009). Each alert names a runbook section in
+# docs/runbooks/observability.md. Thresholds are starting points for the
+# launch volume: tune them once real traffic is known.
+groups:
+  - name: poro-availability
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} ne répond plus à Prometheus"
+          runbook: docs/runbooks/observability.md#servicedown
+
+      - alert: HighErrorRate
+        expr: |
+          sum by (service) (rate(http_requests_total{status=~"5.."}[5m]))
+            / sum by (service) (rate(http_requests_total[5m])) > 0.05
+          and sum by (service) (rate(http_requests_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} : {{ $value | humanizePercentage }} de réponses 5xx"
+          runbook: docs/runbooks/observability.md#higherrorrate
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} : p95 à {{ $value | humanizeDuration }}"
+          runbook: docs/runbooks/observability.md#highlatency
+
+  - name: poro-async
+    rules:
+      - alert: OutboxBacklog
+        expr: outbox_pending > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} : {{ $value }} événements en attente de publication"
+          runbook: docs/runbooks/observability.md#outboxbacklog
+
+      - alert: OutboxPublishFailing
+        expr: increase(outbox_publish_failures_total[10m]) > 0 and increase(outbox_published_total[10m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} n'arrive plus à publier vers Kafka"
+          runbook: docs/runbooks/observability.md#outboxpublishfailing
+
+      - alert: EventsDeadLettered
+        expr: sum by (service, group, topic) (increase(kafka_consumer_records_total{outcome="dead_lettered"}[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }}/{{ $labels.group }} : événements {{ $labels.topic }} envoyés en DLQ"
+          runbook: docs/runbooks/observability.md#eventsdeadlettered
+
+      - alert: ConsumerRetrying
+        expr: sum by (service, group) (rate(kafka_consumer_records_total{outcome="retried"}[10m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }}/{{ $labels.group }} réessaie en boucle"
+          runbook: docs/runbooks/observability.md#consumerretrying
+
+  - name: poro-business
+    rules:
+      - alert: SMSBudgetBlocking
+        expr: sum by (reason) (increase(auth_sms_blocked_total[15m])) > 50
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} SMS OTP bloqués par le plafond {{ $labels.reason }} en 15 min"
+          runbook: docs/runbooks/observability.md#smsbudgetblocking

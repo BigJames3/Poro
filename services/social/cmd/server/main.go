@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/poro/shared-go/kafka"
 	"github.com/poro/shared-go/logging"
 	"github.com/poro/shared-go/metrics"
+	"github.com/poro/shared-go/revocation"
 	"github.com/poro/shared-go/tracing"
 
 	"github.com/poro/social/internal/config"
@@ -72,7 +74,21 @@ func run() error {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	jwt, err := jwtauth.NewVerifier(jwtauth.Config{JWKSURL: cfg.JWKSURL})
+	// Revoked sessions are refused (ADR-0016). Only a dev service started on
+	// its own may run without the registry.
+	var revocations jwtauth.Revocations
+	revocationCheck := func(context.Context) error { return nil }
+	if cfg.RevocationRedisURL != "" {
+		registry, err := revocation.Open(cfg.RevocationRedisURL)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = registry.Close() }()
+		revocations, revocationCheck = registry, registry.Ping
+	} else {
+		log.Warn("REVOCATION_REDIS_URL is not set: revoked sessions stay accepted until their tokens expire")
+	}
+	jwt, err := jwtauth.NewVerifier(jwtauth.Config{JWKSURL: cfg.JWKSURL, Revocations: revocations})
 	if err != nil {
 		return fmt.Errorf("init jwks: %w", err)
 	}
@@ -86,9 +102,19 @@ func run() error {
 		Brokers: cfg.KafkaBrokers,
 		Group:   consumer.Group,
 		Topics:  consumer.Topics,
+		Metrics: m.Registry(),
 	}, consumer.NewProjections(pool, log), log)
 	if err != nil {
 		return fmt.Errorf("init projections consumer: %w", err)
+	}
+	erasure, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   consumer.ErasureGroup,
+		Topics:  consumer.ErasureTopics,
+		Metrics: m.Registry(),
+	}, consumer.NewErasure(pool, log), log)
+	if err != nil {
+		return fmt.Errorf("init account erasure consumer: %w", err)
 	}
 
 	app := fiber.New(fiber.Config{
@@ -111,8 +137,9 @@ func run() error {
 		// Kafka is left out: likes and comments keep working while the broker is
 		// down, their events wait in the outbox.
 		Health: health.New("social", version, map[string]health.Check{
-			"postgres": pool.Ping,
-			"redis":    func(ctx context.Context) error { return limiter.Conn().Ping(ctx).Err() },
+			"postgres":   pool.Ping,
+			"revocation": revocationCheck,
+			"redis":      func(ctx context.Context) error { return limiter.Conn().Ping(ctx).Err() },
 		}),
 		Metrics: m.Handler(),
 		JWT:     jwt,
@@ -122,7 +149,15 @@ func run() error {
 	consumerDone := make(chan struct{})
 	go func() {
 		defer close(consumerDone)
-		_ = projections.Run(ctx)
+		var wg sync.WaitGroup
+		for _, c := range []*kafka.Consumer{projections, erasure} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_ = c.Run(ctx)
+			}()
+		}
+		wg.Wait()
 	}()
 
 	addr := ":" + cfg.AppPort

@@ -28,8 +28,16 @@ n'a aucun effet. Un événement invalide part en DLQ (`<topic>.dlq`).
 | `poro.shop.shop.updated` | — | Projection `shop_projections` (nom, handle) ; le snapshot le plus récent gagne. |
 | `poro.order.order.placed` | `seller_id` et `buyer_id` | Paiement à la livraison seulement. Vendeur : « Nouvelle commande » (acheteur et montant) ; acheteur : « Commande confirmée » (boutique et montant). |
 | `poro.order.order.shipped` | `buyer_id` | « Commande expédiée », avec le suivi s'il est renseigné. |
-| `poro.order.order.cancelled` | selon `reason` | `buyer_cancelled` : le vendeur seulement. `seller_cancelled`, `stock_rejected`, `payment_timeout` : l'acheteur seulement, avec « Ton remboursement est en cours. » si `paid`. |
+| `poro.order.order.cancelled` | selon `reason` | `buyer_cancelled` : le vendeur seulement. `seller_cancelled`, `stock_rejected`, `payment_timeout` : l'acheteur seulement, avec « Ton remboursement est en cours. » si `paid`. `account_deleted` : les deux parties encore présentes, sans nommer personne. |
 | `poro.order.order.completed` | `seller_id` | « Commande terminée » (acheteur et montant). |
+
+Groupe `poro-notification-account-erasure`, `poro.auth.user.deleted`
+([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) :
+appareils, préférences, projection, notifications reçues et notifications où le
+compte est acteur (un groupe de likes qui le compte est supprimé en entier) sont
+effacés dans la transaction de l'inbox. `erased_users` garde l'id seul : aucun
+événement tardif ou rejoué ne recrée ensuite de projection ni de notification
+pour ou sur ce compte.
 
 ## Notifications de commande
 
@@ -105,6 +113,7 @@ Voir `.env.example`.
 | `DATABASE_URL` | — | `poro_notification` ; hors `dev`, `sslmode=require` ou `verify-*` |
 | `REDIS_URL` | — | Compteurs de limite de débit (DB 5) ; obligatoire hors `dev` |
 | `JWKS_URL` | `http://localhost:8081/.well-known/jwks.json` | Clés publiques d'auth |
+| `REVOCATION_REDIS_URL` | *(vide en dev)* | Registre des sessions révoquées par auth ([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) ; obligatoire hors dev, 503 s'il ne répond pas |
 | `KAFKA_BROKERS` | `localhost:9092` | Brokers Redpanda/Kafka |
 | `KAFKA_CONSUMER_ENABLED` | `true` | `false` : HTTP seul |
 | `FCM_CREDENTIALS_B64` | vide | JSON du compte de service Firebase en base64 ; vide = push désactivé |

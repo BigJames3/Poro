@@ -10,9 +10,11 @@ import (
 	"sync/atomic"
 )
 
-// Memory is an in-process object store for tests.
+// Memory is an in-process object store for tests. Its three maps stand for
+// the source, media and quarantine buckets.
 type Memory struct {
 	mu         sync.Mutex
+	sources    map[string][]byte
 	objects    map[string][]byte
 	quarantine map[string][]byte
 	uploads    map[string]*memUpload
@@ -26,7 +28,7 @@ type memUpload struct {
 
 // NewMemory builds an empty store.
 func NewMemory() *Memory {
-	return &Memory{objects: map[string][]byte{}, quarantine: map[string][]byte{}, uploads: map[string]*memUpload{}}
+	return &Memory{sources: map[string][]byte{}, objects: map[string][]byte{}, quarantine: map[string][]byte{}, uploads: map[string]*memUpload{}}
 }
 
 func (m *Memory) CreateMultipart(_ context.Context, key, _ string) (string, error) {
@@ -67,7 +69,7 @@ func (m *Memory) CompleteMultipart(_ context.Context, key, uploadID string, part
 		}
 		buf.Write(chunk)
 	}
-	m.objects[key] = buf.Bytes()
+	m.sources[key] = buf.Bytes()
 	delete(m.uploads, uploadID)
 	return nil
 }
@@ -79,20 +81,28 @@ func (m *Memory) AbortMultipart(_ context.Context, _, uploadID string) error {
 	return nil
 }
 
-func (m *Memory) Head(_ context.Context, key string) (Object, error) {
+// HasUpload reports whether a multipart upload is still open.
+func (m *Memory) HasUpload(uploadID string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	b, ok := m.objects[key]
+	_, ok := m.uploads[uploadID]
+	return ok
+}
+
+func (m *Memory) HeadSource(_ context.Context, key string) (Object, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b, ok := m.sources[key]
 	if !ok {
 		return Object{}, fmt.Errorf("not found: %s", key)
 	}
 	return Object{Size: int64(len(b))}, nil
 }
 
-func (m *Memory) GetRange(_ context.Context, key string, start, end int64) ([]byte, error) {
+func (m *Memory) GetSourceRange(_ context.Context, key string, start, end int64) ([]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	b, ok := m.objects[key]
+	b, ok := m.sources[key]
 	if !ok {
 		return nil, fmt.Errorf("not found: %s", key)
 	}
@@ -110,9 +120,9 @@ func (m *Memory) GetRange(_ context.Context, key string, start, end int64) ([]by
 	return out, nil
 }
 
-func (m *Memory) Get(_ context.Context, key string, dest io.Writer) error {
+func (m *Memory) GetSource(_ context.Context, key string, dest io.Writer) error {
 	m.mu.Lock()
-	b, ok := m.objects[key]
+	b, ok := m.sources[key]
 	m.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("not found: %s", key)
@@ -121,7 +131,7 @@ func (m *Memory) Get(_ context.Context, key string, dest io.Writer) error {
 	return err
 }
 
-func (m *Memory) Put(_ context.Context, key, _ string, body io.Reader) error {
+func (m *Memory) PutMedia(_ context.Context, key, _ string, body io.Reader) error {
 	raw, err := io.ReadAll(body)
 	if err != nil {
 		return err
@@ -132,14 +142,31 @@ func (m *Memory) Put(_ context.Context, key, _ string, body io.Reader) error {
 	return nil
 }
 
-func (m *Memory) Delete(_ context.Context, key string) error {
+func (m *Memory) DeleteSource(_ context.Context, key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.objects, key)
+	delete(m.sources, key)
 	return nil
 }
 
-// Bytes returns a copy of an object for assertions.
+// PutSource stores a source object directly (tests simulate a finished upload).
+func (m *Memory) PutSource(key string, body []byte) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make([]byte, len(body))
+	copy(cp, body)
+	m.sources[key] = cp
+}
+
+// HasSource reports whether key sits in the source bucket.
+func (m *Memory) HasSource(key string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.sources[key]
+	return ok
+}
+
+// Bytes returns a copy of a media object for assertions.
 func (m *Memory) Bytes(key string) []byte {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -169,7 +196,7 @@ func (m *Memory) Quarantined(key string) bool {
 	return ok
 }
 
-// Has reports whether key sits in the public bucket.
+// Has reports whether key sits in the public media bucket.
 func (m *Memory) Has(key string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()

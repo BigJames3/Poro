@@ -47,7 +47,7 @@ func setup(t *testing.T) fixture {
 	mem := storage.NewMemory()
 	thumb := model.ThumbKey(user.String(), video.String())
 	for _, key := range []string{thumb, model.HLSDir(user.String(), video.String()) + "/master.m3u8"} {
-		require.NoError(t, mem.Put(ctx, key, "x", bytes.NewReader([]byte("x"))))
+		require.NoError(t, mem.PutMedia(ctx, key, "x", bytes.NewReader([]byte("x"))))
 	}
 	return fixture{moderation.New(testdb.Pool, repo, mem, zap.NewNop()), mem, repo, user, video, thumb}
 }

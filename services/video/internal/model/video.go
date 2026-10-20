@@ -1,6 +1,11 @@
 package model
 
-import "time"
+import (
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+)
 
 const (
 	StatusUploading  = "uploading"
@@ -76,22 +81,42 @@ func PartCount(size int64) int {
 	return n
 }
 
-// SourceKey is the deterministic object key of the original upload.
+// MediaRoot prefixes every object key of every video.
+const MediaRoot = "videos/"
+
+// SourceKey is the deterministic object key of the original upload. It lives
+// in the private source bucket, never in the public media bucket.
 func SourceKey(userID, videoID, ext string) string {
-	return "videos/" + userID + "/" + videoID + "/source." + ext
+	return MediaRoot + userID + "/" + videoID + "/source." + ext
+}
+
+// IsSourceKey reports whether key has the shape of a SourceKey.
+func IsSourceKey(key string) bool {
+	parts := strings.Split(key, "/")
+	if len(parts) != 4 || parts[0]+"/" != MediaRoot {
+		return false
+	}
+	if _, err := uuid.Parse(parts[1]); err != nil {
+		return false
+	}
+	if _, err := uuid.Parse(parts[2]); err != nil {
+		return false
+	}
+	ext, ok := strings.CutPrefix(parts[3], "source.")
+	return ok && ext != "" && !strings.Contains(ext, ".")
 }
 
 // HLSDir is the prefix of transcoded HLS objects.
 func HLSDir(userID, videoID string) string {
-	return "videos/" + userID + "/" + videoID + "/hls"
+	return MediaRoot + userID + "/" + videoID + "/hls"
 }
 
 // MediaPrefix holds every object of a video: source, HLS and thumbnail.
 func MediaPrefix(userID, videoID string) string {
-	return "videos/" + userID + "/" + videoID + "/"
+	return MediaRoot + userID + "/" + videoID + "/"
 }
 
 // ThumbKey is the JPEG thumbnail object key.
 func ThumbKey(userID, videoID string) string {
-	return "videos/" + userID + "/" + videoID + "/thumb.jpg"
+	return MediaRoot + userID + "/" + videoID + "/thumb.jpg"
 }

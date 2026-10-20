@@ -24,6 +24,15 @@ transaction que l'effet, 3 essais puis `<topic>.dlq` (en-têtes `x-poro-*`
 identiques à shared-go). Les événements produits passent par l'outbox et
 `outbox-relay-moderation`. Feed, social et notification appliquent les retraits.
 
+Groupe `poro-moderation-account-erasure` sur `poro.auth.user.deleted`
+([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)), même
+transaction que l'inbox : les signalements du compte reçoivent chacun un `reporter_id` aléatoire
+et perdent leur commentaire ; ses instantanés perdent texte et `owner_id` ; ses dossiers perdent
+`owner_id`. Dossiers et décisions restent (journal de modération) avec des ids opaques : un
+dossier visant le compte garde son id en `target_id`, une décision d'un modérateur effacé garde
+`moderator_id`. L'id seul reste dans `erased_users` : le scanner n'enregistre plus rien d'un
+compte effacé (verrou consultatif par compte entre scan et effacement).
+
 ## Filtre automatique
 
 Règles déterministes, listes dans [`src/moderation/rules/fr.yml`](src/moderation/rules/fr.yml)
@@ -70,6 +79,7 @@ texte de la même cible est signalé par le filtre.
 | `DATABASE_URL` | — | `postgresql://…/poro_moderation?sslmode=…` |
 | `REDIS_URL` | vide | Limites de débit partagées (DB 6) ; en mémoire si vide (dev) |
 | `JWKS_URL` | `http://localhost:8081/.well-known/jwks.json` | Clés publiques d'auth |
+| `REVOCATION_REDIS_URL` | *(vide en dev)* | Registre des sessions révoquées par auth ([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) ; obligatoire hors dev, 503 s'il ne répond pas |
 | `KAFKA_BROKERS` | `localhost:9092` | Brokers |
 | `KAFKA_CONSUMER_ENABLED` | `true` | `false` : HTTP seul |
 | `REPORT_THRESHOLD` | `3` | Signalements distincts pour la priorité haute |

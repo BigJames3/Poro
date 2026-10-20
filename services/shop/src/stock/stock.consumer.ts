@@ -4,6 +4,7 @@ import {
   Logger,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  Optional,
 } from '@nestjs/common';
 
 import { isUuid } from '../common/uuid';
@@ -20,6 +21,7 @@ import {
 import { Envelope } from '../events/envelope';
 import { KafkaEventConsumer, PermanentError } from '../events/event-consumer';
 import { STOCK_CONSUMER_GROUP, StockService } from './stock.service';
+import { MetricsService } from '../metrics/metrics';
 
 export const STOCK_TOPICS = [TYPE_ORDER_CREATED, TYPE_ORDER_CANCELLED, TYPE_ORDER_COMPLETED];
 const MAX_LINES = 50;
@@ -77,6 +79,7 @@ export class StockConsumer implements OnApplicationBootstrap, OnApplicationShutd
   constructor(
     private readonly stock: StockService,
     @Inject(appConfig.KEY) private readonly config: AppConfigType,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -86,7 +89,7 @@ export class StockConsumer implements OnApplicationBootstrap, OnApplicationShutd
     }
     this.consumer = new KafkaEventConsumer(
       this.config.kafkaBrokers,
-      { group: STOCK_CONSUMER_GROUP, topics: STOCK_TOPICS },
+      { group: STOCK_CONSUMER_GROUP, topics: STOCK_TOPICS, records: this.metrics?.kafkaRecords },
       (env) => this.handle(env),
     );
     this.consumer.start();

@@ -10,7 +10,7 @@ from typing import Any
 from prometheus_client import Counter
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from moderation.cases import Content, apply_verdict, save_content
+from moderation.cases import Content, apply_verdict, is_erased, lock_account, save_content
 from moderation.events.consumer import PermanentError
 from moderation.events.envelope import (
     TYPE_COMMENT_CREATED,
@@ -115,7 +115,11 @@ class Scanner:
         async with self._sessions.begin() as session:
             if not await claim(session, GROUP, env.id):
                 return
-            if not await save_content(session, content):
+            await lock_account(session, content.owner_id)
+            if await is_erased(session, content.owner_id):
+                # A late event about an erased account stores nothing (ADR-0018).
+                outcome = "erased"
+            elif not await save_content(session, content):
                 outcome = "stale"
             else:
                 outcome = await apply_verdict(session, content, verdict)

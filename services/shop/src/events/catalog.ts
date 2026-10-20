@@ -8,6 +8,7 @@ export const TYPE_STOCK_REJECTED = 'poro.shop.stock.rejected';
 export const TYPE_ORDER_CREATED = 'poro.order.order.created';
 export const TYPE_ORDER_CANCELLED = 'poro.order.order.cancelled';
 export const TYPE_ORDER_COMPLETED = 'poro.order.order.completed';
+export const TYPE_AUTH_USER_DELETED = 'poro.auth.user.deleted';
 
 export const COUNTRIES = ['CI', 'SN', 'CM', 'NG'] as const;
 export type CountryCode = (typeof COUNTRIES)[number];
@@ -142,4 +143,10 @@ export interface OrderCompletedV1 {
   total: number;
   payment_method: string;
   completed_at: string;
+}
+
+/** Published by auth when an account is erased (ADR-0018). Carries no contact data. */
+export interface AuthUserDeletedV1 {
+  user_id: string;
+  deleted_at: string;
 }

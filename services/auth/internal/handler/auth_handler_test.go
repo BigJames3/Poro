@@ -103,6 +103,8 @@ func TestAuthHandlerMapsErrors(t *testing.T) {
 		{err: service.ErrOTPTooManyAttempts, status: http.StatusTooManyRequests, code: "otp_too_many_attempts"},
 		{err: &service.ThrottledError{RetryAfter: time.Minute}, status: http.StatusTooManyRequests, code: "otp_throttled"},
 		{err: service.ErrInvalidCredentials, status: http.StatusUnauthorized, code: "invalid_credentials"},
+		{err: fmt.Errorf("login email: %w", &service.LoginLockedError{RetryAfter: time.Minute}), status: http.StatusTooManyRequests, code: "login_throttled"},
+		{err: fmt.Errorf("request otp: %w", service.ErrSMSBudgetExhausted), status: http.StatusServiceUnavailable, code: "sms_unavailable"},
 		{err: service.ErrRefreshTokenInvalid, status: http.StatusUnauthorized, code: "refresh_token_invalid"},
 		{err: service.ErrRefreshTokenReused, status: http.StatusUnauthorized, code: "session_revoked"},
 		{err: service.ErrOTPInvalid, status: http.StatusUnauthorized, code: "otp_invalid"},
@@ -141,6 +143,17 @@ func TestRequestOTPSetsRetryAfter(t *testing.T) {
 	resp := do(t, app, http.MethodPost, "/otp/request", `{"phone":"+14155552671"}`, nil)
 	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
 	require.Equal(t, "43", resp.Header.Get(fiber.HeaderRetryAfter))
+}
+
+func TestLockedLoginSetsRetryAfter(t *testing.T) {
+	app := authApp(&stubAuth{
+		login: func(context.Context, dto.LoginEmailRequest, string, string) (*dto.AuthResponse, error) {
+			return nil, fmt.Errorf("login email: %w", &service.LoginLockedError{RetryAfter: 119500 * time.Millisecond})
+		},
+	})
+	resp := do(t, app, http.MethodPost, "/email/login", `{"email":"ada@poro.app","password":"password1"}`, nil)
+	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+	require.Equal(t, "120", resp.Header.Get(fiber.HeaderRetryAfter))
 }
 
 func TestLogoutAndMe(t *testing.T) {
