@@ -21,8 +21,13 @@ info:
     `delivery_location_required`, `confirmation_required`,
     `address_book_full`, `address_label_invalid`, `tracking_invalid` (422);
     `invalid_cursor` (400); `preview_outdated`, `preview_expired`,
-    `order_status_conflict` (409); `preview_not_found`, `address_not_found`,
+    `order_status_conflict` (409); `shop_suspended` (403, a suspended shop
+    may not ship nor cancel); `preview_not_found`, `address_not_found`,
     `order_not_found` (404).
+
+    The seller sees the delivery contact only while the order is due for
+    delivery or done (`confirmed`, `paid`, `shipped`, `completed`); otherwise
+    `delivery` is null in seller responses.
 servers:
   - url: http://localhost:8091
     description: Local development
@@ -295,7 +300,7 @@ paths:
     parameters: [{ $ref: "#/components/parameters/OrderId" }]
     get:
       tags: [seller]
-      summary: One order of the calling seller, with the delivery contact
+      summary: One order of the calling seller, with the delivery contact once it is due
       responses:
         "200": { $ref: "#/components/responses/Order" }
         "404": { $ref: "#/components/responses/Error" }
@@ -303,7 +308,7 @@ paths:
     parameters: [{ $ref: "#/components/parameters/OrderId" }]
     post:
       tags: [seller]
-      summary: Mark a confirmed or paid order shipped
+      summary: Mark a confirmed or paid order shipped (403 shop_suspended while suspended)
       requestBody:
         content:
           application/json:
@@ -314,15 +319,17 @@ paths:
                 tracking: { type: ["string", "null"], description: "Free text, 200 characters at most" }
       responses:
         "200": { $ref: "#/components/responses/Order" }
+        "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/seller/orders/{orderId}/cancel:
     parameters: [{ $ref: "#/components/parameters/OrderId" }]
     post:
       tags: [seller]
-      summary: Cancel before shipping; a paid order is refunded
+      summary: Cancel before shipping; a paid order is refunded (403 shop_suspended while suspended)
       responses:
         "200": { $ref: "#/components/responses/Order" }
+        "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
@@ -586,9 +593,9 @@ components:
         delivery:
           oneOf:
             - { $ref: "#/components/schemas/Delivery" }
-            - { type: "null", description: Erased 90 days after the order ended }
+            - { type: "null", description: "Erased 90 days after the order ended; hidden from the seller until the order is due" }
         tracking: { type: ["string", "null"] }
-        cancel_reason: { enum: [stock_rejected, payment_timeout, buyer_cancelled, seller_cancelled, null] }
+        cancel_reason: { enum: [stock_rejected, payment_timeout, buyer_cancelled, seller_cancelled, account_deleted, null] }
         paid: { type: boolean }
         last_payment_error: { type: ["string", "null"] }
         expires_at: { type: ["string", "null"], format: date-time }

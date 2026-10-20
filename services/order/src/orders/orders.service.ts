@@ -60,7 +60,7 @@ export class OrdersService {
     const items = orders.slice(0, limit);
     const last = items.at(-1);
     return {
-      items: items.map(toOrderView),
+      items: items.map((order) => toOrderView(order, side)),
       next_cursor:
         orders.length > limit && last
           ? encodeCursor({ createdAt: last.createdAt, id: last.id })
@@ -76,7 +76,7 @@ export class OrdersService {
     if (!order || (side === 'buyer' ? order.buyerId : order.sellerId) !== userId) {
       throw new ApiError(404, 'order_not_found', 'order not found');
     }
-    return toOrderView(order);
+    return toOrderView(order, side);
   }
 
   /** The buyer or the seller cancels before shipping; a paid order gets refunded. */
@@ -139,9 +139,17 @@ export class OrdersService {
       if (!current || (side === 'buyer' ? current.buyerId : current.sellerId) !== userId) {
         throw new ApiError(404, 'order_not_found', 'order not found');
       }
+      if (side === 'seller') {
+        // A suspended shop may not ship nor cancel (PORO-021); a shop its
+        // owner closed still handles the orders it already took.
+        const shop = await tx.catalogShop.findUnique({ where: { id: current.shopId } });
+        if (shop?.status === 'suspended') {
+          throw new ApiError(403, 'shop_suspended', 'the shop is suspended');
+        }
+      }
       return change(tx, current, new Date());
     });
-    return toOrderView(order);
+    return toOrderView(order, side);
   }
 }
 

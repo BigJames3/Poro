@@ -194,7 +194,23 @@ export type OrderWithLines = Order & { lines: OrderLine[] };
 
 const iso = (at: Date | null): string | null => at?.toISOString() ?? null;
 
-export function toOrderView(order: OrderWithLines): OrderView {
+/**
+ * Statuses in which the seller sees the delivery contact: from the moment the
+ * order is due for delivery (PORO-023). Before that (pending, awaiting an
+ * online payment) or if it was cancelled, the seller has no use for it.
+ */
+export const SELLER_CONTACT_STATUSES: readonly OrderStatus[] = [
+  'confirmed',
+  'paid',
+  'shipped',
+  'completed',
+];
+
+export type OrderViewer = 'buyer' | 'seller';
+
+export function toOrderView(order: OrderWithLines, viewer: OrderViewer = 'buyer'): OrderView {
+  const contactHidden =
+    viewer === 'seller' && !SELLER_CONTACT_STATUSES.includes(order.status as OrderStatus);
   return {
     order_id: order.id,
     checkout_id: order.checkoutId,
@@ -217,7 +233,7 @@ export function toOrderView(order: OrderWithLines): OrderView {
       })),
     subtotal_seen: Number(order.subtotalSeen),
     total: order.total === null ? null : Number(order.total),
-    delivery: toDeliveryView(order),
+    delivery: contactHidden ? null : toDeliveryView(order),
     tracking: order.tracking,
     cancel_reason: order.cancelReason as CancelReason | null,
     paid: order.paid,

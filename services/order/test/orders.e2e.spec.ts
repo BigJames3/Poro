@@ -371,6 +371,57 @@ describe('order service', () => {
     expect(again.body.data.status).toBe('completed');
   });
 
+  it('shows the delivery contact to the seller only once the order is due', async () => {
+    const listing = await listed();
+    const seller = await bearer(listing.sellerId);
+    const sellerView = async (orderId: string): Promise<OrderBody> =>
+      (await request(server).get(`/api/v1/seller/orders/${orderId}`).set('Authorization', seller))
+        .body.data as OrderBody;
+
+    const cash = await pendingOrder(listing);
+    expect((await sellerView(cash.order.order_id)).delivery).toBeNull();
+    expect((await getOrder(cash.auth, cash.order.order_id)).delivery).toEqual(DELIVERY_VIEW);
+    const sellerList = await request(server)
+      .get('/api/v1/seller/orders?status=pending')
+      .set('Authorization', seller);
+    expect(
+      (sellerList.body.data.items as OrderBody[]).every((order) => order.delivery === null),
+    ).toBe(true);
+    await saga.handle(reserved(listing, cash.order.order_id, 15000));
+    expect((await sellerView(cash.order.order_id)).delivery).toEqual(DELIVERY_VIEW);
+
+    const wave = await pendingOrder(listing, 'wave');
+    await saga.handle(reserved(listing, wave.order.order_id, 15000));
+    const awaiting = await sellerView(wave.order.order_id);
+    expect([awaiting.status, awaiting.delivery]).toEqual(['awaiting_payment', null]);
+    await saga.handle(paymentEvent('succeeded', wave.order, wave.buyerId, 30000));
+    expect((await sellerView(wave.order.order_id)).delivery).toEqual(DELIVERY_VIEW);
+  });
+
+  it('refuses shipping and seller cancellation while the shop is suspended', async () => {
+    const listing = await listed();
+    const seller = await bearer(listing.sellerId);
+    const { auth, order } = await pendingOrder(listing);
+    await saga.handle(reserved(listing, order.order_id, 15000));
+    await catalog.handle(shopUpdated(listing, { status: 'suspended' }));
+
+    for (const action of ['ship', 'cancel']) {
+      const res = await request(server)
+        .post(`/api/v1/seller/orders/${order.order_id}/${action}`)
+        .set('Authorization', seller)
+        .send({});
+      expect([res.status, res.body.error.code]).toEqual([403, 'shop_suspended']);
+    }
+    expect((await getOrder(auth, order.order_id)).status).toBe('confirmed');
+
+    await catalog.handle(shopUpdated(listing, { status: 'closed' }));
+    const shipped = await request(server)
+      .post(`/api/v1/seller/orders/${order.order_id}/ship`)
+      .set('Authorization', seller)
+      .send({});
+    expect(shipped.body.data.status).toBe('shipped');
+  });
+
   it('hides orders from other accounts', async () => {
     const listing = await listed();
     const { order } = await pendingOrder(listing);

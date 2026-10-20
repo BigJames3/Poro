@@ -77,7 +77,14 @@ propre boutique.
 
 Les coordonnées de livraison (nom, téléphone E.164, ville, adresse,
 indications, position GPS) ne sont visibles que par l'acheteur et le vendeur
-de la commande et ne partent dans aucun événement. Elles sont effacées
+de la commande et ne partent dans aucun événement. Le vendeur ne les voit
+qu'une fois la commande à livrer (`confirmed`, `paid`, puis `shipped` et
+`completed`) : ni en `pending`, ni en attente d'un paiement en ligne, ni
+après une annulation (PORO-023).
+
+Une boutique suspendue par la modération ne peut ni expédier ni annuler ses
+commandes (403 `shop_suspended`, PORO-021) ; une boutique fermée par son
+propriétaire honore encore les commandes déjà prises. Elles sont effacées
 `CONTACT_RETENTION_DAYS` (90) jours après la fin de la commande ; les
 récapitulatifs, qui les contiennent aussi, sont supprimés un jour après leur
 expiration. Le carnet d'adresses est conservé jusqu'à ce que l'acheteur

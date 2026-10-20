@@ -207,7 +207,7 @@ export class CheckoutService {
         : false;
       return {
         checkout_id: checkout.id,
-        orders: orders.map(toOrderView),
+        orders: orders.map((order) => toOrderView(order)),
         address_saved: addressSaved,
       };
     });
@@ -326,6 +326,10 @@ export class CheckoutService {
       include: { lines: true },
       orderBy: { id: 'asc' },
     });
-    return { checkout_id: checkoutId, orders: orders.map(toOrderView), address_saved: false };
+    return {
+      checkout_id: checkoutId,
+      orders: orders.map((order) => toOrderView(order)),
+      address_saved: false,
+    };
   }
 }
