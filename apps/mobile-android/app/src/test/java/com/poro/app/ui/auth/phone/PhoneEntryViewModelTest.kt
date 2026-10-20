@@ -10,6 +10,7 @@ import com.poro.app.testing.FakeAuthRepository
 import com.poro.app.testing.FakeAuthRepository.Companion.failure
 import com.poro.app.testing.MainDispatcherRule
 import java.io.IOException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -23,6 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PhoneEntryViewModelTest {
 
     @get:Rule
