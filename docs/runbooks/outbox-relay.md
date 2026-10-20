@@ -69,8 +69,25 @@ Les records DLQ gardent la **même clé** et le **même JSON**. En-têtes :
 
 1. Lire l'erreur : `rpk topic consume poro.auth.user.created.dlq -n 10 --brokers localhost:9092`
 2. Corriger la cause (schéma, bug consommateur, données).
-3. Republier vers le topic d'origine **sans changer l'`id`** : l'inbox ignore
-   les vrais doublons. Ne pas générer un nouvel `id`.
+3. Republier vers le topic d'origine avec `dlq-replay` (PORO-018). Il garde la clé, le JSON et
+   donc l'`id` de chaque événement : l'inbox des consommateurs ignore les vrais doublons, et un
+   rejeu fait deux fois est sans effet. Toujours commencer **sans `-apply`** (simulation : rien
+   n'est publié) et garder la sortie, qui est la trace de l'opération :
+
+   ```bash
+   # Simulation : ce qui serait rejoué, une ligne JSON par événement, puis un résumé
+   docker compose run --rm --entrypoint /app/dlq-replay outbox-relay-video \
+     -dlq poro.video.ready.dlq -group poro-feed-projector | tee replay-dry.jsonl
+   # Rejeu effectif, éventuellement limité à quelques événements
+   docker compose run --rm --entrypoint /app/dlq-replay outbox-relay-video \
+     -dlq poro.video.ready.dlq -group poro-feed-projector -event-id <uuid>,<uuid> -apply \
+     | tee "replay-$(date -u +%Y%m%dT%H%M%SZ).jsonl"
+   ```
+
+   Filtres : `-group` (groupe qui a mis l'événement en DLQ), `-event-id` (liste), `-limit`.
+   L'outil lit la DLQ du début jusqu'à sa fin au moment du lancement, sans groupe de
+   consommateurs : il ne modifie ni ne vide la DLQ. Chaque événement rejoué porte l'en-tête
+   `x-poro-replayed-from: <dlq>/<partition>/<offset>`.
 4. Ne pas vider la DLQ avant d'avoir un export (rétention 30 jours en local).
 
 Un replay aveugle d'un poison pill (JSON illisible) le renverra en DLQ.

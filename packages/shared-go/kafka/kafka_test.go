@@ -2,6 +2,7 @@ package kafka_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -159,6 +160,64 @@ func TestKafka(t *testing.T) {
 		require.True(t, batch.Rejected[big], "a record over the size limit cannot succeed on retry")
 		require.NotContains(t, batch.Failed, small)
 		require.Len(t, readAll(t, broker, topic, 1), 1)
+	})
+
+	t.Run("dlq replay", func(t *testing.T) {
+		topic := testinfra.Topic(t, broker, "replay")
+		dlq := events.DLQTopic(topic)
+		parked := func(env events.Envelope, group string) *kgo.Record {
+			raw, err := json.Marshal(env)
+			require.NoError(t, err)
+			return &kgo.Record{Topic: dlq, Key: []byte(env.Subject), Value: raw, Headers: []kgo.RecordHeader{
+				{Key: kafka.HeaderError, Value: []byte("database unreachable")},
+				{Key: kafka.HeaderOriginalTopic, Value: []byte(topic)},
+				{Key: kafka.HeaderConsumerGroup, Value: []byte(group)},
+			}}
+		}
+		first, second, other := envelope(t, topic, "s1"), envelope(t, topic, "s2"), envelope(t, topic, "s3")
+		client, err := kgo.NewClient(kgo.SeedBrokers(broker))
+		require.NoError(t, err)
+		defer client.Close()
+		require.NoError(t, client.ProduceSync(ctx,
+			parked(first, "poro-feed-projector"),
+			parked(second, "poro-feed-projector"),
+			parked(other, "poro-search-indexer"),
+			&kgo.Record{Topic: dlq, Key: []byte("garbage"), Value: []byte("not an envelope"),
+				Headers: []kgo.RecordHeader{{Key: kafka.HeaderConsumerGroup, Value: []byte("poro-feed-projector")}}},
+		).FirstErr())
+
+		var seen []kafka.ReplayedRecord
+		report := func(r kafka.ReplayedRecord) { seen = append(seen, r) }
+		sum, err := kafka.Replay(ctx, []string{broker}, kafka.ReplayOptions{DLQ: dlq, Group: "poro-feed-projector"}, report)
+		require.NoError(t, err)
+		require.Equal(t, kafka.ReplaySummary{Scanned: 4, Selected: 3}, sum, "dry run: selected, nothing published")
+		for _, r := range seen {
+			require.False(t, r.Replayed)
+			require.Equal(t, topic, r.Topic)
+		}
+
+		seen = nil
+		sum, err = kafka.Replay(ctx, []string{broker}, kafka.ReplayOptions{
+			DLQ: dlq, EventIDs: map[string]bool{second.ID.String(): true}, Apply: true,
+		}, report)
+		require.NoError(t, err)
+		require.Equal(t, 1, sum.Replayed)
+		require.Len(t, seen, 1)
+		require.Equal(t, second.ID.String(), seen[0].EventID)
+		require.Equal(t, "database unreachable", seen[0].Error)
+
+		replayed := readAll(t, broker, topic, 1)
+		require.Equal(t, "s2", string(replayed[0].Key))
+		var from string
+		for _, h := range replayed[0].Headers {
+			if h.Key == kafka.HeaderReplayedFrom {
+				from = string(h.Value)
+			}
+		}
+		require.Equal(t, fmt.Sprintf("%s/%d/%d", dlq, seen[0].Partition, seen[0].Offset), from)
+
+		_, err = kafka.Replay(ctx, []string{broker}, kafka.ReplayOptions{DLQ: topic}, report)
+		require.ErrorContains(t, err, "not a dead-letter topic")
 	})
 
 	t.Run("consumers can share a metrics registry", func(t *testing.T) {

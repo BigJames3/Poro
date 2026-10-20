@@ -6,11 +6,13 @@ COPY services/outbox-relay/go.mod services/outbox-relay/go.sum /src/services/out
 WORKDIR /src/services/outbox-relay
 RUN go mod download
 COPY services/outbox-relay /src/services/outbox-relay
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/relay ./cmd/relay
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/relay ./cmd/relay \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/dlq-replay ./cmd/dlq-replay
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates wget && adduser -D -H -u 10001 app
 COPY --from=builder /out/relay /app/relay
+COPY --from=builder /out/dlq-replay /app/dlq-replay
 USER app
 EXPOSE 9100
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
