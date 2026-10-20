@@ -3,6 +3,7 @@ package kafka_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
 
@@ -144,6 +146,21 @@ func TestKafka(t *testing.T) {
 		require.NotEmpty(t, headers[kafka.HeaderOriginalOffset])
 	})
 
+	t.Run("oversized record is rejected", func(t *testing.T) {
+		topic := testinfra.Topic(t, broker, "toolarge")
+		big, small := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+		err := producer.Publish(ctx, []outbox.Message{
+			{ID: big, Topic: topic, Key: []byte("big"), Value: make([]byte, 4<<20)},
+			{ID: small, Topic: topic, Key: []byte("small"), Value: []byte(`{}`)},
+		})
+		var batch *outbox.BatchError
+		require.ErrorAs(t, err, &batch)
+		require.Contains(t, batch.Failed, big)
+		require.True(t, batch.Rejected[big], "a record over the size limit cannot succeed on retry")
+		require.NotContains(t, batch.Failed, small)
+		require.Len(t, readAll(t, broker, topic, 1), 1)
+	})
+
 	t.Run("consumers can share a metrics registry", func(t *testing.T) {
 		reg := prometheus.NewRegistry()
 		for _, group := range []string{"poro-test-a", "poro-test-b"} {
@@ -236,4 +253,13 @@ func readAll(t *testing.T, broker, topic string, n int) []*kgo.Record {
 		fetches.EachRecord(func(r *kgo.Record) { out = append(out, r) })
 	}
 	return out
+}
+
+func TestRejected(t *testing.T) {
+	require.True(t, kafka.Rejected(kerr.MessageTooLarge))
+	require.True(t, kafka.Rejected(fmt.Errorf("produce: %w", kerr.InvalidRecord)))
+	require.False(t, kafka.Rejected(kerr.NotLeaderForPartition), "retriable broker errors are transient")
+	require.False(t, kafka.Rejected(kerr.UnknownTopicOrPartition), "a missing topic is fixed by creating it")
+	require.False(t, kafka.Rejected(errors.New("dial tcp: connection refused")))
+	require.False(t, kafka.Rejected(context.DeadlineExceeded))
 }

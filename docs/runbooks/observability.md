@@ -86,6 +86,12 @@ injoignable, relais arrêté).
 Le relais échoue et ne publie plus rien : broker en panne ou topic absent. Les événements restent
 dans l'outbox et partiront au rétablissement ; aucune perte.
 
+### OutboxParked
+Kafka a refusé définitivement un événement (trop gros, invalide) : le relais l'a mis à l'écart
+(`last_error` commence par `rejected: `), ainsi que les événements suivants de la même entité
+(même topic et même clé), pour garder leur ordre. Les autres entités continuent d'être publiées.
+Voir le runbook outbox-relay, section « Événements mis à l'écart ».
+
 ### EventsDeadLettered
 Des événements sont partis en DLQ (`<topic>.dlq`). Lire l'en-tête `x-poro-error` :
 
@@ -114,9 +120,9 @@ canal et création du webhook.
 ## Tests
 
 - `infra/observability/tests/run.sh` (job CI `observability`) :
-  - tests unitaires des 8 alertes ;
+  - tests unitaires des 9 alertes ;
   - validation des configurations ;
-  - démarrage réel de Prometheus, Alertmanager et Grafana, avec 8 règles chargées, Alertmanager
+  - démarrage réel de Prometheus, Alertmanager et Grafana, avec 9 règles chargées, Alertmanager
     connecté, 19 cibles, tableau de bord provisionné et Grafana anonyme en lecture seule.
 - `packages/shared-go/kafka` : compteurs `processed`, `retried` et `dead_lettered` contre un vrai
   Redpanda.

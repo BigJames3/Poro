@@ -32,6 +32,35 @@ docker compose exec redpanda rpk topic create poro.auth.user.created -p 3 --brok
 
 Les topics et `.dlq` sont normalement créés par `redpanda-init`.
 
+## Événements mis à l'écart (PORO-017)
+
+Un événement que Kafka refuse **définitivement** (trop gros, invalide) n'est plus retenté en
+boucle : le relais le met à l'écart (`last_error` commence par `rejected: `), métrique
+`outbox_parked`, alerte `OutboxParked`. Les événements **suivants de la même entité** (même
+topic et même clé) attendent derrière lui, pour que les consommateurs les reçoivent toujours dans
+l'ordre ; toutes les autres entités continuent d'être publiées. Une panne passagère (broker
+injoignable, leader en élection, topic absent) ne met jamais rien à l'écart : le lot est
+retenté.
+
+Limite de la garantie d'ordre : dans un même lot déjà envoyé, un événement plus récent de la même
+clé peut être accepté par Kafka alors que l'ancien est refusé. Les lots suivants, eux, attendent.
+
+```sql
+SELECT id, topic, event_key, attempts, left(last_error, 300) FROM outbox_events
+  WHERE published_at IS NULL AND starts_with(last_error, 'rejected: ');
+```
+
+Corriger la cause (taille maximale du topic, producteur qui écrit un payload invalide), puis
+remettre en file :
+
+```sql
+UPDATE outbox_events SET last_error = NULL
+  WHERE published_at IS NULL AND starts_with(last_error, 'rejected: ') AND id = '<uuid>';
+```
+
+Si l'événement ne doit jamais partir, le marquer publié **après décision humaine** (les
+consommateurs ne le verront pas) : `UPDATE outbox_events SET published_at = now() WHERE id = '<uuid>';`
+
 ## Rejouer une DLQ
 
 Les records DLQ gardent la **même clé** et le **même JSON**. En-têtes :

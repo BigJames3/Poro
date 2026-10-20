@@ -134,3 +134,21 @@ tests:
             exp_annotations:
               summary: "75 SMS OTP bloqués par le plafond prefix en 15 min"
               runbook: docs/runbooks/observability.md#smsbudgetblocking
+
+  - interval: 1m
+    input_series:
+      - series: 'outbox_parked{service="outbox-relay-order"}'
+        values: "0 0 1 1 1 1 1 1 1 1"
+      - series: 'outbox_parked{service="outbox-relay-user"}'
+        values: "0x9"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: OutboxParked
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: OutboxParked
+        exp_alerts:
+          - exp_labels: { severity: warning, service: outbox-relay-order }
+            exp_annotations:
+              summary: "outbox-relay-order : 1 événement(s) refusé(s) par Kafka et mis à l'écart"
+              runbook: docs/runbooks/observability.md#outboxparked

@@ -56,9 +56,9 @@ wait_for() { # url, jq-free python predicate on the JSON body
 }
 
 wait_for "http://127.0.0.1:$pport/api/v1/rules" \
-  'import json,sys; d=json.loads(sys.argv[1]); assert sum(len(g["rules"]) for g in d["data"]["groups"]) == 8' ||
-  fail "prometheus did not load the 8 alert rules"
-pass "prometheus loaded the 8 alert rules"
+  'import json,sys; d=json.loads(sys.argv[1]); assert sum(len(g["rules"]) for g in d["data"]["groups"]) == 9' ||
+  fail "prometheus did not load the 9 alert rules"
+pass "prometheus loaded the 9 alert rules"
 
 wait_for "http://127.0.0.1:$pport/api/v1/alertmanagers" \
   'import json,sys; d=json.loads(sys.argv[1]); assert len(d["data"]["activeAlertmanagers"]) == 1' ||

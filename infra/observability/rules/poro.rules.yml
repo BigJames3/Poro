@@ -55,6 +55,15 @@ groups:
           summary: "{{ $labels.service }} n'arrive plus à publier vers Kafka"
           runbook: docs/runbooks/observability.md#outboxpublishfailing
 
+      - alert: OutboxParked
+        expr: outbox_parked > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} : {{ $value }} événement(s) refusé(s) par Kafka et mis à l'écart"
+          runbook: docs/runbooks/observability.md#outboxparked
+
       - alert: EventsDeadLettered
         expr: sum by (service, group, topic) (increase(kafka_consumer_records_total{outcome="dead_lettered"}[15m])) > 0
         labels:

@@ -9,7 +9,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
 
@@ -45,16 +47,43 @@ func NewProducer(brokers []string) (*Producer, error) {
 	return &Producer{client: client}, nil
 }
 
-// Publish implements outbox.Publisher.
+// Publish implements outbox.Publisher. When some records fail it returns an
+// *outbox.BatchError naming them, with the ones the broker refused for good
+// (too large, invalid) marked rejected.
 func (p *Producer) Publish(ctx context.Context, msgs []outbox.Message) error {
 	records := make([]*kgo.Record, len(msgs))
+	ids := make(map[*kgo.Record]uuid.UUID, len(msgs))
 	for i, m := range msgs {
 		records[i] = &kgo.Record{Topic: m.Topic, Key: m.Key, Value: m.Value}
+		ids[records[i]] = m.ID
 	}
-	if err := p.client.ProduceSync(ctx, records...).FirstErr(); err != nil {
-		return fmt.Errorf("produce: %w", err)
+	results := p.client.ProduceSync(ctx, records...)
+	if results.FirstErr() == nil {
+		return nil
 	}
-	return nil
+	if ctx.Err() != nil {
+		return fmt.Errorf("produce: %w", ctx.Err())
+	}
+	batch := &outbox.BatchError{Failed: map[uuid.UUID]error{}, Rejected: map[uuid.UUID]bool{}}
+	for _, res := range results {
+		if res.Err == nil {
+			continue
+		}
+		id := ids[res.Record]
+		batch.Failed[id] = res.Err
+		if Rejected(res.Err) {
+			batch.Rejected[id] = true
+		}
+	}
+	return batch
+}
+
+// Rejected reports whether the broker refused a record for good: retrying the
+// same record cannot succeed. Unknown errors, timeouts and missing topics are
+// treated as transient.
+func Rejected(err error) bool {
+	var ke *kerr.Error
+	return errors.As(err, &ke) && !ke.Retriable && !errors.Is(err, kerr.UnknownTopicOrPartition)
 }
 
 // Ping checks that a broker answers.

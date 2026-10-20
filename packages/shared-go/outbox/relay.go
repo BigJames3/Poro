@@ -19,6 +19,26 @@ const relayLockID int64 = 0x706f726f6f7574 // "poroout"
 
 const maxErrorLen = 1000
 
+// RejectedPrefix marks, in last_error, a message the broker refused for good
+// (too large, invalid). Such a message is parked: the relay skips it, and the
+// later messages of the same topic and key, so that the per-key order is kept
+// while every other key keeps flowing. Clearing last_error requeues them.
+const RejectedPrefix = "rejected: "
+
+// BatchError is returned by a Publisher that knows which messages of a batch
+// failed. Messages absent from Failed were published. Any other error fails
+// the whole batch as a transient error.
+type BatchError struct {
+	Failed map[uuid.UUID]error
+	// Rejected marks the failed messages the broker refused for good:
+	// retrying them cannot succeed.
+	Rejected map[uuid.UUID]bool
+}
+
+func (e *BatchError) Error() string {
+	return fmt.Sprintf("%d of the batch not published (%d rejected)", len(e.Failed), len(e.Rejected))
+}
+
 // Message is one record to publish.
 type Message struct {
 	ID    uuid.UUID
@@ -51,6 +71,8 @@ type Relay struct {
 	published prometheus.Counter
 	failures  prometheus.Counter
 	pending   prometheus.Gauge
+	parked    prometheus.Gauge
+	rejected  prometheus.Counter
 }
 
 // NewRelay builds a relay. reg may be nil.
@@ -78,9 +100,11 @@ func NewRelay(pool *pgxpool.Pool, publisher Publisher, log *zap.Logger, cfg Rela
 		published: prometheus.NewCounter(prometheus.CounterOpts{Name: "outbox_published_total", Help: "Outbox events published."}),
 		failures:  prometheus.NewCounter(prometheus.CounterOpts{Name: "outbox_publish_failures_total", Help: "Failed outbox batches."}),
 		pending:   prometheus.NewGauge(prometheus.GaugeOpts{Name: "outbox_pending", Help: "Unpublished outbox events at the last poll."}),
+		parked:    prometheus.NewGauge(prometheus.GaugeOpts{Name: "outbox_parked", Help: "Outbox events refused by the broker and set aside."}),
+		rejected:  prometheus.NewCounter(prometheus.CounterOpts{Name: "outbox_rejected_total", Help: "Outbox events the broker refused for good."}),
 	}
 	if reg != nil {
-		for _, c := range []prometheus.Collector{r.published, r.failures, r.pending} {
+		for _, c := range []prometheus.Collector{r.published, r.failures, r.pending, r.parked, r.rejected} {
 			if err := reg.Register(c); err != nil {
 				return nil, fmt.Errorf("register relay metrics: %w", err)
 			}
@@ -140,9 +164,22 @@ func (r *Relay) PublishBatch(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 
+	var parked int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM outbox_events
+		WHERE published_at IS NULL AND starts_with(last_error, $1)`, RejectedPrefix).Scan(&parked); err != nil {
+		return 0, fmt.Errorf("count parked: %w", err)
+	}
+	r.parked.Set(float64(parked))
+
+	// Parked messages are skipped, and so are the later messages of their
+	// topic and key: Kafka orders by key, and consumers rely on that order.
 	rows, err := tx.Query(ctx,
-		`SELECT id, topic, event_key, payload::text FROM outbox_events
-		 WHERE published_at IS NULL ORDER BY created_at, id LIMIT $1`, r.cfg.BatchSize)
+		`SELECT o.id, o.topic, o.event_key, o.payload::text FROM outbox_events o
+		 WHERE o.published_at IS NULL
+		   AND NOT EXISTS (SELECT 1 FROM outbox_events p
+		     WHERE p.published_at IS NULL AND starts_with(p.last_error, $2)
+		       AND p.topic = o.topic AND p.event_key = o.event_key)
+		 ORDER BY o.created_at, o.id LIMIT $1`, r.cfg.BatchSize, RejectedPrefix)
 	if err != nil {
 		return 0, fmt.Errorf("select pending: %w", err)
 	}
@@ -169,11 +206,11 @@ func (r *Relay) PublishBatch(ctx context.Context) (int, error) {
 	}
 
 	if pubErr := r.publisher.Publish(ctx, msgs); pubErr != nil {
-		msg := pubErr.Error()
-		if len(msg) > maxErrorLen {
-			msg = msg[:maxErrorLen]
+		var batch *BatchError
+		if errors.As(pubErr, &batch) {
+			return r.recordPartial(ctx, tx, msgs, batch)
 		}
-		if _, err := tx.Exec(ctx, `UPDATE outbox_events SET attempts = attempts + 1, last_error = $2 WHERE id = ANY($1)`, ids, msg); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE outbox_events SET attempts = attempts + 1, last_error = $2 WHERE id = ANY($1)`, ids, truncate(pubErr.Error())); err != nil {
 			return 0, errors.Join(fmt.Errorf("publish: %w", pubErr), fmt.Errorf("record failure: %w", err))
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -190,6 +227,55 @@ func (r *Relay) PublishBatch(ctx context.Context) (int, error) {
 	}
 	r.published.Add(float64(len(msgs)))
 	return len(msgs), nil
+}
+
+// recordPartial marks the published messages of a batch, parks the rejected
+// ones and counts an attempt on the others. It returns an error, for the
+// relay to back off, only when a message failed for a transient reason.
+func (r *Relay) recordPartial(ctx context.Context, tx pgx.Tx, msgs []Message, batch *BatchError) (int, error) {
+	var published []uuid.UUID
+	transient := 0
+	for _, m := range msgs {
+		cause, failed := batch.Failed[m.ID]
+		switch {
+		case !failed:
+			published = append(published, m.ID)
+		case batch.Rejected[m.ID]:
+			if _, err := tx.Exec(ctx, `UPDATE outbox_events SET attempts = attempts + 1, last_error = $2 WHERE id = $1`,
+				m.ID, truncate(RejectedPrefix+cause.Error())); err != nil {
+				return 0, fmt.Errorf("park rejected message: %w", err)
+			}
+			r.rejected.Inc()
+			r.log.Error("outbox message rejected by the broker, parked",
+				zap.String("id", m.ID.String()), zap.String("topic", m.Topic), zap.Error(cause))
+		default:
+			transient++
+			if _, err := tx.Exec(ctx, `UPDATE outbox_events SET attempts = attempts + 1, last_error = $2 WHERE id = $1`,
+				m.ID, truncate(cause.Error())); err != nil {
+				return 0, fmt.Errorf("record failure: %w", err)
+			}
+		}
+	}
+	if len(published) > 0 {
+		if _, err := tx.Exec(ctx, `UPDATE outbox_events SET published_at = now(), last_error = NULL WHERE id = ANY($1)`, published); err != nil {
+			return 0, fmt.Errorf("mark published: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("commit: %w", err)
+	}
+	r.published.Add(float64(len(published)))
+	if transient > 0 {
+		return len(published), fmt.Errorf("publish: %w", batch)
+	}
+	return len(published), nil
+}
+
+func truncate(msg string) string {
+	if len(msg) > maxErrorLen {
+		return msg[:maxErrorLen]
+	}
+	return msg
 }
 
 // Cleanup deletes published rows older than the retention.
