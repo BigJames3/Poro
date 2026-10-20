@@ -12,7 +12,7 @@ RUN go mod download
 COPY services/video /src/services/video
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/media-worker ./cmd/worker
 
-FROM alpine:3.22
+FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates ffmpeg && adduser -D -u 10001 app
 
