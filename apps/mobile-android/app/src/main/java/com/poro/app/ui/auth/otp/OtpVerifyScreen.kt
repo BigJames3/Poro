@@ -1,0 +1,202 @@
+package com.poro.app.ui.auth.otp
+
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import com.poro.app.R
+import com.poro.app.core.phone.PhoneNumber
+import com.poro.app.ui.auth.ErrorMessageText
+import com.poro.app.ui.quantityString
+import com.poro.app.ui.theme.PoroTheme
+
+@Composable
+fun OtpVerifyScreen(
+    state: OtpUiState,
+    onCodeChange: (String) -> Unit,
+    onVerify: () -> Unit,
+    onResend: () -> Unit,
+    onChangeNumber: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val phone = remember(state.phone) { PhoneNumber.fromE164(state.phone)?.masked() ?: state.phone }
+    Column(
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            stringResource(R.string.otp_title),
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.semantics { heading() },
+        )
+        Text(stringResource(R.string.otp_subtitle, phone), style = MaterialTheme.typography.bodyLarge)
+        OtpCodeField(
+            code = state.code,
+            enabled = !state.verifying && !state.needsNewCode,
+            onCodeChange = onCodeChange,
+            onDone = onVerify,
+        )
+        when {
+            state.verifying -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            state.needsNewCode -> Unit // le message d'erreur dit déjà de demander un nouveau code
+            state.expiresInSeconds == 0 -> Text(
+                stringResource(R.string.otp_expired_hint),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            else -> Text(expiryText(state.expiresInSeconds), style = MaterialTheme.typography.bodyMedium)
+        }
+        state.error?.let { ErrorMessageText(it) }
+        if (state.codeResent) {
+            Text(
+                stringResource(R.string.otp_code_resent),
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+        Button(
+            onClick = onVerify,
+            enabled = state.canVerify,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            Text(stringResource(R.string.action_verify))
+        }
+        OutlinedButton(
+            onClick = onResend,
+            enabled = state.canResend,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) {
+            when {
+                state.resending -> {
+                    val loading = stringResource(R.string.loading)
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp).semantics { contentDescription = loading },
+                        strokeWidth = 2.dp,
+                    )
+                }
+                state.resendInSeconds > 0 -> Text(quantityString(R.plurals.otp_resend_in_seconds, state.resendInSeconds))
+                else -> Text(stringResource(R.string.otp_resend))
+            }
+        }
+        TextButton(
+            onClick = onChangeNumber,
+            enabled = !state.verifying,
+            modifier = Modifier.align(Alignment.CenterHorizontally).heightIn(min = 48.dp),
+        ) {
+            Text(stringResource(R.string.otp_change_number))
+        }
+    }
+}
+
+/** « Ce code expire dans 5 minutes », puis en secondes pendant la dernière minute. */
+@Composable
+private fun expiryText(seconds: Int): String =
+    if (seconds >= SECONDS_PER_MINUTE) {
+        quantityString(R.plurals.otp_expires_in_minutes, (seconds + SECONDS_PER_MINUTE - 1) / SECONDS_PER_MINUTE)
+    } else {
+        quantityString(R.plurals.otp_expires_in_seconds, seconds)
+    }
+
+private const val SECONDS_PER_MINUTE = 60
+
+/**
+ * Un seul champ invisible dessiné en 6 cases : le collage et le remplissage automatique du code
+ * reçu par SMS (ContentType.SmsOtpCode) arrivent en une fois, comme une saisie au clavier.
+ */
+@Composable
+private fun OtpCodeField(
+    code: String,
+    enabled: Boolean,
+    onCodeChange: (String) -> Unit,
+    onDone: () -> Unit,
+) {
+    val focusRequester = remember { FocusRequester() }
+    // À l'ouverture et après une vérification refusée : le clavier revient sans toucher le champ.
+    LaunchedEffect(enabled) { if (enabled) focusRequester.requestFocus() }
+    val description = stringResource(R.string.otp_field_description)
+    BasicTextField(
+        value = code,
+        onValueChange = onCodeChange,
+        enabled = enabled,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        modifier = Modifier
+            .focusRequester(focusRequester)
+            .semantics {
+                contentType = ContentType.SmsOtpCode
+                contentDescription = description
+            },
+        decorationBox = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                repeat(OtpUiState.CODE_LENGTH) { index ->
+                    val active = enabled && index == code.length
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(width = 44.dp, height = 56.dp)
+                            .border(
+                                width = if (active) 2.dp else 1.dp,
+                                color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                shape = RoundedCornerShape(8.dp),
+                            ),
+                    ) {
+                        Text(code.getOrNull(index)?.toString().orEmpty(), style = MaterialTheme.typography.headlineSmall)
+                    }
+                }
+            }
+        },
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun OtpVerifyScreenPreview() {
+    PoroTheme {
+        OtpVerifyScreen(
+            state = OtpUiState(phone = "+2250700000000", code = "123", resendInSeconds = 42, expiresInSeconds = 280),
+            onCodeChange = {},
+            onVerify = {},
+            onResend = {},
+            onChangeNumber = {},
+        )
+    }
+}
