@@ -106,8 +106,6 @@ minimale 70 %.
 ## Limites
 
 - Pas d'analyse d'image ni de vidéo (pas de ML en v1).
-- Les médias d'une vidéo retirée restent servis par l'API video et le stockage
-  jusqu'à la PR video de quarantaine (prochaine étape).
 - Aucune sanction de compte (bannissement : auth), pas d'appel utilisateur, pas
   de notification « contenu retiré » à l'auteur.
 - Listes en français uniquement ; langues locales (wolof, nouchi…) à compléter.

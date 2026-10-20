@@ -82,5 +82,3 @@ utilisent miniredis.
 - **Pagination trending** : les scores évoluent entre deux pages ; une vidéo peut
   rarement monter ou descendre d'une page à l'autre. For You n'a pas ce problème
   (session figée).
-- Modération : toutes les vidéos sont `approved` tant que le service de modération
-  n'existe pas.
