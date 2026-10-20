@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "My Poro"
+rootProject.name = "Poro"
 include(":app")
  
