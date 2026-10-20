@@ -343,6 +343,22 @@ Branche `feat/socle-suite`, partie de `main` après la fusion de la PR #47.
 - **Action humaine (production)** : règles de cycle de vie S3 en filet de sécurité
   (`docs/runbooks/storage.md`).
 
+## Suite — P1 PORO-017, 018, 019, 021, 023 — TERMINÉES
+
+| Tâche | Fait | Tests |
+|---|---|---|
+| PORO-017 outbox | un événement refusé définitivement par Kafka est mis à l'écart ; les suivants de la même clé attendent, les autres clés passent ; une panne passagère n'écarte rien ; métriques et alerte `OutboxParked` | relais (éditeur simulé), producteur contre Redpanda réel (message trop gros), promtool |
+| PORO-018 rejeu DLQ | commande `dlq-replay` (image outbox-relay) : simulation par défaut, filtres groupe, id et nombre ; trace JSON ligne à ligne ; en-tête `x-poro-replayed-from` | Redpanda réel, analyse des options |
+| PORO-019 purges | auth supprime les codes OTP et refresh tokens expirés ; `processed_events` de plus de 30 jours purgé dans les 9 services consommateurs | Postgres réel en Go, Node et Python |
+| PORO-021 boutique suspendue | 403 `shop_suspended` sur expédition et annulation vendeur ; une boutique fermée honore ses commandes | e2e order |
+| PORO-023 contact vendeur | contact masqué au vendeur hors `confirmed`, `paid`, `shipped`, `completed` | e2e order (paiement à la livraison et Wave) |
+
+- **Suites** : modules Go verts (lint 0, `-race`). Node : user 144, shop 178, order 137 tests,
+  couvertures de 95 à 96 %. moderation : 109 tests. Gateway : 133 routes.
+- **Décision à prendre** (PORO-021) : que deviennent les commandes en cours d'une boutique
+  suspendue ? Aujourd'hui, elles restent en attente jusqu'à la réhabilitation. Deux autres
+  options : les annuler (avec remboursement) au bout d'un délai, ou les laisser expédier.
+
 ## Interventions humaines requises (cumul)
 
 - Lancer `infra/media-worker/check_sandbox.sh` sur le vrai conteneur après reconstruction.
@@ -352,6 +368,7 @@ Branche `feat/socle-suite`, partie de `main` après la fusion de la PR #47.
 - Staging : choisir l'hébergeur, écrire la couche d'environnement staging, créer l'environnement
   GitHub `staging` (relecteurs, secrets SSH, variables) : `docs/runbooks/deploy.md`.
 - Astreinte : canal et webhook Alertmanager pour staging et production.
+- Produit : règle des commandes en cours d'une boutique suspendue (PORO-021).
 - Juridique : durée de conservation des commandes d'un compte effacé (ADR-0018).
 - Équipe mobile : développer l'application selon `docs/api/ANDROID-INTEGRATION.md` ; décider si
   le build Android réel doit bloquer la CI dès maintenant.
