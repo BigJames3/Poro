@@ -27,6 +27,8 @@ sealed interface ApiResult<out T> {
 
 /** Codes d'erreur communs (fichiers docs/api/<domaine>.openapi.yaml). Chaque domaine en ajoute d'autres. */
 object ApiErrorCodes {
+    const val INVALID_REQUEST = "invalid_request"
+    const val INVALID_JSON = "invalid_json"
     const val UNAUTHORIZED = "unauthorized"
     const val RATE_LIMITED = "rate_limited"
     const val UNAVAILABLE = "unavailable"
@@ -35,9 +37,36 @@ object ApiErrorCodes {
     const val SESSION_REVOKED = "session_revoked"
     const val INTERNAL_ERROR = "internal_error"
 
+    // Connexion par téléphone (docs/api/auth.openapi.yaml).
+    const val OTP_INVALID = "otp_invalid"
+    const val OTP_EXPIRED = "otp_expired"
+    const val OTP_TOO_MANY_ATTEMPTS = "otp_too_many_attempts"
+    const val OTP_THROTTLED = "otp_throttled"
+    const val PHONE_COUNTRY_NOT_SUPPORTED = "phone_country_not_supported"
+    const val PHONE_UNREACHABLE = "phone_unreachable"
+    const val SMS_UNAVAILABLE = "sms_unavailable"
+
     /** Réponse d'erreur illisible (pas d'enveloppe) : propre au client. */
     const val UNEXPECTED_RESPONSE = "unexpected_response"
+
+    /** Session acceptée par le serveur mais impossible à enregistrer sur l'appareil : propre au client. */
+    const val STORAGE_FAILED = "storage_failed"
 }
+
+/**
+ * Délai à respecter avant de réessayer après un 429, ou null pour une autre erreur :
+ * `Retry-After` quand le serveur l'envoie, sinon un recul exponentiel selon le nombre de 429
+ * consécutifs [consecutive] (5 s, 10 s, 20 s… 60 s au plus). Jamais de réessai immédiat.
+ */
+fun ApiResult.Failure.retryDelaySeconds(consecutive: Int): Long? {
+    if (httpStatus != 429) return null
+    retryAfterSeconds?.takeIf { it > 0 }?.let { return it }
+    val exponent = (consecutive - 1).coerceIn(0, 4)
+    return (BACKOFF_BASE_SECONDS shl exponent).coerceAtMost(BACKOFF_MAX_SECONDS)
+}
+
+private const val BACKOFF_BASE_SECONDS = 5L
+private const val BACKOFF_MAX_SECONDS = 60L
 
 /**
  * Exécute un appel Retrofit et convertit sa réponse en [ApiResult].

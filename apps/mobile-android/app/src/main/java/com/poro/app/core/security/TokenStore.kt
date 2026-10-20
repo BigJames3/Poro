@@ -1,5 +1,6 @@
 package com.poro.app.core.security
 
+import java.io.IOException
 import kotlinx.coroutines.flow.StateFlow
 
 /** Jetons de la session de l'appareil (réponse `Tokens` de l'API Auth). */
@@ -24,3 +25,10 @@ interface TokenStore {
 
     fun clear()
 }
+
+/**
+ * Les jetons n'ont pas pu être chiffrés ou écrits (Keystore défaillant sur certains appareils,
+ * disque plein). Hérite d'[IOException] : levée pendant un rafraîchissement dans OkHttp,
+ * elle fait échouer la requête au lieu de faire planter l'application.
+ */
+class TokenStorageException(cause: Throwable) : IOException("session tokens could not be stored", cause)
