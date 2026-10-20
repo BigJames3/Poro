@@ -10,17 +10,26 @@ data class SessionTokens(
     val refreshToken: String,
 )
 
+/** État de la session, observé par l'interface pour choisir le premier écran. */
+enum class SessionState {
+    /** Jetons en cours de lecture au démarrage : afficher un écran d'attente. */
+    Unknown,
+    SignedIn,
+    SignedOut,
+}
+
 /**
  * Stockage des jetons. Lecture synchrone ([current]) car l'authenticator OkHttp tourne sur un
- * thread réseau ; [save] et [clear] persistent avant de rendre la main.
+ * thread réseau ; [save] et [clear] persistent avant de rendre la main. Aucune de ces trois
+ * méthodes ne doit être appelée depuis le thread principal.
  */
 interface TokenStore {
     /** Jetons courants, ou null si l'utilisateur n'est pas connecté. */
     fun current(): SessionTokens?
 
-    /** `true` tant qu'une session est enregistrée : l'interface observe ce flux pour router. */
-    val isSignedIn: StateFlow<Boolean>
+    val session: StateFlow<SessionState>
 
+    /** @throws TokenStorageException si les jetons ne peuvent pas être enregistrés. */
     fun save(tokens: SessionTokens)
 
     fun clear()

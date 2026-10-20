@@ -2,6 +2,7 @@ package com.poro.app.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.poro.app.data.auth.AuthRepository
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,10 +24,14 @@ sealed interface ApiStatus {
 class HomeViewModel(
     private val client: OkHttpClient,
     private val healthUrl: HttpUrl,
+    private val auth: AuthRepository,
 ) : ViewModel() {
 
     private val _status = MutableStateFlow<ApiStatus>(ApiStatus.Checking)
     val status: StateFlow<ApiStatus> = _status.asStateFlow()
+
+    private val _signingOut = MutableStateFlow(false)
+    val signingOut: StateFlow<Boolean> = _signingOut.asStateFlow()
 
     init {
         check()
@@ -45,5 +50,12 @@ class HomeViewModel(
                 }
             }
         }
+    }
+
+    /** La navigation revient à la connexion dès que la session passe à SignedOut. */
+    fun logout() {
+        if (_signingOut.value) return
+        _signingOut.value = true
+        viewModelScope.launch { auth.logout() }
     }
 }
