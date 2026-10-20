@@ -1,3 +1,67 @@
 <resources>
     <string name="app_name">Poro</string>
+    <string name="loading">Chargement…</string>
+    <string name="action_retry">Réessayer</string>
+
+    <!-- Accueil provisoire -->
+    <string name="home_api_reachable">API joignable ✓</string>
+    <string name="home_api_unreachable">API injoignable : %1$s\nLa pile locale est-elle lancée (docker compose up) ?</string>
+    <string name="home_signed_in">Vous êtes connecté.</string>
+    <string name="action_logout">Se déconnecter</string>
+    <string name="home_deletion_cancelled">Bon retour ! La suppression programmée de votre compte a été annulée.</string>
+    <string name="session_expired">Votre session a expiré. Reconnectez-vous.</string>
+
+    <!-- Saisie du numéro -->
+    <string name="phone_title">Connexion</string>
+    <string name="phone_subtitle">Entrez votre numéro de téléphone : nous vous enverrons un code par SMS.</string>
+    <string name="phone_label">Numéro de téléphone</string>
+    <string name="phone_invalid_hint">Numéro incomplet ou invalide pour ce pays.</string>
+    <string name="phone_country_picker_description">Pays : %1$s, indicatif +%2$s. Appuyez pour changer.</string>
+    <string name="action_send_code">Recevoir le code</string>
+    <string name="country_ci">Côte d’Ivoire</string>
+    <string name="country_sn">Sénégal</string>
+    <string name="country_cm">Cameroun</string>
+    <string name="country_ng">Nigeria</string>
+    <plurals name="retry_in_seconds">
+        <item quantity="one">Réessayer dans %d seconde</item>
+        <item quantity="other">Réessayer dans %d secondes</item>
+    </plurals>
+
+    <!-- Saisie du code -->
+    <string name="otp_title">Saisissez le code</string>
+    <string name="otp_subtitle">Code à 6 chiffres envoyé par SMS au %1$s.</string>
+    <string name="otp_field_description">Code de vérification à 6 chiffres</string>
+    <string name="otp_expired_hint">Ce code a expiré. Demandez-en un nouveau.</string>
+    <string name="otp_code_resent">Nouveau code envoyé.</string>
+    <string name="otp_resend">Renvoyer le code</string>
+    <string name="otp_change_number">Modifier le numéro</string>
+    <string name="action_verify">Valider</string>
+    <plurals name="otp_resend_in_seconds">
+        <item quantity="one">Renvoyer le code dans %d seconde</item>
+        <item quantity="other">Renvoyer le code dans %d secondes</item>
+    </plurals>
+    <plurals name="otp_expires_in_minutes">
+        <item quantity="one">Ce code expire dans %d minute</item>
+        <item quantity="other">Ce code expire dans %d minutes</item>
+    </plurals>
+    <plurals name="otp_expires_in_seconds">
+        <item quantity="one">Ce code expire dans %d seconde</item>
+        <item quantity="other">Ce code expire dans %d secondes</item>
+    </plurals>
+
+    <!-- Erreurs : une par code du contrat (jamais error.message, en anglais) -->
+    <string name="error_network">Pas de connexion. Vérifiez votre réseau et réessayez.</string>
+    <string name="error_invalid_request">Saisie invalide. Vérifiez et réessayez.</string>
+    <string name="error_phone_country_not_supported">Ce pays n’est pas encore pris en charge.</string>
+    <string name="error_phone_unreachable">Impossible d’envoyer un SMS à ce numéro. Vérifiez-le.</string>
+    <string name="error_otp_throttled">Trop de codes demandés pour ce numéro. Patientez avant de réessayer.</string>
+    <string name="error_rate_limited">Trop de tentatives. Patientez avant de réessayer.</string>
+    <string name="error_sms_unavailable">L’envoi de SMS est momentanément indisponible. Réessayez plus tard.</string>
+    <string name="error_otp_invalid">Code incorrect. Vérifiez le SMS et réessayez.</string>
+    <string name="error_otp_expired">Ce code a expiré. Demandez-en un nouveau.</string>
+    <string name="error_otp_too_many_attempts">Trop d’essais avec ce code. Demandez-en un nouveau.</string>
+    <string name="error_account_blocked">Ce compte est bloqué. Contactez le support.</string>
+    <string name="error_storage_failed">Impossible d’enregistrer la session sur cet appareil. Réessayez.</string>
+    <string name="error_unexpected">Une erreur inattendue est survenue. Réessayez.</string>
+    <string name="error_reference">Référence : %1$s</string>
 </resources>
