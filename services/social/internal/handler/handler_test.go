@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,6 +171,15 @@ func TestAuthAndInputErrors(t *testing.T) {
 	r = a.do("PUT", "/api/v1/users/"+user.String()+"/follow", &user, nil)
 	require.Equal(t, 400, r.Status)
 	require.Equal(t, "cannot_follow_self", r.Error.Code)
+
+	tooMany := strings.TrimSuffix(strings.Repeat(video.String()+",", 51), ",")
+	for _, ids := range []string{"", ",", "not-a-uuid", tooMany} {
+		r = a.do("GET", "/api/v1/videos/stats?ids="+ids, nil, nil)
+		require.Equal(t, 400, r.Status, ids)
+		require.Equal(t, "invalid_request", r.Error.Code)
+	}
+	r = a.do("GET", "/api/v1/videos/stats?ids="+video.String()+","+uuid.NewString(), nil, nil)
+	require.Equal(t, 200, r.Status)
 }
 
 func TestSocialFlowOverHTTP(t *testing.T) {

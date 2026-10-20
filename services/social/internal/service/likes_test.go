@@ -206,3 +206,28 @@ func TestListLikesPagesWithoutGapOrDuplicate(t *testing.T) {
 	_, err = svc.ListUserLikes(ctx, uuid.Must(uuid.NewV7()), "", 10)
 	requireCode(t, err, 404, "user_not_found")
 }
+
+func TestVideoStatsBatchKeepsOrderAndViewerLikes(t *testing.T) {
+	ctx := context.Background()
+	svc := newSvc(t)
+	liked, _ := seedVideo(t)
+	other, _ := seedVideo(t)
+	viewer := newUser(t)
+	_, err := svc.LikeVideo(ctx, viewer, liked)
+	require.NoError(t, err)
+	unknown := uuid.Must(uuid.NewV7())
+
+	got, err := svc.VideoStatsBatch(ctx, []uuid.UUID{other, unknown, liked, other}, &viewer)
+	require.NoError(t, err)
+	require.Len(t, got.Items, 2)
+	require.Equal(t, other.String(), got.Items[0].VideoID)
+	require.False(t, got.Items[0].LikedByMe)
+	require.Equal(t, liked.String(), got.Items[1].VideoID)
+	require.True(t, got.Items[1].LikedByMe)
+	require.Equal(t, int64(1), got.Items[1].Likes)
+
+	anonymous, err := svc.VideoStatsBatch(ctx, []uuid.UUID{liked}, nil)
+	require.NoError(t, err)
+	require.Len(t, anonymous.Items, 1)
+	require.False(t, anonymous.Items[0].LikedByMe)
+}

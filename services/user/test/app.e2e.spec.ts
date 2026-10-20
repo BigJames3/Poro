@@ -217,6 +217,37 @@ describe('user service HTTP API', () => {
     expect((await request(server).get('/api/v1/users/by-username/%20')).status).toBe(404);
   });
 
+  it('reads several public profiles in one call', async () => {
+    const first = await as();
+    const second = await as();
+    await request(server)
+      .patch('/api/v1/users/me')
+      .set('Authorization', first.auth)
+      .send({ username: 'awa.batch' });
+    await request(server)
+      .patch('/api/v1/users/me')
+      .set('Authorization', second.auth)
+      .send({ username: 'issa.batch' });
+
+    const res = await request(server)
+      .get('/api/v1/users')
+      .query({
+        ids: `${second.userId},${uuidv7()},${first.userId.toUpperCase()},${second.userId}`,
+      });
+    expect(res.status).toBe(200);
+    const items = (res.body as { data: { items: Record<string, unknown>[] } }).data.items;
+    expect(items.map((p) => p.username)).toEqual(['issa.batch', 'awa.batch']);
+    expect(items[0]).not.toHaveProperty('country_code');
+
+    const tooMany = Array.from({ length: 101 }, () => uuidv7()).join(',');
+    for (const ids of ['not-a-uuid', '', ',', tooMany]) {
+      const bad = await request(server).get('/api/v1/users').query({ ids });
+      expect(bad.status).toBe(400);
+      expect(bad.body.error.code).toBe('invalid_request');
+    }
+    expect((await request(server).get('/api/v1/users')).status).toBe(400);
+  });
+
   it('activates creators once and writes the event to the outbox', async () => {
     const { userId, auth } = await as();
     const early = await request(server).post('/api/v1/users/me/creator').set('Authorization', auth);

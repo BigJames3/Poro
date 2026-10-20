@@ -18,6 +18,11 @@ type VideoStats struct {
 	LikedByMe bool   `json:"liked_by_me"`
 }
 
+// VideoStatsList holds the stats of several videos.
+type VideoStatsList struct {
+	Items []VideoStats `json:"items"`
+}
+
 // UserStats are the public counters of an account.
 type UserStats struct {
 	UserID       string `json:"user_id"`

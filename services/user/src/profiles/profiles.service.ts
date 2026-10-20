@@ -16,6 +16,7 @@ import {
   AvatarContentType,
   AvatarUploadView,
   MyProfileView,
+  PublicProfileListView,
   PublicProfileView,
   UpdateProfileDto,
   UsernameAvailabilityView,
@@ -25,6 +26,8 @@ import {
 import { normalizeUsername, usernameProblem } from './username';
 
 export const DISPLAY_NAME_MAX = 50;
+export const PROFILES_BATCH_MAX = 100;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export const BIO_MAX = 160;
 const BIO_MAX_LINES = 5;
 // Control characters, bidi overrides and zero-width characters are used to spoof names.
@@ -149,6 +152,35 @@ export class ProfilesService {
       throw new ApiError(404, 'profile_not_found', 'profile not found');
     }
     return toPublicView(profile, (key) => this.avatars.publicUrl(key));
+  }
+
+  /**
+   * Public profiles of several accounts in one call, so a list of comments or
+   * followers costs one request instead of one per author. Unknown and deleted
+   * accounts are left out; the order follows the request.
+   */
+  async byIds(raw: string): Promise<PublicProfileListView> {
+    const ids = [...new Set(raw.split(',').map((id) => id.trim().toLowerCase()))].filter(
+      (id) => id !== '',
+    );
+    if (ids.length === 0 || ids.length > PROFILES_BATCH_MAX || !ids.every((id) => UUID.test(id))) {
+      throw new ApiError(
+        400,
+        'invalid_request',
+        `ids must be 1 to ${PROFILES_BATCH_MAX} comma-separated user ids`,
+      );
+    }
+    const found = await this.prisma.profile.findMany({
+      where: { userId: { in: ids }, deletedAt: null },
+    });
+    const byId = new Map(found.map((p) => [p.userId, p]));
+    const avatarUrl = (key: string) => this.avatars.publicUrl(key);
+    return {
+      items: ids.flatMap((id) => {
+        const profile = byId.get(id);
+        return profile ? [toPublicView(profile, avatarUrl)] : [];
+      }),
+    };
   }
 
   async createAvatarUpload(

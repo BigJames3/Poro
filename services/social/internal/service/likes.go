@@ -87,6 +87,36 @@ func (s *Social) VideoStats(ctx context.Context, videoID uuid.UUID, viewer *uuid
 	return out, nil
 }
 
+// VideoStatsBatchMax caps the ids of one VideoStatsBatch call.
+const VideoStatsBatchMax = 50
+
+// VideoStatsBatch returns the stats of several videos in one call, in the
+// order asked, so a feed page costs one request instead of one per video.
+// Videos that are not ready (unknown, deleted, removed) are left out.
+func (s *Social) VideoStatsBatch(ctx context.Context, ids []uuid.UUID, viewer *uuid.UUID) (*dto.VideoStatsList, error) {
+	seen := make(map[uuid.UUID]bool, len(ids))
+	unique := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			unique = append(unique, id)
+		}
+	}
+	found, err := repository.ReadyVideoStats(ctx, s.pool, unique, viewer)
+	if err != nil {
+		return nil, errInternal.WithCause(err)
+	}
+	out := &dto.VideoStatsList{Items: make([]dto.VideoStats, 0, len(found))}
+	for _, id := range unique {
+		if r, ok := found[id]; ok {
+			out.Items = append(out.Items, dto.VideoStats{
+				VideoID: id.String(), Likes: r.Likes, Comments: r.Comments, Shares: r.Shares, LikedByMe: r.LikedByViewer,
+			})
+		}
+	}
+	return out, nil
+}
+
 // ListVideoLikes lists who likes a ready video, newest first.
 func (s *Social) ListVideoLikes(ctx context.Context, videoID uuid.UUID, rawCursor string, limit int) (*dto.Page[dto.VideoLike], error) {
 	after, err := decodeCursor(rawCursor)

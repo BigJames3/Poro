@@ -17,10 +17,12 @@ import type { AuthUser } from '../common/request';
 import {
   AvatarUploadDto,
   ConfirmAvatarDto,
+  ProfilesBatchQueryDto,
   UpdateProfileDto,
   UsernameQueryDto,
   type AvatarUploadView,
   type MyProfileView,
+  type PublicProfileListView,
   type PublicProfileView,
   type UsernameAvailabilityView,
 } from './profile.dto';
@@ -29,6 +31,12 @@ import { ProfilesService } from './profiles.service';
 @Controller('api/v1/users')
 export class ProfilesController {
   constructor(private readonly profiles: ProfilesService) {}
+
+  @Public()
+  @Get()
+  byIds(@Query() query: ProfilesBatchQueryDto): Promise<PublicProfileListView> {
+    return this.profiles.byIds(query.ids);
+  }
 
   @Get('me')
   me(@CurrentUser() user: AuthUser): Promise<MyProfileView> {

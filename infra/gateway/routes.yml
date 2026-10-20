@@ -43,10 +43,11 @@ http:
       entryPoints: [web]
       rule: "Path(`/api/v1/videos`) || PathPrefix(`/api/v1/videos/`)"
       service: video
-    # Reactions to a video belong to social, before the video prefix.
+    # Reactions to a video, and the stats of several videos, belong to social,
+    # before the video prefix.
     social-videos:
       entryPoints: [web]
-      rule: "PathRegexp(`^/api/v1/videos/[^/]+/(like|likes|stats|comments|shares)$`)"
+      rule: "Path(`/api/v1/videos/stats`) || PathRegexp(`^/api/v1/videos/[^/]+/(like|likes|stats|comments|shares)$`)"
       service: social
       priority: 1000
     social-comments:
