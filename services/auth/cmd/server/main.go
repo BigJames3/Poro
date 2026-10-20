@@ -144,10 +144,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init account purge: %w", err)
 	}
-	limiter, err := middleware.NewRedisStorage(cfg)
-	if err != nil {
-		return fmt.Errorf("init rate limiter: %w", err)
-	}
+	limiter := middleware.NewLimiter(rdb)
 
 	creators, err := kafka.NewConsumer(kafka.ConsumerConfig{
 		Brokers: cfg.KafkaBrokers,
@@ -179,10 +176,11 @@ func run() error {
 			"redis":      func(ctx context.Context) error { return rdb.Ping(ctx).Err() },
 			"revocation": registry.Ping,
 		}),
-		Metrics: m.Handler(),
-		JWKS:    handler.NewJWKSHandler(tokens),
-		Tokens:  tokens,
-		Limiter: limiter,
+		Metrics:  m.Handler(),
+		JWKS:     handler.NewJWKSHandler(tokens),
+		Tokens:   tokens,
+		Accounts: users,
+		Limiter:  limiter,
 	})
 
 	var consumers sync.WaitGroup

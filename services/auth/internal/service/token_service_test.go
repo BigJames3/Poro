@@ -87,8 +87,29 @@ func TestTokenServiceRejectsForeignAndForgedTokens(t *testing.T) {
 		return jwt.MapClaims{
 			"sub": mustID(t).String(), "sid": mustID(t).String(), "jti": "x",
 			"iss": TokenIssuer, "aud": TokenAudience, "exp": time.Now().Add(time.Minute).Unix(),
+			"iat": time.Now().Unix(),
 		}
 	}
+
+	futureIssued := base()
+	futureIssued["iat"] = time.Now().Add(time.Hour).Unix()
+	_, err = svc.ValidateAccessToken(forge(futureIssued, jwt.SigningMethodRS256, key))
+	require.ErrorIs(t, err, ErrInvalidToken, "an iat in the future is rejected")
+
+	noIssued := base()
+	delete(noIssued, "iat")
+	_, err = svc.ValidateAccessToken(forge(noIssued, jwt.SigningMethodRS256, key))
+	require.ErrorIs(t, err, ErrInvalidToken, "a token without iat is rejected")
+
+	futureNotBefore := base()
+	futureNotBefore["nbf"] = time.Now().Add(time.Hour).Unix()
+	_, err = svc.ValidateAccessToken(forge(futureNotBefore, jwt.SigningMethodRS256, key))
+	require.ErrorIs(t, err, ErrInvalidToken, "a token not yet valid is rejected")
+
+	skewed := base()
+	skewed["iat"] = time.Now().Add(10 * time.Second).Unix()
+	_, err = svc.ValidateAccessToken(forge(skewed, jwt.SigningMethodRS256, key))
+	require.NoError(t, err, "a small clock skew is tolerated")
 
 	wrongAud := base()
 	wrongAud["aud"] = "another-api"

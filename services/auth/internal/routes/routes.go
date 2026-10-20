@@ -12,16 +12,17 @@ import (
 )
 
 // Dependencies are the handlers and middleware the router needs.
-// A nil Limiter keeps rate-limit counters in process memory.
+// The Limiter fails closed: with Redis down the limited routes answer 503.
 type Dependencies struct {
-	Auth    *handler.AuthHandler
-	Account *handler.AccountHandler
-	Email   *handler.EmailHandler
-	Health  *health.Handler
-	Metrics fiber.Handler
-	JWKS    *handler.JWKSHandler
-	Tokens  service.TokenService
-	Limiter fiber.Storage
+	Auth     *handler.AuthHandler
+	Account  *handler.AccountHandler
+	Email    *handler.EmailHandler
+	Health   *health.Handler
+	Metrics  fiber.Handler
+	JWKS     *handler.JWKSHandler
+	Tokens   service.TokenService
+	Accounts middleware.AccountLookup
+	Limiter  *middleware.Limiter
 }
 
 // Register mounts the probes, metrics, the JWKS document and the /api/v1/auth routes.
@@ -41,7 +42,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	auth.Post("/email/password/forgot", middleware.LoginLimit(deps.Limiter), deps.Email.ForgotPassword)
 	auth.Post("/email/password/reset", middleware.LoginLimit(deps.Limiter), deps.Email.ResetPassword)
 
-	protected := auth.Group("", middleware.NewAuth(deps.Tokens))
+	protected := auth.Group("", middleware.NewAuth(deps.Tokens, deps.Accounts))
 	protected.Post("/logout", deps.Auth.Logout)
 	protected.Get("/me", deps.Auth.Me)
 	protected.Get("/sessions", deps.Account.Sessions)
