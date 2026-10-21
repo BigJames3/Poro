@@ -2,6 +2,8 @@ package com.poro.app.data.notification
 
 import com.poro.app.core.network.ApiEnvelope
 import com.poro.app.core.network.PageDto
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import retrofit2.Response
@@ -71,13 +73,17 @@ data class ReadReceipt(val id: String = "", @SerialName("read_at") val readAt: S
 @Serializable
 data class ReadAll(val updated: Int = 0)
 
-/** Tout est activé par défaut ; `orders: false` coupe seulement le push des commandes. */
+/**
+ * Tout est activé par défaut ; `orders: false` coupe seulement le push des commandes. Envoyé en
+ * PATCH : chaque champ est encodé, même à sa valeur par défaut, sinon réactiver ne changerait rien.
+ */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class PreferencesDto(
-    @SerialName("push_enabled") val pushEnabled: Boolean = true,
-    val likes: Boolean = true,
-    val comments: Boolean = true,
-    val follows: Boolean = true,
-    @SerialName("video_ready") val videoReady: Boolean = true,
-    val orders: Boolean = true,
+    @EncodeDefault @SerialName("push_enabled") val pushEnabled: Boolean = true,
+    @EncodeDefault val likes: Boolean = true,
+    @EncodeDefault val comments: Boolean = true,
+    @EncodeDefault val follows: Boolean = true,
+    @EncodeDefault @SerialName("video_ready") val videoReady: Boolean = true,
+    @EncodeDefault val orders: Boolean = true,
 )
