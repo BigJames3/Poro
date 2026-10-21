@@ -155,6 +155,76 @@ class AuthRepositoryTest {
         assertNull(store.current())
     }
 
+    @Test
+    fun `register sends the account fields and saves the session`() = runTest {
+        server.enqueue(json(201, SIGNED_IN))
+        val store = InMemoryTokenStore()
+
+        val result = repository(store).register("awa@poro.africa", "s3cret-pass", "Awa Koné")
+
+        assertTrue(result is ApiResult.Success)
+        assertEquals(SessionTokens("access-1", "refresh-1"), store.current())
+        val request = server.takeRequest()
+        assertEquals("/api/v1/auth/email/register", request.path)
+        assertEquals(
+            """{"email":"awa@poro.africa","password":"s3cret-pass","full_name":"Awa Koné","device_name":"Tecno Spark 20"}""",
+            request.body.readUtf8(),
+        )
+    }
+
+    @Test
+    fun `login saves the session, wrong credentials and lockouts do not`() = runTest {
+        server.enqueue(error(401, ApiErrorCodes.INVALID_CREDENTIALS))
+        server.enqueue(error(429, ApiErrorCodes.LOGIN_THROTTLED).setHeader("Retry-After", "120"))
+        server.enqueue(json(200, SIGNED_IN))
+        val store = InMemoryTokenStore()
+        val repo = repository(store)
+
+        assertEquals(ApiErrorCodes.INVALID_CREDENTIALS, (repo.login("awa@poro.africa", "bad") as ApiResult.Failure).code)
+        val locked = repo.login("awa@poro.africa", "bad") as ApiResult.Failure
+        assertEquals(ApiErrorCodes.LOGIN_THROTTLED, locked.code)
+        assertEquals(120L, locked.retryAfterSeconds)
+        assertNull(store.current())
+
+        assertTrue(repo.login("awa@poro.africa", "good") is ApiResult.Success)
+        assertEquals(SessionTokens("access-1", "refresh-1"), store.current())
+        assertEquals("/api/v1/auth/email/login", server.takeRequest().path)
+    }
+
+    @Test
+    fun `email verification is requested and confirmed with the session token`() = runTest {
+        server.enqueue(json(202, """{"data":{"expires_in":900},"error":null,"meta":{}}"""))
+        server.enqueue(json(200, """{"data":{"id":"u1","email":"awa@poro.africa","email_verified":true},"error":null,"meta":{}}"""))
+        val repo = repository(InMemoryTokenStore(SessionTokens("access", "refresh")))
+
+        assertEquals(ApiResult.Success(CodeSent(expiresIn = 900)), repo.requestEmailVerification())
+        val confirmed = repo.confirmEmailVerification("123456") as ApiResult.Success
+
+        assertTrue(confirmed.data.emailVerified)
+        assertEquals("/api/v1/auth/email/verification/request", server.takeRequest().path)
+        val confirm = server.takeRequest()
+        assertEquals("/api/v1/auth/email/verification/confirm", confirm.path)
+        assertEquals("""{"code":"123456"}""", confirm.body.readUtf8())
+    }
+
+    @Test
+    fun `password reset accepts 204 and reports a rejected code`() = runTest {
+        server.enqueue(json(202, """{"data":{"expires_in":900},"error":null,"meta":{}}"""))
+        server.enqueue(error(422, ApiErrorCodes.CODE_INVALID))
+        server.enqueue(MockResponse().setResponseCode(204))
+        val repo = repository(InMemoryTokenStore())
+
+        assertTrue(repo.forgotPassword("awa@poro.africa") is ApiResult.Success)
+        assertEquals(ApiErrorCodes.CODE_INVALID, (repo.resetPassword("awa@poro.africa", "000000", "new-pass-1") as ApiResult.Failure).code)
+        assertEquals(ApiResult.Success(Unit), repo.resetPassword("awa@poro.africa", "123456", "new-pass-1"))
+
+        assertEquals("""{"email":"awa@poro.africa"}""", server.takeRequest().body.readUtf8())
+        server.takeRequest()
+        val reset = server.takeRequest()
+        assertEquals("/api/v1/auth/email/password/reset", reset.path)
+        assertEquals("""{"email":"awa@poro.africa","code":"123456","new_password":"new-pass-1"}""", reset.body.readUtf8())
+    }
+
     private fun json(code: Int, body: String) =
         MockResponse().setResponseCode(code).setHeader("Content-Type", "application/json").setBody(body)
 

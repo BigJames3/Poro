@@ -46,6 +46,18 @@ object ApiErrorCodes {
     const val PHONE_UNREACHABLE = "phone_unreachable"
     const val SMS_UNAVAILABLE = "sms_unavailable"
 
+    // Connexion par email (docs/api/auth.openapi.yaml).
+    const val EMAIL_TAKEN = "email_taken"
+    const val INVALID_CREDENTIALS = "invalid_credentials"
+    const val LOGIN_THROTTLED = "login_throttled"
+    const val EMAIL_THROTTLED = "email_throttled"
+    const val EMAIL_UNAVAILABLE = "email_unavailable"
+    const val EMAIL_ALREADY_VERIFIED = "email_already_verified"
+    const val EMAIL_MISSING = "email_missing"
+    const val CODE_INVALID = "code_invalid"
+    const val CODE_EXPIRED = "code_expired"
+    const val CODE_TOO_MANY_ATTEMPTS = "code_too_many_attempts"
+
     /** Réponse d'erreur illisible (pas d'enveloppe) : propre au client. */
     const val UNEXPECTED_RESPONSE = "unexpected_response"
 

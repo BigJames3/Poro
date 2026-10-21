@@ -22,6 +22,27 @@ interface AuthApi {
 
     @GET("api/v1/auth/me")
     suspend fun me(): Response<ApiEnvelope<UserDto>>
+
+    @POST("api/v1/auth/email/register")
+    suspend fun emailRegister(@Body body: EmailRegister): Response<ApiEnvelope<SignedIn>>
+
+    @POST("api/v1/auth/email/login")
+    suspend fun emailLogin(@Body body: EmailLogin): Response<ApiEnvelope<SignedIn>>
+
+    /** Bearer : code de vérification envoyé à l'adresse du compte connecté. */
+    @POST("api/v1/auth/email/verification/request")
+    suspend fun requestEmailVerification(): Response<ApiEnvelope<CodeSent>>
+
+    @POST("api/v1/auth/email/verification/confirm")
+    suspend fun confirmEmailVerification(@Body body: CodeConfirm): Response<ApiEnvelope<UserDto>>
+
+    /** Toujours 202, que l'adresse ait un compte ou non. */
+    @POST("api/v1/auth/email/password/forgot")
+    suspend fun forgotPassword(@Body body: PasswordForgot): Response<ApiEnvelope<CodeSent>>
+
+    /** 204 sans corps ; déconnecte tous les appareils du compte. */
+    @POST("api/v1/auth/email/password/reset")
+    suspend fun resetPassword(@Body body: PasswordReset): Response<ApiEnvelope<Unit>>
 }
 
 /**
@@ -45,6 +66,34 @@ data class OtpVerify(
     val code: String,
     /** Affiché dans la liste des sessions (60 caractères au plus). */
     @SerialName("device_name") val deviceName: String? = null,
+)
+
+@Serializable
+data class EmailRegister(
+    val email: String,
+    val password: String,
+    @SerialName("full_name") val fullName: String,
+    @SerialName("device_name") val deviceName: String? = null,
+)
+
+@Serializable
+data class EmailLogin(
+    val email: String,
+    val password: String,
+    @SerialName("device_name") val deviceName: String? = null,
+)
+
+@Serializable
+data class CodeConfirm(val code: String)
+
+@Serializable
+data class PasswordForgot(val email: String)
+
+@Serializable
+data class PasswordReset(
+    val email: String,
+    val code: String,
+    @SerialName("new_password") val newPassword: String,
 )
 
 @Serializable
