@@ -56,7 +56,12 @@ class NetworkModule(
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(120, TimeUnit.SECONDS)
-        .apply { if (debug) addInterceptor(LoopbackRewriteInterceptor(baseUrl.host)) }
+        .apply {
+            if (debug) {
+                addInterceptor(LoopbackRewriteInterceptor(baseUrl.host))
+                addInterceptor(MediaLoggingInterceptor())
+            }
+        }
         .build()
 
     val retrofit: Retrofit = buildRetrofit(baseUrl, apiClient)

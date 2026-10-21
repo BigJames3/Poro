@@ -316,6 +316,7 @@
     <string name="shop_status_closed">Fermée : invisible des acheteurs</string>
     <string name="shop_status_suspended">Suspendue par la modération</string>
     <string name="my_shop_title">Ma boutique</string>
+    <string name="shop_saved">Boutique enregistrée.</string>
     <string name="my_shop_open">Ouvrir ma boutique</string>
     <string name="my_shop_open_intro">Ouvrez votre boutique pour vendre vos produits aux spectateurs de vos vidéos.</string>
     <string name="my_shop_open_action">Ouvrir la boutique</string>

@@ -82,7 +82,7 @@ fun NavGraphBuilder.shopGraph(nav: AppNav) {
     composable<CartRoute> {
         val vm = poroViewModel { CartViewModel(container.orderRepository) }
         val state by vm.state.collectAsStateWithLifecycle()
-        // Retour de la commande : le panier a été vidé, ou des prix ont changé.
+        // À l'affichage et au retour de la commande (panier vidé, prix changés).
         LaunchedEffect(Unit) { vm.load() }
         CartScreen(
             state = state,
@@ -151,6 +151,11 @@ fun NavGraphBuilder.shopGraph(nav: AppNav) {
         val state by vm.state.collectAsStateWithLifecycle()
         LaunchedEffect(Unit) { if (state.loading) vm.load() }
         ConsumeResult(entry, RESULT_PRODUCTS_CHANGED) { vm.loadProducts(reset = true) }
+        CollectEvents(vm.events) { event ->
+            when (event) {
+                MyShopEvent.Saved -> nav.showMessage(R.string.shop_saved)
+            }
+        }
         MyShopScreen(
             state = state,
             onBack = nav::back,

@@ -32,12 +32,17 @@ class CartViewModel(private val orders: OrderRepository) : ViewModel() {
     private val _state = MutableStateFlow(CartUiState())
     val state: StateFlow<CartUiState> = _state.asStateFlow()
 
-    init {
-        load()
-    }
+    private var loading = false
 
+    /** Chargé par l'écran à chaque affichage ; un chargement en cours n'est pas doublé. */
     fun load() {
-        viewModelScope.launch { _state.update { it.copy(cart = orders.cart().toLoadable()) } }
+        if (loading) return
+        loading = true
+        viewModelScope.launch {
+            val cart = orders.cart().toLoadable()
+            loading = false
+            _state.update { it.copy(cart = cart) }
+        }
     }
 
     fun setQuantity(variantId: String, quantity: Int) {

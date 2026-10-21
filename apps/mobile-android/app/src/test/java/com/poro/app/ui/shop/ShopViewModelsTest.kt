@@ -70,8 +70,11 @@ class ShopViewModelsTest {
             ),
         )
         val vm = CartViewModel(orders)
+        vm.load()
+        vm.load()
         runCurrent()
         assertFalse(vm.state.value.canCheckout)
+        assertEquals("a load in progress is not repeated", 1, orders.calls.count { it == "cart" })
 
         vm.setQuantity("v1", 0)
         runCurrent()
@@ -145,6 +148,19 @@ class ShopViewModelsTest {
 
         assertEquals(R.string.error_image_invalid, vm.state.value.error?.text)
         assertFalse(shops.calls.any { it.startsWith("uploadLogo") })
+    }
+
+    @Test
+    fun `saving the shop details confirms it`() = runTest {
+        val vm = MyShopViewModel(shops, FakeMediaReader())
+        vm.load()
+        runCurrent()
+
+        vm.onEditName("Kofi Store")
+        vm.saveDetails()
+
+        assertEquals(MyShopEvent.Saved, vm.events.first())
+        assertTrue("updateMyShop:Kofi Store" in shops.calls)
     }
 
     @Test

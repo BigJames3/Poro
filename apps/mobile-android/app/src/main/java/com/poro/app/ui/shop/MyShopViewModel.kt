@@ -12,9 +12,12 @@ import com.poro.app.data.shop.ShopRepository
 import com.poro.app.ui.auth.ErrorMessage
 import com.poro.app.ui.auth.toErrorMessage
 import java.io.IOException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -46,6 +49,11 @@ data class MyShopUiState(
     val error: ErrorMessage? = null,
 )
 
+sealed interface MyShopEvent {
+    /** Nom et description enregistrés. */
+    data object Saved : MyShopEvent
+}
+
 /** Sa boutique : ouverture, nom et description, fermeture, logo, et liste de ses produits. */
 class MyShopViewModel(
     private val shops: ShopRepository,
@@ -54,6 +62,9 @@ class MyShopViewModel(
 
     private val _state = MutableStateFlow(MyShopUiState())
     val state: StateFlow<MyShopUiState> = _state.asStateFlow()
+
+    private val _events = Channel<MyShopEvent>(Channel.BUFFERED)
+    val events: Flow<MyShopEvent> = _events.receiveAsFlow()
 
     fun load() {
         viewModelScope.launch {
@@ -98,7 +109,7 @@ class MyShopViewModel(
     fun saveDetails() {
         val current = _state.value
         if (current.editName.isBlank()) return
-        act { shops.updateMyShop(current.editName, current.editDescription) }
+        act(onSuccess = { _events.send(MyShopEvent.Saved) }) { shops.updateMyShop(current.editName, current.editDescription) }
     }
 
     /** Fermée, la boutique disparaît du catalogue ; rouverte, elle y revient. */
@@ -121,13 +132,14 @@ class MyShopViewModel(
         }
     }
 
-    private fun act(call: suspend () -> ApiResult<ShopDto>) {
+    private fun act(onSuccess: suspend () -> Unit = {}, call: suspend () -> ApiResult<ShopDto>) {
         if (_state.value.working) return
         _state.update { it.copy(working = true, error = null) }
         viewModelScope.launch {
             val result = call()
             if (result is ApiResult.Success) applyShop(result.data)
             _state.update { it.copy(working = false, error = result.toErrorMessage()) }
+            if (result is ApiResult.Success) onSuccess()
         }
     }
 
