@@ -64,6 +64,14 @@ object ApiErrorCodes {
     const val FORBIDDEN = "forbidden"
     const val CONFLICT = "conflict"
     const val INVALID_CURSOR = "invalid_cursor"
+
+    // Interactions (docs/api/social.openapi.yaml).
+    const val VIDEO_NOT_FOUND = "video_not_found"
+    const val COMMENT_NOT_FOUND = "comment_not_found"
+    const val USER_NOT_FOUND = "user_not_found"
+    const val CANNOT_FOLLOW_SELF = "cannot_follow_self"
+    const val COMMENT_INVALID = "comment_invalid"
+    const val COMMENT_EDIT_WINDOW_CLOSED = "comment_edit_window_closed"
     const val USERNAME_TAKEN = "username_taken"
     const val USERNAME_INVALID = "username_invalid"
     const val USERNAME_RESERVED = "username_reserved"

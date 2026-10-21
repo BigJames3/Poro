@@ -20,6 +20,10 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Base des liens de partage (ex. https://poro.africa) : vide tant que le site et les liens
+        // d'application n'existent pas ; le partage n'envoie alors que le titre.
+        buildConfigField("String", "SHARE_BASE_URL", "\"\"")
     }
 
     buildTypes {

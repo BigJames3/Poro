@@ -76,10 +76,13 @@ fun NavDestination.isSignInScreen(): Boolean =
     hasRoute<PhoneRoute>() || hasRoute<OtpRoute>() || hasRoute<EmailLoginRoute>() || hasRoute<EmailRegisterRoute>() ||
         hasRoute<ForgotPasswordRoute>() || hasRoute<ResetPasswordRoute>()
 
-/** ViewModel d'une destination, créé avec ses dépendances (injection manuelle). */
+/**
+ * ViewModel d'une destination, créé avec ses dépendances (injection manuelle). [key] distingue
+ * plusieurs instances du même type sur un écran (les commentaires de chaque vidéo du fil).
+ */
 @Composable
-inline fun <reified VM : ViewModel> poroViewModel(noinline create: CreationExtras.() -> VM): VM =
-    viewModel(factory = viewModelFactory { initializer(create) })
+inline fun <reified VM : ViewModel> poroViewModel(key: String? = null, noinline create: CreationExtras.() -> VM): VM =
+    viewModel(key = key, factory = viewModelFactory { initializer(create) })
 
 /** Événements ponctuels d'un ViewModel (navigation, messages), reçus tant que l'écran est affiché. */
 @Composable

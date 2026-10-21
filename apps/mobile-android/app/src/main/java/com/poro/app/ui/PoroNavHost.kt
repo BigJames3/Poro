@@ -38,8 +38,12 @@ import com.poro.app.AppContainer
 import com.poro.app.R
 import com.poro.app.core.security.SessionState
 import com.poro.app.ui.auth.authGraph
+import com.poro.app.data.social.VideoStatsDto
 import com.poro.app.ui.feed.feedGraph
 import com.poro.app.ui.profile.profileGraph
+import com.poro.app.ui.social.MyFollowCounts
+import com.poro.app.ui.social.SocialVideoActions
+import com.poro.app.ui.social.socialGraph
 
 /** Onglets de la barre du bas, visibles sur leurs propres écrans seulement. */
 enum class TopLevelTab(
@@ -119,8 +123,16 @@ private fun PoroNavGraph(
     ) { padding ->
         NavHost(navController = navController, startDestination = start, modifier = Modifier.padding(padding)) {
             authGraph(nav)
-            feedGraph(nav, onOpenAuthor = {})
-            profileGraph(nav)
+            feedGraph(
+                nav,
+                onOpenAuthor = { userId, username -> nav.controller.navigate(PublicProfileRoute(userId, username)) },
+                feedActions = { item ->
+                    SocialVideoActions(nav, item.videoId, item.title, VideoStatsDto(item.videoId, item.stats.likes, item.stats.comments, item.stats.shares))
+                },
+                videoActions = { video -> SocialVideoActions(nav, video.id, video.title, VideoStatsDto(video.id)) },
+            )
+            socialGraph(nav)
+            profileGraph(nav, profileExtra = { me -> MyFollowCounts(nav, me.profile.userId) })
         }
     }
 }

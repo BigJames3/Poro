@@ -32,6 +32,7 @@ fun VideoScreen(
     player: VideoPlayer,
     onBack: () -> Unit,
     onRetry: () -> Unit,
+    onOpenAuthor: (userId: String) -> Unit,
     actions: @Composable (VideoDto) -> Unit = {},
 ) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -42,7 +43,7 @@ fun VideoScreen(
                     item = video.asFeedItem(),
                     player = player,
                     active = true,
-                    onOpenAuthor = {},
+                    onOpenAuthor = { onOpenAuthor(video.userId) },
                     actions = { actions(video) },
                     description = video.description,
                 )

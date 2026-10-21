@@ -42,6 +42,10 @@ data class EmailVerifyRoute(val codeAlreadySent: Boolean = true)
 @Serializable
 data class VideoRoute(val videoId: String)
 
+/** Profil d'un autre compte ; [username] null si l'auteur n'en a pas encore (profil réduit). */
+@Serializable
+data class PublicProfileRoute(val userId: String, val username: String? = null)
+
 @Serializable
 data object ProfileRoute
 

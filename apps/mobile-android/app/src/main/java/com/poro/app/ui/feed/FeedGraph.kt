@@ -20,7 +20,7 @@ import com.poro.app.ui.poroViewModel
  */
 fun NavGraphBuilder.feedGraph(
     nav: AppNav,
-    onOpenAuthor: (FeedItem) -> Unit,
+    onOpenAuthor: (userId: String, username: String?) -> Unit,
     feedActions: @Composable (FeedItem) -> Unit = {},
     videoActions: @Composable (VideoDto) -> Unit = {},
     feedTopEnd: @Composable () -> Unit = {},
@@ -38,7 +38,7 @@ fun NavGraphBuilder.feedGraph(
             onSelect = { kind -> if (kind == state.kind) vm.refresh() else vm.select(kind) },
             onItemShown = vm::onItemShown,
             onRetry = { vm.refresh() },
-            onOpenAuthor = onOpenAuthor,
+            onOpenAuthor = { item -> onOpenAuthor(item.author.id, item.author.username) },
             actions = feedActions,
             topEnd = feedTopEnd,
         )
@@ -48,6 +48,13 @@ fun NavGraphBuilder.feedGraph(
         val vm = poroViewModel { VideoViewModel(route.videoId, container.videoRepository) }
         val state by vm.video.collectAsStateWithLifecycle()
         val player = rememberVideoPlayer(container.network.mediaClient)
-        VideoScreen(state = state, player = player, onBack = nav::back, onRetry = vm::load, actions = videoActions)
+        VideoScreen(
+            state = state,
+            player = player,
+            onBack = nav::back,
+            onRetry = vm::load,
+            onOpenAuthor = { userId -> onOpenAuthor(userId, null) },
+            actions = videoActions,
+        )
     }
 }

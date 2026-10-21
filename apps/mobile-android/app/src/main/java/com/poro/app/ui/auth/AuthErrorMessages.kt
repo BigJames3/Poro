@@ -48,6 +48,8 @@ fun ApiResult<*>.toErrorMessage(): ErrorMessage? = when (this) {
         ApiErrorCodes.AVATAR_TOO_LARGE -> ErrorMessage(R.string.error_avatar_too_large)
         ApiErrorCodes.AVATAR_INVALID -> ErrorMessage(R.string.error_avatar_invalid)
         ApiErrorCodes.UPLOAD_REJECTED -> ErrorMessage(R.string.error_upload_rejected)
+        ApiErrorCodes.VIDEO_NOT_FOUND, ApiErrorCodes.COMMENT_NOT_FOUND, ApiErrorCodes.USER_NOT_FOUND -> ErrorMessage(R.string.error_not_found)
+        ApiErrorCodes.COMMENT_INVALID -> ErrorMessage(R.string.error_comment_invalid)
         else -> ErrorMessage(R.string.error_unexpected, requestId)
     }
 }

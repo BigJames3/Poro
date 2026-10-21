@@ -99,6 +99,33 @@
     <string name="video_removed">Cette vidéo a été retirée par la modération.</string>
     <string name="video_ready">Vidéo prête.</string>
 
+    <!-- Interactions -->
+    <string name="action_like">J’aime, %1$s</string>
+    <string name="action_unlike">Retirer le j’aime, %1$s</string>
+    <string name="action_comments">Commentaires, %1$s</string>
+    <string name="action_share">Partager, %1$s</string>
+    <string name="action_follow">S’abonner</string>
+    <string name="action_unfollow">Abonné·e</string>
+    <string name="action_cancel">Annuler</string>
+    <string name="action_delete">Supprimer</string>
+    <string name="comments_title">Commentaires</string>
+    <string name="comments_empty">Aucun commentaire. Soyez le premier !</string>
+    <string name="comments_placeholder">Ajouter un commentaire…</string>
+    <string name="comments_send">Publier le commentaire</string>
+    <string name="comments_reply">Répondre</string>
+    <string name="comments_replying">Réponse à un commentaire</string>
+    <string name="comments_show_replies">Voir les réponses (%1$d)</string>
+    <string name="comments_hide_replies">Masquer les réponses</string>
+    <string name="comments_more_replies">Plus de réponses</string>
+    <string name="comments_you">Vous</string>
+    <string name="comments_edited">modifié</string>
+    <string name="comments_deleted">Commentaire supprimé</string>
+    <string name="share_title">Partager la vidéo</string>
+    <string name="share_whatsapp">WhatsApp</string>
+    <string name="share_other">Autres applications</string>
+    <string name="profile_followers">%1$s abonnés</string>
+    <string name="profile_following">%1$s abonnements</string>
+
     <!-- Profil -->
     <string name="profile_edit">Modifier le profil</string>
     <string name="profile_settings">Paramètres</string>
@@ -177,6 +204,7 @@
     <string name="error_avatar_too_large">Image trop lourde (5 Mo au plus).</string>
     <string name="error_avatar_invalid">Image illisible. Choisissez une photo JPEG, PNG ou WebP.</string>
     <string name="error_upload_rejected">L’envoi du fichier a été refusé. Réessayez.</string>
+    <string name="error_comment_invalid">Commentaire invalide : 1 000 caractères et 20 retours à la ligne au plus.</string>
     <string name="error_unexpected">Une erreur inattendue est survenue. Réessayez.</string>
     <string name="error_reference">Référence : %1$s</string>
 </resources>

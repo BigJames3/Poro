@@ -15,6 +15,8 @@ import com.poro.app.data.auth.DefaultAccountRepository
 import com.poro.app.data.auth.DefaultAuthRepository
 import com.poro.app.data.feed.DefaultFeedRepository
 import com.poro.app.data.feed.FeedRepository
+import com.poro.app.data.social.DefaultSocialRepository
+import com.poro.app.data.social.SocialRepository
 import com.poro.app.data.user.DefaultProfileRepository
 import com.poro.app.data.user.ProfileRepository
 import com.poro.app.data.video.DefaultVideoRepository
@@ -65,6 +67,8 @@ class AppContainer(context: Context) {
     val feedRepository: FeedRepository = DefaultFeedRepository(network.api())
 
     val videoRepository: VideoRepository = DefaultVideoRepository(network.api())
+
+    val socialRepository: SocialRepository = DefaultSocialRepository(network.api())
 }
 
 sealed interface SessionEvent {
