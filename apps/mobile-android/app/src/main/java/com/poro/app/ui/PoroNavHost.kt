@@ -32,15 +32,13 @@ import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.poro.app.AppContainer
 import com.poro.app.R
 import com.poro.app.core.security.SessionState
 import com.poro.app.ui.auth.authGraph
-import com.poro.app.ui.home.HomeScreen
-import com.poro.app.ui.home.HomeViewModel
+import com.poro.app.ui.feed.feedGraph
 import com.poro.app.ui.profile.profileGraph
 
 /** Onglets de la barre du bas, visibles sur leurs propres écrans seulement. */
@@ -121,12 +119,7 @@ private fun PoroNavGraph(
     ) { padding ->
         NavHost(navController = navController, startDestination = start, modifier = Modifier.padding(padding)) {
             authGraph(nav)
-            composable<HomeRoute> {
-                val vm = poroViewModel { HomeViewModel(container.network.baseClient, container.network.healthUrl, container.authRepository) }
-                val status by vm.status.collectAsStateWithLifecycle()
-                val signingOut by vm.signingOut.collectAsStateWithLifecycle()
-                HomeScreen(status = status, signingOut = signingOut, onRetry = vm::check, onLogout = vm::logout)
-            }
+            feedGraph(nav, onOpenAuthor = {})
             profileGraph(nav)
         }
     }

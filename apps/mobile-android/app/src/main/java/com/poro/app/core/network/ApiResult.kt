@@ -63,6 +63,7 @@ object ApiErrorCodes {
     const val NOT_FOUND = "not_found"
     const val FORBIDDEN = "forbidden"
     const val CONFLICT = "conflict"
+    const val INVALID_CURSOR = "invalid_cursor"
     const val USERNAME_TAKEN = "username_taken"
     const val USERNAME_INVALID = "username_invalid"
     const val USERNAME_RESERVED = "username_reserved"

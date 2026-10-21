@@ -14,8 +14,8 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 /**
  * Clients HTTP de l'application.
  *
- * - [baseClient] : X-Request-ID et délais, sans jeton ; sert au rafraîchissement et aux routes publiques
- *   comme /health. Il n'a pas d'authenticator, donc pas de récursion pendant un rafraîchissement.
+ * - [baseClient] : X-Request-ID et délais, sans jeton ; sert au rafraîchissement. Il n'a pas
+ *   d'authenticator, donc pas de récursion pendant un rafraîchissement.
  * - [apiClient] : ajoute le Bearer et rafraîchit la session sur un 401.
  * - [mediaClient] : stockage objet (lecture HLS, images, envoi sur URL présignée). Jamais de jeton :
  *   ces URL sont publiques ou signées, et un Bearer y fuiterait vers un tiers (CDN, S3).
@@ -65,7 +65,4 @@ class NetworkModule(
     inline fun <reified T : Any> api(): T = retrofit.create(T::class.java)
 
     val authApi: AuthApi = api()
-
-    /** Vérifie que la gateway répond (route publique `/health`). */
-    val healthUrl: HttpUrl = baseUrl.resolve("health")!!
 }

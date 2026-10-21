@@ -38,6 +38,10 @@ data object HomeRoute
 @Serializable
 data class EmailVerifyRoute(val codeAlreadySent: Boolean = true)
 
+/** Une vidéo ouverte seule (recherche, notification, profil). */
+@Serializable
+data class VideoRoute(val videoId: String)
+
 @Serializable
 data object ProfileRoute
 

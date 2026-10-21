@@ -13,8 +13,12 @@ import com.poro.app.data.auth.AccountRepository
 import com.poro.app.data.auth.AuthRepository
 import com.poro.app.data.auth.DefaultAccountRepository
 import com.poro.app.data.auth.DefaultAuthRepository
+import com.poro.app.data.feed.DefaultFeedRepository
+import com.poro.app.data.feed.FeedRepository
 import com.poro.app.data.user.DefaultProfileRepository
 import com.poro.app.data.user.ProfileRepository
+import com.poro.app.data.video.DefaultVideoRepository
+import com.poro.app.data.video.VideoRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -57,6 +61,10 @@ class AppContainer(context: Context) {
     val uploader = PresignedUploader(network.mediaClient)
 
     val profileRepository: ProfileRepository = DefaultProfileRepository(network.api(), uploader)
+
+    val feedRepository: FeedRepository = DefaultFeedRepository(network.api())
+
+    val videoRepository: VideoRepository = DefaultVideoRepository(network.api())
 }
 
 sealed interface SessionEvent {

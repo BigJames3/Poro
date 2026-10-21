@@ -4,10 +4,7 @@
     <string name="action_retry">Réessayer</string>
     <string name="code_field_description">Code de vérification à 6 chiffres</string>
 
-    <!-- Accueil provisoire -->
-    <string name="home_api_reachable">API joignable ✓</string>
-    <string name="home_api_unreachable">API injoignable : %1$s\nLa pile locale est-elle lancée (docker compose up) ?</string>
-    <string name="home_signed_in">Vous êtes connecté.</string>
+    <!-- Session -->
     <string name="action_logout">Se déconnecter</string>
     <string name="home_deletion_cancelled">Bon retour ! La suppression programmée de votre compte a été annulée.</string>
     <string name="session_expired">Votre session a expiré. Reconnectez-vous.</string>
@@ -88,6 +85,19 @@
     <string name="tab_shop">Boutique</string>
     <string name="tab_profile">Profil</string>
     <string name="member_fallback">Membre Poro</string>
+
+    <!-- Fil et vidéos -->
+    <string name="feed_for_you">Pour toi</string>
+    <string name="feed_following">Abonnements</string>
+    <string name="feed_trending">Tendances</string>
+    <string name="feed_empty">Aucune vidéo pour le moment. Revenez bientôt !</string>
+    <string name="feed_following_empty">Abonnez-vous à des créateurs pour voir leurs vidéos ici.</string>
+    <string name="feed_video_description">Vidéo : %1$s, par %2$s</string>
+    <string name="feed_play_pause">Lire ou mettre en pause</string>
+    <string name="video_processing">Vidéo en cours de traitement. Elle sera visible dans quelques minutes.</string>
+    <string name="video_failed">Le traitement de cette vidéo a échoué.</string>
+    <string name="video_removed">Cette vidéo a été retirée par la modération.</string>
+    <string name="video_ready">Vidéo prête.</string>
 
     <!-- Profil -->
     <string name="profile_edit">Modifier le profil</string>
