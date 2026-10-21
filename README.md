@@ -10,7 +10,8 @@ Plateforme sociale vidéo africaine avec marketplace intégrée.
 | `services/` | Services de l'API, détaillés ci-dessous |
 | `packages/shared-go` | HTTP, JWT/JWKS, santé, métriques, tracing, outbox/inbox, Kafka, catalogue d'événements |
 | `packages/contracts` | Schémas JSON des événements (`poro.{domaine}.{entité}.{action}`) |
-| `infra/` | Gateway Traefik ; Terraform, Helm, Kubernetes (à venir) |
+| `infra/` | Gateway Traefik, contrôle d'accès du stockage objet, sauvegardes, observabilité, isolement de FFmpeg ; Terraform, Helm, Kubernetes (à venir) |
+| `deploy/` | Livraison en staging avec retour automatique en arrière ([runbook](docs/runbooks/deploy.md)) |
 | `docs/` | Architecture, ADR, contrats d'API, runbooks |
 
 ## Services
@@ -39,6 +40,14 @@ Copy-Item .env.example .env
 docker compose up -d
 ```
 
+Chaque service exige `APP_ENV` (`dev`, `staging` ou `prod`) et ses secrets (mot de passe Postgres,
+clés S3) : aucune valeur par défaut dans le code, pour qu'un oubli ne lance jamais la production
+en mode dev. Compose les fournit ; pour lancer un service seul, copier son `.env.example`.
+
+Mise à jour d'un `.env` existant : le stockage objet exige un identifiant S3 par service
+(`S3_USER_*`, `S3_VIDEO_*`, `S3_SHOP_*`, voir `.env.example` et le
+[runbook](docs/runbooks/storage.md)).
+
 Services : Postgres (une base par service), Redis, SeaweedFS, Redpanda (topics + DLQ),
 les services de l'API et leurs relais outbox. ClickHouse/Qdrant :
 `docker compose --profile analytics up -d`.
@@ -54,4 +63,6 @@ unique de l'API ([`infra/gateway`](infra/gateway/README.md)). Les ports directs 
 - Contrats d'API (OpenAPI) et runbooks : liens dans le tableau [Services](#services)
 - [Runbook outbox / DLQ](docs/runbooks/outbox-relay.md)
 - [Gateway](infra/gateway/README.md), [runbook gateway](docs/runbooks/gateway.md)
+- Runbooks transverses : [stockage objet](docs/runbooks/storage.md), [sauvegardes](docs/runbooks/backup.md), [staging et rollback](docs/runbooks/deploy.md)
+- [Intégration Android](docs/api/ANDROID-INTEGRATION.md)
 - [Sécurité](SECURITY.md)

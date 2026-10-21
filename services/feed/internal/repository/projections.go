@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // Video is the projection of a ready video.
@@ -84,9 +85,11 @@ func ApproveVideo(ctx context.Context, db DBTX, videoID uuid.UUID) error {
 	return Rescore(ctx, db, videoID)
 }
 
-// AddFollow records a follow and bumps the author's follower count once.
+// AddFollow records a follow and bumps the author's follower count once. A
+// follow involving an erased account is never projected.
 func AddFollow(ctx context.Context, db DBTX, followerID, followingID uuid.UUID, at time.Time) error {
-	tag, err := db.Exec(ctx, `INSERT INTO follows (follower_id, following_id, created_at) VALUES ($1, $2, $3)
+	tag, err := db.Exec(ctx, `INSERT INTO follows (follower_id, following_id, created_at)
+		SELECT $1, $2, $3 WHERE NOT EXISTS (SELECT 1 FROM erased_users WHERE user_id IN ($1, $2))
 		ON CONFLICT DO NOTHING`, followerID, followingID, at)
 	if err != nil {
 		return fmt.Errorf("insert follow: %w", err)
@@ -134,10 +137,11 @@ func AddStats(ctx context.Context, db DBTX, videoID uuid.UUID, likes, comments, 
 	return Rescore(ctx, db, videoID)
 }
 
-// UpsertAuthor keeps the most recent profile snapshot of an author.
+// UpsertAuthor keeps the most recent profile snapshot of an author. An erased
+// account is never recreated by a late profile event.
 func UpsertAuthor(ctx context.Context, db DBTX, authorID uuid.UUID, username, displayName, avatarURL *string, at time.Time) error {
 	_, err := db.Exec(ctx, `INSERT INTO authors (author_id, username, display_name, avatar_url, updated_at)
-		VALUES ($1, $2, $3, $4, $5)
+		SELECT $1, $2, $3, $4, $5 WHERE NOT EXISTS (SELECT 1 FROM erased_users WHERE user_id = $1)
 		ON CONFLICT (author_id) DO UPDATE SET
 			username = EXCLUDED.username, display_name = EXCLUDED.display_name,
 			avatar_url = EXCLUDED.avatar_url, updated_at = EXCLUDED.updated_at
@@ -145,6 +149,42 @@ func UpsertAuthor(ctx context.Context, db DBTX, authorID uuid.UUID, username, di
 		authorID, username, displayName, avatarURL, at)
 	if err != nil {
 		return fmt.Errorf("upsert author: %w", err)
+	}
+	return nil
+}
+
+// EraseUser forgets an erased account (ADR-0018): its author profile, its
+// follows in both directions and its follower count. Follows go through
+// RemoveFollow so the counters of the accounts it followed drop once, and the
+// follow.deleted events social publishes later are no-ops. The id is recorded
+// in erased_users so no late event projects the account again. Its videos
+// leave through poro.video.deleted.
+func EraseUser(ctx context.Context, db DBTX, userID uuid.UUID, at time.Time) error {
+	if _, err := db.Exec(ctx, `INSERT INTO erased_users (user_id, erased_at) VALUES ($1, $2) ON CONFLICT DO NOTHING`, userID, at); err != nil {
+		return fmt.Errorf("record erased user: %w", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM authors WHERE author_id = $1`, userID); err != nil {
+		return fmt.Errorf("delete author: %w", err)
+	}
+	rows, err := db.Query(ctx, `SELECT follower_id, following_id FROM follows WHERE follower_id = $1 OR following_id = $1`, userID)
+	if err != nil {
+		return fmt.Errorf("list follows: %w", err)
+	}
+	follows, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) ([2]uuid.UUID, error) {
+		var f [2]uuid.UUID
+		err := r.Scan(&f[0], &f[1])
+		return f, err
+	})
+	if err != nil {
+		return fmt.Errorf("list follows: %w", err)
+	}
+	for _, f := range follows {
+		if err := RemoveFollow(ctx, db, f[0], f[1]); err != nil {
+			return err
+		}
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM author_followers WHERE author_id = $1`, userID); err != nil {
+		return fmt.Errorf("delete follower count: %w", err)
 	}
 	return nil
 }

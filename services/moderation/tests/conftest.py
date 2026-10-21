@@ -33,7 +33,7 @@ def run_alembic(database_url: str, *args: str) -> None:
     subprocess.run(  # noqa: S603 -- fixed command line.
         [sys.executable, "-m", "alembic", *args],
         cwd=ROOT,
-        env={**os.environ, "DATABASE_URL": database_url},
+        env={**os.environ, "APP_ENV": "dev", "DATABASE_URL": database_url},
         check=True,
         capture_output=True,
     )
@@ -52,7 +52,12 @@ def database_url() -> Iterator[str]:
 @pytest.fixture(scope="session")
 def config(database_url: str) -> Config:
     return load_config(
-        {"DATABASE_URL": database_url, "KAFKA_CONSUMER_ENABLED": "false", "LOG_LEVEL": "WARNING"}
+        {
+            "APP_ENV": "dev",
+            "DATABASE_URL": database_url,
+            "KAFKA_CONSUMER_ENABLED": "false",
+            "LOG_LEVEL": "WARNING",
+        }
     )
 
 

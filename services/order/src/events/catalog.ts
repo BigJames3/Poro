@@ -12,9 +12,10 @@ export const TYPE_ORDER_COMPLETED = 'poro.order.order.completed';
 export const TYPE_PAYMENT_SUCCEEDED = 'poro.payment.payment.succeeded';
 export const TYPE_PAYMENT_FAILED = 'poro.payment.payment.failed';
 export const TYPE_REFUND_SUCCEEDED = 'poro.payment.refund.succeeded';
+export const TYPE_AUTH_USER_DELETED = 'poro.auth.user.deleted';
 
 export type CancelReason =
-  'stock_rejected' | 'payment_timeout' | 'buyer_cancelled' | 'seller_cancelled';
+  'stock_rejected' | 'payment_timeout' | 'buyer_cancelled' | 'seller_cancelled' | 'account_deleted';
 
 /** Full snapshot of a shop: keep the latest updated_at. */
 export interface ShopUpdatedV1 {

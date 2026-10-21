@@ -12,6 +12,8 @@ export class MetricsService {
   readonly registry = new Registry();
   private readonly requests: Counter<'method' | 'route' | 'status'>;
   private readonly duration: Histogram<'method' | 'route'>;
+  /** Kafka records by consumer group, topic and outcome, as in shared-go/kafka. */
+  readonly kafkaRecords: Counter<'group' | 'topic' | 'outcome'>;
 
   constructor() {
     this.registry.setDefaultLabels({ service: SERVICE_NAME });
@@ -27,6 +29,12 @@ export class MetricsService {
       help: 'HTTP request latency by method and route template.',
       labelNames: ['method', 'route'],
       buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+      registers: [this.registry],
+    });
+    this.kafkaRecords = new Counter({
+      name: 'kafka_consumer_records_total',
+      help: 'Kafka records handled by consumer group, topic and outcome.',
+      labelNames: ['group', 'topic', 'outcome'],
       registers: [this.registry],
     });
   }

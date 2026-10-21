@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -51,22 +52,31 @@ func (s *Social) UnlikeVideo(ctx context.Context, user, videoID uuid.UUID) (*dto
 		if err != nil {
 			return err
 		}
-		removed, err := repository.DeleteLike(ctx, tx, user, videoID)
-		if err != nil || !removed {
-			return err
-		}
-		if err := repository.AddVideoCounters(ctx, tx, videoID, -1, 0, 0); err != nil {
-			return err
-		}
-		now := s.clock()
-		return emit(ctx, tx, events.TypeSocialLikeDeleted, videoID.String(), events.SocialLikeDeletedV1{
-			UserID: user.String(), VideoID: videoID.String(), VideoOwnerID: owner.String(), DeletedAt: now,
-		}, now)
+		return removeLike(ctx, tx, user, videoID, &owner, s.clock())
 	})
 	if err != nil {
 		return nil, err
 	}
 	return s.VideoStats(ctx, videoID, &user)
+}
+
+// removeLike deletes a like, updates the counter and publishes like.deleted,
+// whatever the status of the video. A missing like changes nothing. owner is
+// nil only for a video never projected, whose like has no consumer to tell.
+func removeLike(ctx context.Context, tx pgx.Tx, user, videoID uuid.UUID, owner *uuid.UUID, now time.Time) error {
+	removed, err := repository.DeleteLike(ctx, tx, user, videoID)
+	if err != nil || !removed {
+		return err
+	}
+	if err := repository.AddVideoCounters(ctx, tx, videoID, -1, 0, 0); err != nil {
+		return err
+	}
+	if owner == nil {
+		return nil
+	}
+	return emit(ctx, tx, events.TypeSocialLikeDeleted, videoID.String(), events.SocialLikeDeletedV1{
+		UserID: user.String(), VideoID: videoID.String(), VideoOwnerID: owner.String(), DeletedAt: now,
+	}, now)
 }
 
 // VideoStats returns the counters of a ready video. viewer may be nil.

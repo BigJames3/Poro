@@ -1,0 +1,30 @@
+# Alertmanager for PORO (PORO-009).
+#
+# Dev: alerts are visible at http://127.0.0.1:9093 and go nowhere else.
+# Staging and production: replace the `dev` receiver with the on-call channel.
+# The URL is a secret, read from a file mounted at runtime (never committed):
+#
+#   receivers:
+#     - name: oncall
+#       webhook_configs:
+#         - url_file: /run/secrets/alertmanager_webhook_url
+#           send_resolved: true
+route:
+  receiver: dev
+  group_by: [alertname, service]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="critical"]
+      receiver: dev
+      repeat_interval: 1h
+
+inhibit_rules:
+  # A service that is down also has no traffic: do not page twice.
+  - source_matchers: [alertname="ServiceDown"]
+    target_matchers: [severity="warning"]
+    equal: [service]
+
+receivers:
+  - name: dev

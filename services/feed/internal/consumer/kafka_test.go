@@ -28,7 +28,8 @@ import (
 
 // The E2E path of the feed: video.ready and follow.created published on a
 // real broker reach the projections through the real consumer group, then
-// the follower's feed shows the video and a like moves it into trending.
+// the follower's feed shows the video and a like moves it into trending. The
+// erasure group then forgets the follower.
 func TestEventsOverKafkaReachTheFeeds(t *testing.T) {
 	testdb.Available(t)
 	if testing.Short() {
@@ -49,7 +50,7 @@ func TestEventsOverKafkaReachTheFeeds(t *testing.T) {
 	require.NoError(t, err)
 	defer admin.Close()
 	var topics []string
-	for _, topic := range consumer.Topics {
+	for _, topic := range append(append([]string{}, consumer.Topics...), consumer.ErasureTopics...) {
 		topics = append(topics, topic, events.DLQTopic(topic))
 	}
 	resp, err := kadm.NewClient(admin).CreateTopics(ctx, 1, 1, nil, topics...)
@@ -63,8 +64,13 @@ func TestEventsOverKafkaReachTheFeeds(t *testing.T) {
 		consumer.NewProjector(testdb.Pool, zap.NewNop()), zap.NewNop())
 	require.NoError(t, err)
 	done := make(chan struct{})
+	eraser, err := kafka.NewConsumer(kafka.ConsumerConfig{Brokers: []string{broker}, Group: consumer.ErasureGroup, Topics: consumer.ErasureTopics},
+		consumer.NewEraser(testdb.Pool, zap.NewNop()), zap.NewNop())
+	require.NoError(t, err)
+	erased := make(chan struct{})
 	go func() { defer close(done); _ = c.Run(runCtx) }()
-	t.Cleanup(func() { stop(); <-done })
+	go func() { defer close(erased); _ = eraser.Run(runCtx) }()
+	t.Cleanup(func() { stop(); <-done; <-erased })
 
 	producer, err := kafka.NewProducer([]string{broker})
 	require.NoError(t, err)
@@ -118,4 +124,13 @@ func TestEventsOverKafkaReachTheFeeds(t *testing.T) {
 		}
 		return false
 	}, 60*time.Second, 250*time.Millisecond, "a like moves the video into trending")
+
+	// The erasure group forgets the fan's follows and lowers the author's count.
+	publish(events.TypeAuthUserDeleted, fan.String(), events.AuthUserDeletedV1{UserID: fan.String(), DeletedAt: now})
+	require.Eventually(t, func() bool {
+		var follows, count int64
+		err := testdb.Pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM follows WHERE follower_id = $1),
+			(SELECT followers_count FROM author_followers WHERE author_id = $2)`, fan, author).Scan(&follows, &count)
+		return err == nil && follows == 0 && count == 0
+	}, 60*time.Second, 250*time.Millisecond, "the erased account no longer follows anyone")
 }

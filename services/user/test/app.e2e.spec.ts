@@ -350,7 +350,7 @@ describe('user service HTTP API', () => {
       .send({ content_type: 'image/png' });
     expect(upload.status).toBe(201);
     const { upload_url, fields, upload_key, max_bytes } = upload.body.data;
-    expect(upload_url).toBe('http://localhost:9000/poro-avatars');
+    expect(upload_url).toBe('http://localhost:9000/poro-avatar-uploads');
     expect(upload_key).toMatch(new RegExp(`^avatars/uploads/${userId}/[0-9a-f-]{36}$`));
     expect(fields).toMatchObject({
       key: upload_key,
@@ -374,7 +374,12 @@ describe('user service HTTP API', () => {
       .set('Authorization', auth)
       .send({ upload_key });
     expect(set.status).toBe(200);
+    expect(s3.commandCalls(GetObjectCommand)[0].args[0].input).toMatchObject({
+      Bucket: 'poro-avatar-uploads',
+      Key: upload_key,
+    });
     const put = s3.commandCalls(PutObjectCommand)[0].args[0].input;
+    expect(put.Bucket).toBe('poro-avatars');
     expect(put.Key).toMatch(new RegExp(`^avatars/${userId}/[0-9a-f-]{36}\\.webp$`));
     expect(put.ContentType).toBe('image/webp');
     expect(await sharp(put.Body as Buffer).metadata()).toMatchObject({
@@ -386,8 +391,8 @@ describe('user service HTTP API', () => {
     expect((await profileSnapshots(userId)).map((d) => d.avatar_url)).toEqual([
       `https://cdn.poro.test/avatars/${put.Key}`,
     ]);
-    expect(s3.commandCalls(DeleteObjectCommand).map((c) => c.args[0].input.Key)).toEqual([
-      upload_key,
+    expect(s3.commandCalls(DeleteObjectCommand).map((c) => c.args[0].input)).toEqual([
+      { Bucket: 'poro-avatar-uploads', Key: upload_key },
     ]);
 
     s3.reset();
@@ -399,7 +404,9 @@ describe('user service HTTP API', () => {
       `https://cdn.poro.test/avatars/${put.Key}`,
       null,
     ]);
-    expect(s3.commandCalls(DeleteObjectCommand).map((c) => c.args[0].input.Key)).toEqual([put.Key]);
+    expect(s3.commandCalls(DeleteObjectCommand).map((c) => c.args[0].input)).toEqual([
+      { Bucket: 'poro-avatars', Key: put.Key },
+    ]);
   });
 
   it('rejects avatar uploads that are foreign, missing or not images', async () => {

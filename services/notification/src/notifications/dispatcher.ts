@@ -209,7 +209,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
     }
     this.consumer = new KafkaEventConsumer(
       this.config.kafkaBrokers,
-      { group: DISPATCHER_GROUP, topics: [...CONSUMED_TYPES] },
+      { group: DISPATCHER_GROUP, topics: [...CONSUMED_TYPES], records: this.metrics.kafkaRecords },
       (env) => this.handle(env),
     );
     this.consumer.start();
@@ -431,6 +431,19 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
     const order = orderParties(data);
     const paid = data.paid === true;
     const reason = data.reason;
+    if (reason === 'account_deleted') {
+      // The event does not say which party was erased: both are told, and
+      // write() skips the erased one. Neither is named.
+      const shop = await this.shopName(tx, order.shopId);
+      return [
+        orderDraft(order, 'buyer', 'order_cancelled', 'cancelled', null, () =>
+          messages.orderCancelledAccountDeleted(shop, paid),
+        ),
+        orderDraft(order, 'seller', 'order_cancelled', 'cancelled', null, () =>
+          messages.orderCancelledAccountDeletedSeller(),
+        ),
+      ];
+    }
     if (reason === 'buyer_cancelled') {
       return [
         orderDraft(order, 'seller', 'order_cancelled', 'cancelled', order.buyerId, (buyer) =>
@@ -441,7 +454,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
     const render = typeof reason === 'string' ? BUYER_CANCEL_MESSAGES[reason] : undefined;
     if (render === undefined) {
       throw new PermanentError(
-        'reason must be stock_rejected, payment_timeout, buyer_cancelled or seller_cancelled',
+        'reason must be stock_rejected, payment_timeout, buyer_cancelled, seller_cancelled or account_deleted',
       );
     }
     const shop = await this.shopName(tx, order.shopId);
@@ -471,6 +484,12 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
   /** Writes draft and returns the push to send, if any. */
   private async write(tx: Tx, draft: Draft): Promise<PendingPush | undefined> {
     if (draft.actorId === draft.userId) {
+      return undefined;
+    }
+    // An event that arrives after an account erasure (late, or replayed from
+    // the DLQ) must not write anything for or about that account again.
+    const parties = draft.actorId === null ? [draft.userId] : [draft.userId, draft.actorId];
+    if ((await tx.erasedUser.count({ where: { userId: { in: parties } } })) > 0) {
       return undefined;
     }
     const prefs =
@@ -596,16 +615,15 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
   }
 
   private async userCreated(tx: Tx, data: Data): Promise<void> {
-    // A profile snapshot may already be here: it is newer, keep it.
-    await tx.userProjection.createMany({
-      data: [
-        {
-          userId: uuidField(data, 'user_id'),
-          updatedAt: dateField(data, 'created_at'),
-        },
-      ],
-      skipDuplicates: true,
-    });
+    const userId = uuidField(data, 'user_id');
+    const updatedAt = dateField(data, 'created_at');
+    // A profile snapshot may already be here: it is newer, keep it. An erased
+    // account gets no projection back.
+    await tx.$executeRaw`
+      INSERT INTO user_projections (user_id, updated_at)
+      SELECT ${userId}::uuid, ${updatedAt}
+       WHERE NOT EXISTS (SELECT 1 FROM erased_users WHERE user_id = ${userId}::uuid)
+      ON CONFLICT (user_id) DO NOTHING`;
   }
 
   private async shopUpdated(tx: Tx, data: Data): Promise<void> {
@@ -631,7 +649,8 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
     const avatarUrl = optionalString(data, 'avatar_url', 2048);
     await tx.$executeRaw`
       INSERT INTO user_projections (user_id, username, display_name, avatar_url, updated_at)
-      VALUES (${userId}::uuid, ${username}, ${displayName}, ${avatarUrl}, ${updatedAt})
+      SELECT ${userId}::uuid, ${username}, ${displayName}, ${avatarUrl}, ${updatedAt}
+       WHERE NOT EXISTS (SELECT 1 FROM erased_users WHERE user_id = ${userId}::uuid)
       ON CONFLICT (user_id) DO UPDATE
         SET username = EXCLUDED.username,
             display_name = EXCLUDED.display_name,

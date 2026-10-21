@@ -1,4 +1,4 @@
-"""Application factory: wires the database, Redis, JWKS, the scanner and the routes."""
+"""Application factory: wires the database, Redis, JWKS, the consumers and the routes."""
 
 import logging
 from collections.abc import AsyncIterator
@@ -12,11 +12,15 @@ from moderation import SERVICE_NAME, SERVICE_VERSION
 from moderation.api import platform, routes
 from moderation.config import Config
 from moderation.db import create_engine, session_factory
+from moderation.erasure import GROUP as ERASURE_GROUP
+from moderation.erasure import TOPICS as ERASURE_TOPICS
+from moderation.erasure import Eraser
 from moderation.events.consumer import KafkaConsumer
 from moderation.http.errors import RequestIdMiddleware, install_error_handlers
 from moderation.http.jwks import JwksKeyStore, TokenVerifier
 from moderation.http.metrics import MetricsMiddleware
 from moderation.http.ratelimit import Limiter, MemoryLimiter, RedisLimiter
+from moderation.http.revocations import RedisRevocations
 from moderation.rules.engine import RuleEngine
 from moderation.scanner import GROUP, TOPICS, Scanner
 
@@ -38,23 +42,37 @@ def create_app(config: Config, http_client: httpx.AsyncClient | None = None) -> 
         app.state.sessions = session_factory(engine)
         app.state.redis = redis
         app.state.limiter = limiter
-        app.state.verifier = TokenVerifier(JwksKeyStore(config.jwks_url, client))
-        app.state.scanner = Scanner(app.state.sessions, rules)
-        consumer = None
-        if config.kafka_consumer_enabled:
-            consumer = KafkaConsumer(config.kafka_brokers, GROUP, TOPICS, app.state.scanner.handle)
-            consumer.start()
+        revocations = None
+        if config.revocation_redis_url is None:
+            log.warning(
+                "REVOCATION_REDIS_URL is not set: revoked sessions stay accepted until their tokens expire"
+            )
         else:
-            log.warning("kafka consumer disabled by KAFKA_CONSUMER_ENABLED=false")
+            revocations = RedisRevocations.connect(config.revocation_redis_url)
+        app.state.verifier = TokenVerifier(JwksKeyStore(config.jwks_url, client), revocations)
+        app.state.scanner = Scanner(app.state.sessions, rules)
+        app.state.eraser = Eraser(app.state.sessions)
+        consumers: list[KafkaConsumer] = []
+        if config.kafka_consumer_enabled:
+            consumers = [
+                KafkaConsumer(config.kafka_brokers, GROUP, TOPICS, app.state.scanner.handle),
+                KafkaConsumer(config.kafka_brokers, ERASURE_GROUP, ERASURE_TOPICS, app.state.eraser.handle),
+            ]
+            for consumer in consumers:
+                consumer.start()
+        else:
+            log.warning("kafka consumers disabled by KAFKA_CONSUMER_ENABLED=false")
         try:
             yield
         finally:
-            if consumer is not None:
+            for consumer in consumers:
                 await consumer.stop()
             if http_client is None:
                 await client.aclose()
             if redis is not None:
                 await redis.aclose()
+            if revocations is not None:
+                await revocations.close()
             await engine.dispose()
 
     app = FastAPI(

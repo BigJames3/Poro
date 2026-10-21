@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -89,7 +92,7 @@ func TestHandlerMarksReady(t *testing.T) {
 	seedProcessing(t, user, id)
 	mem := storage.NewMemory()
 	key := model.SourceKey(user.String(), id.String(), "mp4")
-	require.NoError(t, mem.Put(ctx, key, "video/mp4", bytes.NewReader([]byte("src"))))
+	mem.PutSource(key, []byte("src"))
 
 	h := worker.New(testdb.Pool, repository.New(testdb.Pool), mem, fakeFF{}, zap.NewNop())
 	env := uploadedEnv(t, user, id, key)
@@ -101,6 +104,8 @@ func TestHandlerMarksReady(t *testing.T) {
 	require.NotNil(t, got.HLSKey)
 	require.NotEmpty(t, mem.Bytes(*got.HLSKey))
 	require.NotEmpty(t, mem.Bytes(*got.ThumbnailKey))
+	require.True(t, mem.HasSource(key), "the source is kept, privately")
+	require.False(t, mem.Has(key), "the source never becomes public")
 
 	var n int
 	require.NoError(t, testdb.Pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events WHERE topic = $1 AND event_key = $2`,
@@ -129,7 +134,7 @@ func TestHandlerMarksFailedTooLong(t *testing.T) {
 	seedProcessing(t, user, id)
 	mem := storage.NewMemory()
 	key := model.SourceKey(user.String(), id.String(), "mp4")
-	require.NoError(t, mem.Put(ctx, key, "video/mp4", bytes.NewReader([]byte("src"))))
+	mem.PutSource(key, []byte("src"))
 
 	h := worker.New(testdb.Pool, repository.New(testdb.Pool), mem, fakeFF{err: transcode.ErrTooLong}, zap.NewNop())
 	require.NoError(t, h.Handle(ctx, uploadedEnv(t, user, id, key)))
@@ -172,7 +177,7 @@ func TestMediaOfAVideoWithdrawnDuringTranscodeAreQuarantined(t *testing.T) {
 			seedProcessing(t, user, id)
 			mem := storage.NewMemory()
 			key := model.SourceKey(user.String(), id.String(), "mp4")
-			require.NoError(t, mem.Put(ctx, key, "video/mp4", bytes.NewReader([]byte("src"))))
+			mem.PutSource(key, []byte("src"))
 			ff := slowFF{during: func() { withdraw(user, id) }}
 			h := worker.New(testdb.Pool, repo, mem, ff, zap.NewNop())
 			require.NoError(t, h.Handle(ctx, uploadedEnv(t, user, id, key)))
@@ -191,9 +196,88 @@ func TestHideIfWithdrawnLeavesApprovedVideosAlone(t *testing.T) {
 	seedProcessing(t, user, id)
 	mem := storage.NewMemory()
 	thumb := model.ThumbKey(user.String(), id.String())
-	require.NoError(t, mem.Put(ctx, thumb, "image/jpeg", bytes.NewReader([]byte("jpg"))))
+	require.NoError(t, mem.PutMedia(ctx, thumb, "image/jpeg", bytes.NewReader([]byte("jpg"))))
 	h := worker.New(testdb.Pool, repository.New(testdb.Pool), mem, fakeFF{}, zap.NewNop())
 	require.NoError(t, h.HideIfWithdrawn(ctx, id))
 	require.True(t, mem.Has(thumb))
 	require.NoError(t, h.HideIfWithdrawn(ctx, uuid.Must(uuid.NewV7())), "an unknown video is ignored")
+}
+
+// flakyStore fails the first reads and writes, after writing part of the
+// object, as a dropped connection would.
+type flakyStore struct {
+	*storage.Memory
+	getFailures, putFailures int
+}
+
+func (s *flakyStore) GetSource(ctx context.Context, key string, dest io.Writer) error {
+	if s.getFailures > 0 {
+		s.getFailures--
+		_, _ = dest.Write([]byte("partial"))
+		return errors.New("connection reset")
+	}
+	return s.Memory.GetSource(ctx, key, dest)
+}
+
+func (s *flakyStore) PutMedia(ctx context.Context, key, contentType string, body io.Reader) error {
+	if s.putFailures > 0 {
+		s.putFailures--
+		return errors.New("503 slow down")
+	}
+	return s.Memory.PutMedia(ctx, key, contentType, body)
+}
+
+// sourceCheckFF fails unless the downloaded source is exactly want.
+type sourceCheckFF struct{ want string }
+
+func (f sourceCheckFF) Transcode(ctx context.Context, src, workDir, userID, videoID string) (*transcode.Output, error) {
+	raw, err := os.ReadFile(src) //nolint:gosec // G304: test file
+	if err != nil || string(raw) != f.want {
+		return nil, fmt.Errorf("%w: source %q", transcode.ErrInvalid, raw)
+	}
+	return fakeFF{}.Transcode(ctx, src, workDir, userID, videoID)
+}
+
+func TestHandlerRetriesTransientStorageErrors(t *testing.T) {
+	ctx := context.Background()
+	user, id := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	seedProcessing(t, user, id)
+	store := &flakyStore{Memory: storage.NewMemory(), getFailures: 2, putFailures: 2}
+	key := model.SourceKey(user.String(), id.String(), "mp4")
+	store.PutSource(key, []byte("src"))
+
+	h := worker.New(testdb.Pool, repository.New(testdb.Pool), store, sourceCheckFF{want: "src"}, zap.NewNop())
+	h.SetRetryBackoff(time.Millisecond)
+	require.NoError(t, h.Handle(ctx, uploadedEnv(t, user, id, key)))
+	got, err := repository.New(testdb.Pool).Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, model.StatusReady, got.Status, "two failures then success: no partial bytes left in the source")
+}
+
+func TestHandlerFailsAfterBoundedStorageRetries(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name     string
+		get, put int
+		code     string
+	}{
+		{"source unreadable", 3, 0, events.VideoFailInvalid},
+		{"media unwritable", 0, 3, events.VideoFailTranscode},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			user, id := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+			seedProcessing(t, user, id)
+			store := &flakyStore{Memory: storage.NewMemory(), getFailures: tc.get, putFailures: tc.put}
+			key := model.SourceKey(user.String(), id.String(), "mp4")
+			store.PutSource(key, []byte("src"))
+
+			h := worker.New(testdb.Pool, repository.New(testdb.Pool), store, fakeFF{}, zap.NewNop())
+			h.SetRetryBackoff(time.Millisecond)
+			require.NoError(t, h.Handle(ctx, uploadedEnv(t, user, id, key)))
+			got, err := repository.New(testdb.Pool).Get(ctx, id)
+			require.NoError(t, err)
+			require.Equal(t, model.StatusFailed, got.Status, "the video never stays in processing")
+			require.Equal(t, tc.code, *got.FailureCode)
+		})
+	}
 }

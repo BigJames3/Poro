@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   NoSuchKey,
   PutObjectCommand,
   S3Client,
@@ -60,6 +61,7 @@ export function s3ClientFor(config: AppConfigType, endpoint: string): S3Client {
 export class MediaService {
   private readonly logger = new Logger(MediaService.name);
   private readonly bucket: string;
+  private readonly uploadBucket: string;
   private readonly publicBaseUrl: string;
 
   constructor(
@@ -68,6 +70,7 @@ export class MediaService {
     @Inject(S3_PRESIGN_CLIENT) private readonly presignS3: S3Client,
   ) {
     this.bucket = config.s3.bucket;
+    this.uploadBucket = config.s3.uploadBucket;
     this.publicBaseUrl = config.mediaPublicBaseUrl;
   }
 
@@ -78,7 +81,7 @@ export class MediaService {
   async createUpload(ownerId: string, contentType: ImageContentType): Promise<ImageUploadView> {
     const key = `${UPLOAD_PREFIX}/${ownerId}/${uuidv7()}`;
     const { url, fields } = await createPresignedPost(this.presignS3, {
-      Bucket: this.bucket,
+      Bucket: this.uploadBucket,
       Key: key,
       Conditions: [
         ['content-length-range', 1, IMAGE_MAX_BYTES],
@@ -121,11 +124,11 @@ export class MediaService {
         CacheControl: 'public, max-age=31536000, immutable',
       }),
     );
-    await this.remove(uploadKey);
+    await this.removeUpload(uploadKey);
     return key;
   }
 
-  /** Best effort: an orphan object costs storage, not correctness. */
+  /** Deletes a public object. Best effort: an orphan costs storage, not correctness. */
   async remove(key: string): Promise<void> {
     try {
       await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
@@ -134,12 +137,49 @@ export class MediaService {
     }
   }
 
+  /**
+   * Deletes every public object under prefix. Unlike remove() it fails when
+   * storage does, so account erasure is retried until nothing is left.
+   */
+  async removeAll(prefix: string): Promise<void> {
+    await this.removePrefix(this.bucket, prefix);
+  }
+
+  /** Deletes the originals ownerId uploaded but never confirmed. Fails when storage does. */
+  async removeUploadsOf(ownerId: string): Promise<void> {
+    await this.removePrefix(this.uploadBucket, `${UPLOAD_PREFIX}/${ownerId}/`);
+  }
+
+  /** Lists then deletes page by page; deleting what is listed keeps later pages valid. */
+  private async removePrefix(bucket: string, prefix: string): Promise<void> {
+    let token: string | undefined;
+    do {
+      const page = await this.s3.send(
+        new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }),
+      );
+      const keys = (page.Contents ?? []).flatMap((object) => object.Key ?? []);
+      await Promise.all(
+        keys.map((key) => this.s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))),
+      );
+      token = page.IsTruncated === true ? page.NextContinuationToken : undefined;
+    } while (token !== undefined);
+  }
+
+  /** Deletes a private original once re-encoded or rejected. Best effort. */
+  private async removeUpload(key: string): Promise<void> {
+    try {
+      await this.s3.send(new DeleteObjectCommand({ Bucket: this.uploadBucket, Key: key }));
+    } catch (err) {
+      this.logger.warn({ msg: 'image upload not deleted', key, err });
+    }
+  }
+
   private async download(key: string): Promise<Buffer> {
     let body;
     try {
-      const res = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      const res = await this.s3.send(new GetObjectCommand({ Bucket: this.uploadBucket, Key: key }));
       if ((res.ContentLength ?? 0) > IMAGE_MAX_BYTES) {
-        await this.remove(key);
+        await this.removeUpload(key);
         throw new ApiError(422, 'image_too_large', 'image is larger than 5 MB');
       }
       body = await res.Body?.transformToByteArray();

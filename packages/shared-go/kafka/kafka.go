@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/zap"
 
@@ -87,6 +88,37 @@ type ConsumerConfig struct {
 	Topics      []string
 	MaxAttempts int           // 3
 	Backoff     time.Duration // 500ms, doubled after each failed attempt
+	// Metrics, when set, receives kafka_consumer_records_total{group, topic,
+	// outcome}: processed, retried (one per failed attempt) or dead_lettered.
+	// Several consumers may share one registry.
+	Metrics prometheus.Registerer
+}
+
+// Record outcomes counted by kafka_consumer_records_total.
+const (
+	OutcomeProcessed    = "processed"
+	OutcomeRetried      = "retried"
+	OutcomeDeadLettered = "dead_lettered"
+)
+
+func consumerRecords(reg prometheus.Registerer) (*prometheus.CounterVec, error) {
+	records := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "kafka_consumer_records_total",
+		Help: "Kafka records handled by consumer group, topic and outcome.",
+	}, []string{"group", "topic", "outcome"})
+	if reg == nil {
+		return records, nil
+	}
+	if err := reg.Register(records); err != nil {
+		var already prometheus.AlreadyRegisteredError
+		if errors.As(err, &already) {
+			if existing, ok := already.ExistingCollector.(*prometheus.CounterVec); ok {
+				return existing, nil
+			}
+		}
+		return nil, fmt.Errorf("kafka consumer metrics: %w", err)
+	}
+	return records, nil
 }
 
 // Consumer processes records one by one and commits only processed offsets.
@@ -95,6 +127,7 @@ type Consumer struct {
 	cfg     ConsumerConfig
 	handler Handler
 	log     *zap.Logger
+	records *prometheus.CounterVec
 }
 
 // NewConsumer builds a consumer group member.
@@ -108,6 +141,10 @@ func NewConsumer(cfg ConsumerConfig, handler Handler, log *zap.Logger) (*Consume
 	if cfg.Backoff <= 0 {
 		cfg.Backoff = 500 * time.Millisecond
 	}
+	records, err := consumerRecords(cfg.Metrics)
+	if err != nil {
+		return nil, err
+	}
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(cfg.Brokers...),
 		kgo.ConsumerGroup(cfg.Group),
@@ -120,7 +157,7 @@ func NewConsumer(cfg ConsumerConfig, handler Handler, log *zap.Logger) (*Consume
 	if err != nil {
 		return nil, fmt.Errorf("kafka consumer: %w", err)
 	}
-	return &Consumer{client: client, cfg: cfg, handler: handler, log: log.With(zap.String("consumer_group", cfg.Group))}, nil
+	return &Consumer{client: client, cfg: cfg, handler: handler, log: log.With(zap.String("consumer_group", cfg.Group)), records: records}, nil
 }
 
 // Run consumes until ctx is cancelled. Broker outages are retried forever:
@@ -171,13 +208,17 @@ func (c *Consumer) process(ctx context.Context, rec *kgo.Record) error {
 		log.Error("undecodable event, dead-lettering", zap.Error(err))
 		return c.deadLetter(ctx, rec, err)
 	}
-	log = log.With(zap.String("event_id", env.ID.String()), zap.String("event_type", env.Type))
+	// The subject is the entity the event is about (video, order, user...):
+	// searching the logs of every service for it follows one entity across
+	// the asynchronous flow; event_id follows one event.
+	log = log.With(zap.String("event_id", env.ID.String()), zap.String("event_type", env.Type), zap.String("event_subject", env.Subject))
 
 	backoff := c.cfg.Backoff
 	for attempt := 1; ; attempt++ {
 		err = c.handler(ctx, env)
 		if err == nil {
 			log.Debug("event processed")
+			c.records.WithLabelValues(c.cfg.Group, rec.Topic, OutcomeProcessed).Inc()
 			return nil
 		}
 		if ctx.Err() != nil {
@@ -188,6 +229,7 @@ func (c *Consumer) process(ctx context.Context, rec *kgo.Record) error {
 			return c.deadLetter(ctx, rec, err)
 		}
 		log.Warn("event failed, retrying", zap.Int("attempt", attempt), zap.Error(err))
+		c.records.WithLabelValues(c.cfg.Group, rec.Topic, OutcomeRetried).Inc()
 		if !sleep(ctx, backoff) {
 			return ctx.Err()
 		}
@@ -218,6 +260,7 @@ func (c *Consumer) deadLetter(ctx context.Context, rec *kgo.Record, cause error)
 	for {
 		err := c.client.ProduceSync(ctx, dlq).FirstErr()
 		if err == nil {
+			c.records.WithLabelValues(c.cfg.Group, rec.Topic, OutcomeDeadLettered).Inc()
 			return nil
 		}
 		if ctx.Err() != nil {

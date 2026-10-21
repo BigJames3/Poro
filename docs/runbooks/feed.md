@@ -43,3 +43,10 @@ la référence.
 
 Voir le seuil de bascule vers le fan-out à l'écriture dans
 [ADR-0009](../architecture/adr/0009-feed-v1.md) (p95 > 150 ms).
+
+## Démarrage refusé : `APP_ENV is required`
+
+`APP_ENV` n'a pas de valeur par défaut, pas plus que le mot de passe Postgres ou les clés S3 :
+un oubli arrête le service au lieu de le lancer avec les raccourcis du mode dev (TLS facultatif,
+Redis facultatif, secrets de développement). Fixer `APP_ENV=dev`, `staging` ou `prod` et fournir
+les secrets (compose, `.env` copié de `.env.example`, ou gestionnaire de secrets).

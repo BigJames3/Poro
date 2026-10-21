@@ -16,7 +16,7 @@ datasource db {
 // auth owns identity, this service owns the public profile.
 model Profile {
   userId       String    @id @map("user_id") @db.Uuid
-  // Lowercase; unique even across deleted profiles so a handle is never reused.
+  // Lowercase and unique. Erasure sets it to NULL: the handle becomes free again (ADR-0018).
   username     String?   @unique @db.VarChar(30)
   displayName  String?   @map("display_name") @db.VarChar(50)
   bio          String?   @db.VarChar(160)

@@ -4,6 +4,7 @@ import {
   Logger,
   OnApplicationBootstrap,
   OnApplicationShutdown,
+  Optional,
 } from '@nestjs/common';
 
 import { appConfig, type AppConfigType } from '../config/app.config';
@@ -18,6 +19,7 @@ import { Envelope } from '../events/envelope';
 import { KafkaEventConsumer, PermanentError } from '../events/event-consumer';
 import { Data } from '../events/fields';
 import { SAGA_CONSUMER_GROUP, SagaService } from './saga.service';
+import { MetricsService } from '../metrics/metrics';
 
 export const SAGA_TOPICS = [
   TYPE_STOCK_RESERVED,
@@ -36,6 +38,7 @@ export class SagaConsumer implements OnApplicationBootstrap, OnApplicationShutdo
   constructor(
     private readonly saga: SagaService,
     @Inject(appConfig.KEY) private readonly config: AppConfigType,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -45,7 +48,7 @@ export class SagaConsumer implements OnApplicationBootstrap, OnApplicationShutdo
     }
     this.consumer = new KafkaEventConsumer(
       this.config.kafkaBrokers,
-      { group: SAGA_CONSUMER_GROUP, topics: SAGA_TOPICS },
+      { group: SAGA_CONSUMER_GROUP, topics: SAGA_TOPICS, records: this.metrics?.kafkaRecords },
       (env) => this.handle(env),
     );
     this.consumer.start();

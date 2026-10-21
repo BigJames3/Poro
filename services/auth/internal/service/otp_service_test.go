@@ -192,11 +192,11 @@ func TestNewOTPServiceValidation(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewOTPService(tc.cfg, &memOTP{}, allowAll{}, &captureSender{}, zap.NewNop())
+			_, err := NewOTPService(tc.cfg, &memOTP{}, allowAll{}, &allowSMS{}, &captureSender{}, zap.NewNop())
 			require.Error(t, err)
 		})
 	}
-	_, err := NewOTPService(devOTPConfig(), &memOTP{}, nil, &captureSender{}, zap.NewNop())
+	_, err := NewOTPService(devOTPConfig(), &memOTP{}, nil, &allowSMS{}, &captureSender{}, zap.NewNop())
 	require.Error(t, err)
 }
 
@@ -211,7 +211,7 @@ func devOTPConfig() *config.Config {
 
 func newOTP(t *testing.T, cfg *config.Config, repo *memOTP, throttle OTPThrottle, sender SMSSender, log *zap.Logger) OTPService {
 	t.Helper()
-	svc, err := NewOTPService(cfg, repo, throttle, sender, log)
+	svc, err := NewOTPService(cfg, repo, throttle, &allowSMS{}, sender, log)
 	require.NoError(t, err)
 	return svc
 }

@@ -77,7 +77,11 @@ Règles produit :
 ## Variables d'environnement
 
 Voir [`.env.example`](.env.example). `PORT` 8090, base `poro_shop`, Redis DB 8
-(limites de débit), bucket `poro-shop`, `MEDIA_PUBLIC_BASE_URL` pour les URLs
+(limites de débit), bucket public `poro-shop` pour les images ré-encodées et
+bucket privé `S3_UPLOAD_BUCKET` (`poro-shop-uploads`) pour les originaux,
+identité S3 `poro-shop`
+([ADR-0015](../../docs/architecture/adr/0015-controle-acces-stockage-objet.md)),
+`MEDIA_PUBLIC_BASE_URL` pour les URLs
 publiques (CDN en production). Hors `dev` : TLS Postgres, `REDIS_URL`, HTTPS
 sur `S3_PUBLIC_ENDPOINT`, CORS en origines https exactes, clés S3 obligatoires.
 
@@ -107,3 +111,11 @@ Postgres et Redpanda via testcontainers, S3 simulé. Couverture minimale 70 %.
 - Une boutique fermée garde ses produits ; ils redeviennent visibles à la
   réouverture.
 - Les produits ne sont pas encore cherchables : search ne les indexe pas.
+
+## Sessions révoquées
+
+Les access tokens des sessions révoquées par auth (déconnexion, « déconnecter les autres
+appareils », réinitialisation du mot de passe, suppression du compte, vol de refresh token) sont
+refusés grâce au registre partagé `REVOCATION_REDIS_URL`
+([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) : obligatoire hors dev,
+réponse `503` s'il ne répond pas.

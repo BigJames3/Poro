@@ -1,0 +1,136 @@
+# promtool test rules rules/poro.rules.test.yml
+rule_files:
+  - poro.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="api", service="feed"}'
+        values: "1 1 0 0 0 0"
+      - series: 'up{job="api", service="auth"}'
+        values: "1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ServiceDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ServiceDown
+        exp_alerts:
+          - exp_labels: { severity: critical, job: api, service: feed }
+            exp_annotations:
+              summary: "feed ne répond plus à Prometheus"
+              runbook: docs/runbooks/observability.md#servicedown
+
+  - interval: 1m
+    input_series:
+      # 10% of 600 req/min are 5xx on social, 1% on video.
+      - series: 'http_requests_total{service="social", status="500"}'
+        values: "0+60x20"
+      - series: 'http_requests_total{service="social", status="200"}'
+        values: "0+540x20"
+      - series: 'http_requests_total{service="video", status="500"}'
+        values: "0+6x20"
+      - series: 'http_requests_total{service="video", status="200"}'
+        values: "0+594x20"
+      # A quiet service with only errors stays below the traffic floor.
+      - series: 'http_requests_total{service="search", status="500"}'
+        values: "0+1x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: HighErrorRate
+        exp_alerts:
+          - exp_labels: { severity: critical, service: social }
+            exp_annotations:
+              summary: "social : 10% de réponses 5xx"
+              runbook: docs/runbooks/observability.md#higherrorrate
+
+  - interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{service="order", le="0.5"}'
+        values: "0+10x20"
+      - series: 'http_request_duration_seconds_bucket{service="order", le="2.5"}'
+        values: "0+100x20"
+      - series: 'http_request_duration_seconds_bucket{service="order", le="+Inf"}'
+        values: "0+100x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: HighLatency
+        exp_alerts:
+          - exp_labels: { severity: warning, service: order }
+            exp_annotations:
+              summary: "order : p95 à 2.389s"
+              runbook: docs/runbooks/observability.md#highlatency
+
+  - interval: 1m
+    input_series:
+      - series: 'outbox_pending{service="outbox-relay-video"}'
+        values: "500x20"
+      - series: 'outbox_publish_failures_total{service="outbox-relay-video"}'
+        values: "0+1x20"
+      - series: 'outbox_published_total{service="outbox-relay-video"}'
+        values: "100x20"
+      - series: 'outbox_pending{service="outbox-relay-auth"}'
+        values: "3x20"
+      - series: 'outbox_publish_failures_total{service="outbox-relay-auth"}'
+        values: "0+1x20"
+      - series: 'outbox_published_total{service="outbox-relay-auth"}'
+        values: "0+50x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: OutboxBacklog
+        exp_alerts:
+          - exp_labels: { severity: warning, service: outbox-relay-video }
+            exp_annotations:
+              summary: "outbox-relay-video : 500 événements en attente de publication"
+              runbook: docs/runbooks/observability.md#outboxbacklog
+      - eval_time: 20m
+        alertname: OutboxPublishFailing
+        exp_alerts:
+          - exp_labels: { severity: critical, service: outbox-relay-video }
+            exp_annotations:
+              summary: "outbox-relay-video n'arrive plus à publier vers Kafka"
+              runbook: docs/runbooks/observability.md#outboxpublishfailing
+
+  - interval: 1m
+    input_series:
+      - series: 'kafka_consumer_records_total{service="feed", group="poro-feed-projector", topic="poro.video.ready", outcome="dead_lettered"}'
+        values: "0 0 0 1 1 1 1"
+      - series: 'kafka_consumer_records_total{service="feed", group="poro-feed-projector", topic="poro.video.ready", outcome="processed"}'
+        values: "0+10x6"
+      - series: 'kafka_consumer_records_total{service="social", group="poro-social-projections", outcome="retried"}'
+        values: "0+12x30"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: EventsDeadLettered
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: EventsDeadLettered
+        exp_alerts:
+          - exp_labels: { severity: warning, service: feed, group: poro-feed-projector, topic: poro.video.ready }
+            exp_annotations:
+              summary: "feed/poro-feed-projector : événements poro.video.ready envoyés en DLQ"
+              runbook: docs/runbooks/observability.md#eventsdeadlettered
+      - eval_time: 25m
+        alertname: ConsumerRetrying
+        exp_alerts:
+          - exp_labels: { severity: warning, service: social, group: poro-social-projections }
+            exp_annotations:
+              summary: "social/poro-social-projections réessaie en boucle"
+              runbook: docs/runbooks/observability.md#consumerretrying
+
+  - interval: 1m
+    input_series:
+      - series: 'auth_sms_blocked_total{service="auth", reason="prefix"}'
+        values: "0+5x20"
+      - series: 'auth_sms_blocked_total{service="auth", reason="phone"}'
+        values: "0+1x20"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: SMSBudgetBlocking
+        exp_alerts:
+          - exp_labels: { severity: warning, reason: prefix }
+            exp_annotations:
+              summary: "75 SMS OTP bloqués par le plafond prefix en 15 min"
+              runbook: docs/runbooks/observability.md#smsbudgetblocking

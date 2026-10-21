@@ -17,6 +17,8 @@ export class MetricsService {
   readonly registry = new Registry();
   private readonly requests: Counter<'method' | 'route' | 'status'>;
   private readonly duration: Histogram<'method' | 'route'>;
+  /** Kafka records by consumer group, topic and outcome, as in shared-go/kafka. */
+  readonly kafkaRecords: Counter<'group' | 'topic' | 'outcome'>;
   private readonly notifications: Counter<'type'>;
   private readonly pushes: Counter<'outcome'>;
 
@@ -46,6 +48,12 @@ export class MetricsService {
       name: 'notification_pushes_total',
       help: 'FCM push deliveries per device token, by outcome; error counts whole failed sends.',
       labelNames: ['outcome'],
+      registers: [this.registry],
+    });
+    this.kafkaRecords = new Counter({
+      name: 'kafka_consumer_records_total',
+      help: 'Kafka records handled by consumer group, topic and outcome.',
+      labelNames: ['group', 'topic', 'outcome'],
       registers: [this.registry],
     });
   }

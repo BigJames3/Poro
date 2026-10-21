@@ -1,8 +1,11 @@
+import { ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { RedpandaContainer, StartedRedpandaContainer } from '@testcontainers/redpanda';
+import { mockClient } from 'aws-sdk-client-mock';
 import { Kafka, Producer, logLevel } from 'kafkajs';
 import { Client } from 'pg';
 
+import { ACCOUNT_ERASURE_TOPICS } from '../src/account/account-erasure.consumer';
 import { uuidv7 } from '../src/common/uuid';
 import { newEnvelope } from '../src/events/envelope';
 import { HEADER_ERROR } from '../src/events/event-consumer';
@@ -12,6 +15,8 @@ import { STOCK_TOPICS } from '../src/stock/stock.consumer';
 import { createApp } from './support/app';
 import { outboxEvents } from './support/outbox';
 import { TestDatabase, startDatabase } from './support/postgres';
+
+const s3 = mockClient(S3Client);
 
 async function eventually<T>(read: () => Promise<T | undefined>, timeoutMs = 60_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
@@ -45,10 +50,12 @@ describe('order saga over Kafka', () => {
     const admin = kafka.admin();
     await admin.connect();
     await admin.createTopics({
-      topics: STOCK_TOPICS.flatMap((topic) => [topic, `${topic}.dlq`]).map((topic) => ({
-        topic,
-        numPartitions: 3,
-      })),
+      topics: [...STOCK_TOPICS, ...ACCOUNT_ERASURE_TOPICS]
+        .flatMap((topic) => [topic, `${topic}.dlq`])
+        .map((topic) => ({
+          topic,
+          numPartitions: 3,
+        })),
     });
     await admin.disconnect();
     producer = kafka.producer();
@@ -134,6 +141,35 @@ describe('order saga over Kafka', () => {
       variantId,
     ]);
     expect(rows).toEqual([{ stock_reserved: 0 }]);
+  });
+
+  it('closes the shop of a deleted account', async () => {
+    s3.on(ListObjectsV2Command).resolves({ Contents: [] });
+    const ownerId = uuidv7();
+    const shop = await app
+      .get(ShopsService)
+      .create(ownerId, { name: 'Wax Abidjan', handle: 'wax_abidjan', country_code: 'CI' });
+    const erased = newEnvelope('poro.auth.user.deleted', 1, ownerId, {
+      user_id: ownerId,
+      deleted_at: new Date().toISOString(),
+    });
+    await producer.send({
+      topic: erased.type,
+      messages: [{ key: ownerId, value: JSON.stringify(erased) }],
+    });
+    const closed = await eventually(async () => {
+      const { rows } = await pg.query<{ status: string }>(
+        `SELECT s.status FROM shops s JOIN processed_events e
+            ON e.consumer = 'poro-shop-account-erasure' AND e.event_id = $2
+          WHERE s.id = $1`,
+        [shop.shop_id, erased.id],
+      );
+      return rows[0]?.status;
+    });
+    expect(closed).toBe('closed');
+    expect((await outboxEvents(pg, 'poro.shop.shop.updated', shop.shop_id)).at(-1)).toMatchObject({
+      status: 'closed',
+    });
   });
 
   it('dead-letters events it cannot apply', async () => {

@@ -4,6 +4,7 @@ import { Kafka, Producer, logLevel } from 'kafkajs';
 import { Client } from 'pg';
 import request from 'supertest';
 
+import { ACCOUNT_ERASURE_TOPICS } from '../src/account/account-erasure.consumer';
 import { CATALOG_TOPICS } from '../src/catalog/catalog.consumer';
 import { uuidv7 } from '../src/common/uuid';
 import { Envelope, newEnvelope } from '../src/events/envelope';
@@ -49,7 +50,7 @@ describe('order saga over Kafka', () => {
     const admin = kafka.admin();
     await admin.connect();
     await admin.createTopics({
-      topics: [...CATALOG_TOPICS, ...SAGA_TOPICS]
+      topics: [...CATALOG_TOPICS, ...SAGA_TOPICS, ...ACCOUNT_ERASURE_TOPICS]
         .flatMap((topic) => [topic, `${topic}.dlq`])
         .map((topic) => ({ topic, numPartitions: 3 })),
     });
@@ -145,6 +146,30 @@ describe('order saga over Kafka', () => {
       payment_method: 'cash_on_delivery',
       expires_at: null,
     });
+  });
+
+  it('erases the address book of a deleted account', async () => {
+    const userId = uuidv7();
+    await pg.query(
+      `INSERT INTO addresses (id, buyer_id, full_name, phone, city, address, updated_at)
+       VALUES ($1, $2, 'Moussa', '+221770000000', 'Dakar', 'Plateau', now())`,
+      [uuidv7(), userId],
+    );
+    const erased = newEnvelope('poro.auth.user.deleted', 1, userId, {
+      user_id: userId,
+      deleted_at: new Date().toISOString(),
+    });
+    await publish(erased);
+    await eventually(async () => {
+      const { rows } = await pg.query(
+        `SELECT 1 FROM processed_events
+          WHERE consumer = 'poro-order-account-erasure' AND event_id = $1`,
+        [erased.id],
+      );
+      return rows.length === 1 ? true : undefined;
+    });
+    const { rows } = await pg.query('SELECT id FROM addresses WHERE buyer_id = $1', [userId]);
+    expect(rows).toEqual([]);
   });
 
   it('dead-letters events it cannot apply', async () => {

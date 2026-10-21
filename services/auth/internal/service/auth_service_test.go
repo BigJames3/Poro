@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -32,7 +33,7 @@ func TestNewAuthServiceRejectsBadTTL(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewAuthService(tc.cfg, newFakeUsers(), newFakeRefresh(), &fakeOTP{}, &fakeTokens{}, zap.NewNop())
+			_, err := NewAuthService(tc.cfg, newFakeUsers(), newFakeRefresh(), &fakeOTP{}, &fakeTokens{}, mustLoginGuard(t), zap.NewNop())
 			require.Error(t, err)
 		})
 	}
@@ -282,15 +283,22 @@ func TestRefreshReuseRevokesFamily(t *testing.T) {
 	users := newFakeUsers()
 	users.byID[id] = &model.User{ID: id, Roles: []model.UserRole{model.RolePersonal}, Status: model.StatusActive, CreatedAt: time.Now().UTC()}
 	refresh := newFakeRefresh()
-	refresh.seed(t, id, "t1")
+	first := refresh.seed(t, id, "t1")
 	tokens := &fakeTokens{refresh: "t2"}
 	svc := newAuthServiceWithGrace(t, users, refresh, tokens, "0s")
 
 	_, err := svc.Refresh(context.Background(), dto.RefreshRequest{RefreshToken: "t1"})
 	require.NoError(t, err)
 
+	tokens.failRevoke = true
+	_, err = svc.Refresh(context.Background(), dto.RefreshRequest{RefreshToken: "t1"})
+	require.Error(t, err, "a registry failure aborts the reuse handling")
+	require.NotErrorIs(t, err, ErrRefreshTokenReused)
+	tokens.failRevoke = false
+
 	_, err = svc.Refresh(context.Background(), dto.RefreshRequest{RefreshToken: "t1"})
 	require.ErrorIs(t, err, ErrRefreshTokenReused)
+	require.Equal(t, []uuid.UUID{first.FamilyID}, tokens.revoked, "the stolen session's access tokens are refused everywhere")
 	for _, token := range refresh.items {
 		require.NotNil(t, token.RevokedAt, "every token of the family must be revoked")
 	}
@@ -440,15 +448,15 @@ func TestLogoutRevokesSession(t *testing.T) {
 	claims := TokenClaims{UserID: id, SessionID: current.FamilyID, TokenID: "jti-1", Exp: time.Now().Add(time.Minute)}
 
 	require.NoError(t, svc.Logout(context.Background(), claims))
-	require.Equal(t, []string{"jti-1"}, tokens.blacklisted)
+	require.Equal(t, []uuid.UUID{current.FamilyID}, tokens.revoked, "every service refuses the session's access tokens")
 	require.NotNil(t, current.RevokedAt)
 	require.Nil(t, other.RevokedAt, "other devices stay signed in")
 
 	require.NoError(t, svc.Logout(context.Background(), claims), "logout is idempotent")
 
-	tokens.failBlacklist = true
+	tokens.failRevoke = true
 	require.Error(t, svc.Logout(context.Background(), claims))
-	tokens.failBlacklist = false
+	tokens.failRevoke = false
 
 	refresh.revokeErr = errors.New("db")
 	require.Error(t, svc.Logout(context.Background(), claims))
@@ -507,7 +515,7 @@ func newAuthService(t *testing.T, users *fakeUsers, refresh *fakeRefresh, otp OT
 	t.Helper()
 	svc, err := NewAuthService(
 		&config.Config{JWTAccessTTL: "15m", JWTRefreshTTL: "720h", JWTRefreshReuseGrace: "30s"},
-		users, refresh, otp, tokens, zap.NewNop(),
+		users, refresh, otp, tokens, mustLoginGuard(t), zap.NewNop(),
 	)
 	require.NoError(t, err)
 	return svc
@@ -517,7 +525,7 @@ func newAuthServiceWithGrace(t *testing.T, users *fakeUsers, refresh *fakeRefres
 	t.Helper()
 	svc, err := NewAuthService(
 		&config.Config{JWTAccessTTL: "15m", JWTRefreshTTL: "720h", JWTRefreshReuseGrace: grace},
-		users, refresh, &fakeOTP{}, tokens, zap.NewNop(),
+		users, refresh, &fakeOTP{}, tokens, mustLoginGuard(t), zap.NewNop(),
 	)
 	require.NoError(t, err)
 	return svc
@@ -884,13 +892,13 @@ func (f *fakeOTP) VerifyOTP(context.Context, string, string) (bool, error) {
 }
 
 type fakeTokens struct {
-	refresh       string
-	failAccess    bool
-	failRefresh   bool
-	failBlacklist bool
-	blacklisted   []string
-	lastRoles     []string
-	lastSession   uuid.UUID
+	refresh     string
+	failAccess  bool
+	failRefresh bool
+	failRevoke  bool
+	revoked     []uuid.UUID
+	lastRoles   []string
+	lastSession uuid.UUID
 }
 
 func (f *fakeTokens) GenerateAccessToken(_ uuid.UUID, roles []string, sessionID uuid.UUID) (string, error) {
@@ -918,14 +926,16 @@ func (f *fakeTokens) ValidateAccessToken(string) (*TokenClaims, error) {
 
 func (f *fakeTokens) HashToken(token string) string { return HashToken(token) }
 
-func (f *fakeTokens) BlacklistToken(_ context.Context, tokenID string, _ time.Duration) error {
-	if f.failBlacklist {
-		return errors.New("redis")
+func (f *fakeTokens) RevokeSessions(_ context.Context, sessionIDs ...uuid.UUID) error {
+	if f.failRevoke {
+		return errors.New("registry down")
 	}
-	f.blacklisted = append(f.blacklisted, tokenID)
+	f.revoked = append(f.revoked, sessionIDs...)
 	return nil
 }
 
-func (f *fakeTokens) IsBlacklisted(context.Context, string) (bool, error) { return false, nil }
+func (f *fakeTokens) IsSessionRevoked(_ context.Context, sessionID uuid.UUID) (bool, error) {
+	return slices.Contains(f.revoked, sessionID), nil
+}
 
 func (f *fakeTokens) JWKS() JWKSet { return JWKSet{} }

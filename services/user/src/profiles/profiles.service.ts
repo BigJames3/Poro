@@ -281,6 +281,10 @@ export class ProfilesService {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM profiles WHERE user_id = ${userId}::uuid FOR UPDATE`;
       const before = await tx.profile.findUniqueOrThrow({ where: { userId } });
+      if (before.deletedAt !== null) {
+        // Erased since ensure() read it: the account is gone, never refill it.
+        throw new ApiError(404, 'profile_not_found', 'profile not found');
+      }
       const after = await tx.profile.update({ where: { userId }, data });
       if (!samePublicFields(before, after)) {
         await this.publishProfile(tx, after);

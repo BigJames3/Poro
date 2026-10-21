@@ -162,9 +162,14 @@ func AddVideoStats(ctx context.Context, db DBTX, videoID uuid.UUID, ownerID *uui
 	return nil
 }
 
+// notErased guards every insert into users: an erased account is never
+// indexed again, whatever event arrives late.
+const notErased = `NOT EXISTS (SELECT 1 FROM erased_users WHERE user_id = $1)`
+
 // EnsureUser records an account; it becomes searchable once it has a username.
 func EnsureUser(ctx context.Context, db DBTX, userID uuid.UUID) error {
-	if _, err := db.Exec(ctx, `INSERT INTO users (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`, userID); err != nil {
+	if _, err := db.Exec(ctx, `INSERT INTO users (user_id) SELECT $1 WHERE `+notErased+`
+		ON CONFLICT (user_id) DO NOTHING`, userID); err != nil {
 		return fmt.Errorf("ensure user: %w", err)
 	}
 	return nil
@@ -183,7 +188,7 @@ type Profile struct {
 // UpsertProfile stores the snapshot unless a newer one is already stored.
 func UpsertProfile(ctx context.Context, db DBTX, p Profile) error {
 	_, err := db.Exec(ctx, `INSERT INTO users (user_id, username, display_name, avatar_url, is_creator, profile_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		SELECT $1, $2, $3, $4, $5, $6 WHERE `+notErased+`
 		ON CONFLICT (user_id) DO UPDATE SET username = EXCLUDED.username, display_name = EXCLUDED.display_name,
 			avatar_url = EXCLUDED.avatar_url, is_creator = EXCLUDED.is_creator, profile_at = EXCLUDED.profile_at
 		WHERE users.profile_at IS NULL OR users.profile_at < EXCLUDED.profile_at`,
@@ -196,10 +201,23 @@ func UpsertProfile(ctx context.Context, db DBTX, p Profile) error {
 
 // AddFollowers moves the follower count used to rank accounts, never below zero.
 func AddFollowers(ctx context.Context, db DBTX, userID uuid.UUID, delta int64) error {
-	_, err := db.Exec(ctx, `INSERT INTO users (user_id, followers_count) VALUES ($1, GREATEST($2::bigint, 0))
+	_, err := db.Exec(ctx, `INSERT INTO users (user_id, followers_count) SELECT $1, GREATEST($2::bigint, 0) WHERE `+notErased+`
 		ON CONFLICT (user_id) DO UPDATE SET followers_count = GREATEST(users.followers_count + $2, 0)`, userID, delta)
 	if err != nil {
 		return fmt.Errorf("followers: %w", err)
+	}
+	return nil
+}
+
+// EraseUser de-indexes an erased account (ADR-0018) and records its id so it
+// is never indexed again. Its videos leave through poro.video.deleted, and the
+// follower counts of the accounts it followed through poro.social.follow.deleted.
+func EraseUser(ctx context.Context, db DBTX, userID uuid.UUID, at time.Time) error {
+	if _, err := db.Exec(ctx, `INSERT INTO erased_users (user_id, erased_at) VALUES ($1, $2) ON CONFLICT DO NOTHING`, userID, at); err != nil {
+		return fmt.Errorf("record erased user: %w", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM users WHERE user_id = $1`, userID); err != nil {
+		return fmt.Errorf("delete user: %w", err)
 	}
 	return nil
 }

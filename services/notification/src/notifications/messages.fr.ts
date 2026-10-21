@@ -142,6 +142,23 @@ export const messages = {
     return { title: 'Commande annulée', body: `${buyer} a annulé sa commande.` };
   },
 
+  /** Either party may be the erased account: the text names neither. */
+  orderCancelledAccountDeleted(shop: string, refund: boolean): Message {
+    return {
+      title: 'Commande annulée',
+      body:
+        `Ta commande chez ${shop} est annulée suite à la suppression d’un compte.` +
+        (refund ? REFUND_NOTICE : ''),
+    };
+  },
+
+  orderCancelledAccountDeletedSeller(): Message {
+    return {
+      title: 'Commande annulée',
+      body: 'Une commande a été annulée suite à la suppression d’un compte.',
+    };
+  },
+
   orderCompleted(buyer: string, amount: string): Message {
     return {
       title: 'Commande terminée',

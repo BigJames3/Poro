@@ -44,6 +44,7 @@ auth=$(docker run -d --network "$network" --network-alias auth \
   -e APP_ENV=dev -e APP_PORT=8081 -e LOG_LEVEL=info \
   -e POSTGRES_HOST=postgres -e POSTGRES_PORT=5432 -e POSTGRES_USER=poro -e POSTGRES_PASSWORD=e2e \
   -e POSTGRES_DB=poro_auth -e POSTGRES_SSLMODE=disable -e REDIS_HOST=redis -e REDIS_PORT=6379 \
+  -e REVOCATION_REDIS_URL=redis://redis:6379/15 \
   -e JWT_PRIVATE_KEY_PATH=/app/keys/private.pem -e JWT_PUBLIC_KEY_PATH=/app/keys/public.pem \
   -e MIGRATIONS_PATH=/app/migrations -e KAFKA_BROKERS=redpanda:9092 \
   -e TRUSTED_PROXIES=172.16.0.0/12,192.168.0.0/16 \
@@ -95,7 +96,11 @@ assert session["device"] == "Gateway E2E", session
 assert session["ip_address"] == client_ip, (session["ip_address"], client_ip, gateway_ip)
 for path in ("/health/ready", "/metrics", "/.well-known/jwks.json"):
     assert call("GET", path)[0] == 404, path
-print(f"gateway e2e: sign-up, /me and /sessions through the gateway; auth saw {client_ip}, "
+status, _ = call("POST", "/api/v1/auth/logout", token=token)
+assert status == 204, status
+status, _ = call("GET", "/api/v1/auth/me", token=token)
+assert status == 401, ("a logged-out session's access token still works", status)
+print(f"gateway e2e: sign-up, /me, /sessions and logout through the gateway; auth saw {client_ip}, "
       f"not the gateway ({gateway_ip}) nor the forged 6.6.6.6; internal routes closed")
 PY
 then

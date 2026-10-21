@@ -49,6 +49,7 @@ email (`dev email`).
 | `POSTGRES_HOST` / `_PORT` / `_USER` / `_PASSWORD` / `_DB` | `localhost` / `5433` / `poro` / `poro_dev_password` / `poro_auth` | Connexion Postgres |
 | `POSTGRES_SSLMODE` | `disable` | `require` ou `verify-*` obligatoire hors `dev` |
 | `REDIS_HOST` / `_PORT` / `_PASSWORD` / `_DB` | `localhost` / `6380` / *(vide)* / `0` | Connexion Redis |
+| `REVOCATION_REDIS_URL` | `redis://localhost:6380/15` en dev | Registre des sessions révoquées, partagé avec tous les services ([ADR-0016](../../docs/architecture/adr/0016-revocation-des-sessions.md)) ; obligatoire hors dev |
 | `JWT_PRIVATE_KEY_PATH` / `JWT_PUBLIC_KEY_PATH` | `./keys/*.pem` | Paire RSA ≥ 2048 bits, vérifiée au démarrage |
 | `JWT_ACCESS_TTL` | `15m` | Durée de l'access token |
 | `JWT_REFRESH_TTL` | `720h` | Durée du refresh token (30 jours) |
@@ -58,6 +59,13 @@ email (`dev email`).
 | `OTP_HMAC_SECRET` | *(vide)* | ≥ 32 octets, obligatoire hors `dev` |
 | `OTP_REQUEST_COOLDOWN` | `60s` | Délai entre deux codes pour un numéro |
 | `OTP_MAX_REQUESTS_PER_HOUR` | `5` | Codes par numéro et par heure |
+| `SMS_DAILY_LIMIT_PER_PHONE` | `10` | Budget SMS : codes par numéro et par jour UTC ([ADR-0017](../../docs/architecture/adr/0017-limites-anti-abus-auth.md)) |
+| `SMS_HOURLY_LIMIT_PER_PREFIX` | `20` | Budget SMS : codes par plage de numéros (sans les 3 derniers chiffres) et par heure |
+| `SMS_HOURLY_LIMIT_PER_COUNTRY` | `1000` | Budget SMS : codes par indicatif pays et par heure |
+| `SMS_DAILY_LIMIT` | `5000` | Budget SMS global par jour UTC ; atteint, plus aucun OTP SMS jusqu'au lendemain (503) |
+| `LOGIN_MAX_FAILURES` | `5` | Mots de passe faux avant verrouillage du compte |
+| `LOGIN_FAILURE_WINDOW` | `15m` | Les échecs sont oubliés après ce délai sans nouvel échec |
+| `LOGIN_LOCK_BASE` / `LOGIN_LOCK_MAX` | `1m` / `15m` | Premier blocage, doublé à chaque échec suivant, plafonné |
 | `OTP_ALLOWED_CALLING_CODES` | `+225,+221,+237,+234` | Pays autorisés à recevoir un code ; vide = tous (déconseillé : fraude SMS) |
 | `SMS_PROVIDER` | `log` | `log` (dev uniquement, codes dans les logs) ou `africastalking` |
 | `AFRICASTALKING_USERNAME` | *(vide)* | Nom d'application ; `sandbox` = bac à sable (interdit en prod) |
@@ -148,8 +156,10 @@ vérifient hors ligne.
    supprimés, statut `DELETED`. L'identifiant reste ; le numéro et l'email redeviennent libres.
    `poro.auth.user.deleted` part dans l'outbox, dans la même transaction.
 
-Les autres services effaceront leurs données à la réception de `poro.auth.user.deleted`
-(PR suivantes) ; pendant les 30 jours, le profil reste visible.
+Les autres services effacent leurs données à la réception de `poro.auth.user.deleted`, chacun
+dans son groupe `poro-<service>-account-erasure`
+([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) ;
+pendant les 30 jours, le profil reste visible.
 
 À la création d'un compte, `poro.auth.user.created` est écrit dans l'outbox (même transaction) ;
 à son effacement, `poro.auth.user.deleted`.

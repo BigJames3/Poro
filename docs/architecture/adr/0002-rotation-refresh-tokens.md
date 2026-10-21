@@ -24,6 +24,8 @@ réutilisation stricte déconnecterait des utilisateurs légitimes.
    « perdu » est utilisé plus tard, cela prouve deux détenteurs : la famille est révoquée.
 5. **Logout** : blacklist du `jti` de l'access token dans Redis (TTL = durée restante) et
    révocation de la famille `sid` uniquement ; les autres appareils restent connectés.
+   *Révisé par l'ADR-0016 : la session (`sid`) entre dans un registre lu par tous les
+   services, la liste noire par `jti` disparaît.*
 
 ## Conséquences pour les clients mobiles
 

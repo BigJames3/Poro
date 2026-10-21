@@ -1,6 +1,6 @@
 # ADR-0013 — Cycle de vie du compte : sessions par appareil et suppression
 
-- Statut : accepté
+- Statut : accepté ; décision 2 révisée par [ADR-0016](0016-revocation-des-sessions.md)
 - Date : 2026-10-12
 
 ## Contexte
@@ -20,7 +20,8 @@ hors ligne avec le JWKS.
    rotations.
 2. **Pas de révocation des access tokens entre services** : un token déjà émis reste valide
    jusqu'à son expiration (15 min au plus), comme pour le logout de l'ADR-0002. Auth seul
-   blackliste le `jti` courant.
+   blackliste le `jti` courant. *Révisé par l'ADR-0016 : les sessions révoquées sont refusées
+   par tous les services, sans attendre l'expiration.*
 3. **Suppression en deux temps** : `POST /me/delete` programme l'effacement à J+30
    (`ACCOUNT_DELETION_GRACE`) et déconnecte tous les appareils. Se reconnecter avant
    l'échéance l'annule ; `POST /me/delete/cancel` aussi. Le délai protège des suppressions
@@ -49,6 +50,8 @@ hors ligne avec le JWKS.
   qu'il va disparaître.
 - Un vendeur qui supprime son compte garde sa boutique tant que shop ne consomme pas
   `poro.auth.user.deleted` ; les commandes en cours seront traitées dans cette PR de shop.
+  *Fait par l'[ADR-0018](0018-effacement-du-compte-dans-les-services.md) : chaque service
+  efface ses données à la réception de l'événement.*
 - Après l'effacement, rien n'est récupérable ni restaurable par le support.
 - Il faut un fournisseur SMTP (Brevo, SES…) et un domaine expéditeur configuré (SPF, DKIM,
   DMARC) avant d'ouvrir staging et production.
@@ -58,5 +61,6 @@ hors ligne avec le JWKS.
 - Suppression immédiate : irréversible au moindre doigt qui glisse, ou pour un voleur de
   session.
 - Liste noire des `sid` partagée entre services : un appel réseau ou un cache Redis par
-  requête dans chaque service, pour gagner 15 minutes au plus.
+  requête dans chaque service, pour gagner 15 minutes au plus. *Finalement retenue par
+  l'ADR-0016.*
 - Supprimer la ligne `users` : casserait les références et l'historique côté inbox.

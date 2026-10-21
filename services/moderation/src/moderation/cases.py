@@ -231,7 +231,11 @@ async def report(
     """File a report; a second report of the same target by the same person
     returns the first one. Threshold distinct reporters raise the priority."""
     now = now or _now()
-    owner = target_id if target_type == "user" else await _owner_of(session, target_type, target_id)
+    if target_type == "user":
+        # An erased account keeps no owner link, even when reported again.
+        owner = None if await is_erased(session, target_id) else target_id
+    else:
+        owner = await _owner_of(session, target_type, target_id)
     if owner == reporter_id:
         raise DomainError(422, "cannot_report_self", "you cannot report your own content")
     case = await _get_or_create_case(session, target_type, target_id, owner, now)
@@ -269,6 +273,53 @@ async def report(
         {"id": case["id"], "now": now, "threshold": threshold},
     )
     return ReportResult(report_id, case["id"], True)
+
+
+async def lock_account(session: AsyncSession, user_id: uuid.UUID, *, exclusive: bool = False) -> None:
+    """Serialize the erasure of an account (exclusive) with the scans of its
+    content (shared), until the end of the transaction: a snapshot is either
+    stored before the erasure, which then empties it, or refused after it."""
+    lock = "pg_advisory_xact_lock" if exclusive else "pg_advisory_xact_lock_shared"
+    await session.execute(
+        text(f"SELECT {lock}(hashtextextended(CAST(:id AS text), 0))"),
+        {"id": str(user_id)},
+    )
+
+
+async def is_erased(session: AsyncSession, user_id: uuid.UUID) -> bool:
+    row = (
+        await session.execute(text("SELECT 1 FROM erased_users WHERE user_id = :id"), {"id": user_id})
+    ).first()
+    return row is not None
+
+
+async def erase_account(session: AsyncSession, user_id: uuid.UUID, now: datetime | None = None) -> None:
+    """Forget the personal data of an erased account (ADR-0018), in the
+    caller's transaction. Its reports get a random reporter id each, which
+    cannot be traced back, and lose their comment. Its content snapshots lose
+    their text and owner, and its cases their owner. Cases and decisions stay,
+    with opaque ids, as the moderation log: a case about the account itself
+    keeps the account id as target_id, and the decisions of an erased
+    moderator keep moderator_id. Every statement only matches what is left, so
+    a replay changes nothing."""
+    now = now or _now()
+    await lock_account(session, user_id, exclusive=True)
+    await session.execute(
+        text("INSERT INTO erased_users (user_id, erased_at) VALUES (:id, :now) ON CONFLICT DO NOTHING"),
+        {"id": user_id, "now": now},
+    )
+    await session.execute(
+        text("UPDATE reports SET reporter_id = gen_random_uuid(), comment = NULL WHERE reporter_id = :id"),
+        {"id": user_id},
+    )
+    await session.execute(
+        text(
+            "UPDATE content_snapshots SET body = '', owner_id = NULL "
+            "WHERE owner_id = :id OR (target_type = 'user' AND target_id = :id)"
+        ),
+        {"id": user_id},
+    )
+    await session.execute(text("UPDATE cases SET owner_id = NULL WHERE owner_id = :id"), {"id": user_id})
 
 
 async def _owner_of(session: AsyncSession, target_type: str, target_id: uuid.UUID) -> uuid.UUID | None:
