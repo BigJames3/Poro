@@ -17,6 +17,8 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
  * - [baseClient] : X-Request-ID et délais, sans jeton ; sert au rafraîchissement et aux routes publiques
  *   comme /health. Il n'a pas d'authenticator, donc pas de récursion pendant un rafraîchissement.
  * - [apiClient] : ajoute le Bearer et rafraîchit la session sur un 401.
+ * - [mediaClient] : stockage objet (lecture HLS, images, envoi sur URL présignée). Jamais de jeton :
+ *   ces URL sont publiques ou signées, et un Bearer y fuiterait vers un tiers (CDN, S3).
  */
 class NetworkModule(
     private val baseUrl: HttpUrl,
@@ -49,9 +51,20 @@ class NetworkModule(
         .authenticator(TokenAuthenticator(tokens, { refreshApi }, onSessionExpired))
         .build()
 
+    /** Délais longs : une partie de vidéo fait 8 Mio, sur des réseaux mobiles lents. */
+    val mediaClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(120, TimeUnit.SECONDS)
+        .apply { if (debug) addInterceptor(LoopbackRewriteInterceptor(baseUrl.host)) }
+        .build()
+
     val retrofit: Retrofit = buildRetrofit(baseUrl, apiClient)
 
-    val authApi: AuthApi = retrofit.create(AuthApi::class.java)
+    /** Interface Retrofit d'un service, servie par la gateway sous la même URL de base. */
+    inline fun <reified T : Any> api(): T = retrofit.create(T::class.java)
+
+    val authApi: AuthApi = api()
 
     /** Vérifie que la gateway répond (route publique `/health`). */
     val healthUrl: HttpUrl = baseUrl.resolve("health")!!

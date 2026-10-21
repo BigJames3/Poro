@@ -29,8 +29,8 @@ class EmailVerifyViewModelTest {
 
     private val auth = FakeAuthRepository()
 
-    private fun TestScope.viewModel(saved: SavedStateHandle = SavedStateHandle()) =
-        EmailVerifyViewModel(auth, saved, clock = { testScheduler.currentTime })
+    private fun TestScope.viewModel(saved: SavedStateHandle = SavedStateHandle(), codeAlreadySent: Boolean = true) =
+        EmailVerifyViewModel(codeAlreadySent, auth, saved, clock = { testScheduler.currentTime })
 
     @Test
     fun `the code sent at sign-up can be resent after a minute`() = runTest(main.dispatcher) {
@@ -71,6 +71,17 @@ class EmailVerifyViewModelTest {
         vm.resend()
         runCurrent()
         assertFalse(vm.state.value.needsNewCode)
+        assertTrue(vm.state.value.codeResent)
+        assertEquals(60, vm.state.value.resendInSeconds)
+    }
+
+    @Test
+    fun `opened from the profile, a code is requested at once`() = runTest(main.dispatcher) {
+        auth.emailCodeResults += ApiResult.Success(CodeSent(expiresIn = 900))
+        val vm = viewModel(codeAlreadySent = false)
+        runCurrent()
+
+        assertEquals(listOf("verification"), auth.emailCalls)
         assertTrue(vm.state.value.codeResent)
         assertEquals(60, vm.state.value.resendInSeconds)
     }

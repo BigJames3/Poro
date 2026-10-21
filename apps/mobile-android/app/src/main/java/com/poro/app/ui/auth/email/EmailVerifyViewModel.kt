@@ -43,10 +43,12 @@ sealed interface EmailVerifyEvent {
 }
 
 /**
- * Vérification de l'adresse juste après l'inscription (session ouverte, appels avec le Bearer).
- * L'inscription a déjà envoyé un code : le renvoi n'est possible qu'après 60 s, comme côté serveur.
+ * Vérification de l'adresse (session ouverte, appels avec le Bearer). Juste après l'inscription,
+ * [codeAlreadySent] : le renvoi n'est possible qu'après 60 s, comme côté serveur. Depuis le
+ * profil, aucun code n'est parti : on en demande un à l'ouverture.
  */
 class EmailVerifyViewModel(
+    codeAlreadySent: Boolean,
     private val auth: AuthRepository,
     savedState: SavedStateHandle,
     clock: Clock,
@@ -64,7 +66,11 @@ class EmailVerifyViewModel(
     }
 
     init {
-        if (resendCountdown.isSet) resendCountdown.restore() else resendCountdown.start(RESEND_COOLDOWN_SECONDS)
+        when {
+            resendCountdown.isSet -> resendCountdown.restore()
+            codeAlreadySent -> resendCountdown.start(RESEND_COOLDOWN_SECONDS)
+            else -> sendCode()
+        }
     }
 
     fun onCodeChange(raw: String) {
@@ -100,7 +106,10 @@ class EmailVerifyViewModel(
     }
 
     fun resend() {
-        if (!_state.value.canResend) return
+        if (_state.value.canResend) sendCode()
+    }
+
+    private fun sendCode() {
         _state.update { it.copy(resending = true, error = null, codeResent = false) }
         viewModelScope.launch {
             val result = auth.requestEmailVerification()

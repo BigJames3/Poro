@@ -80,6 +80,62 @@
     <string name="action_change_password">Changer le mot de passe</string>
     <string name="password_changed">Mot de passe modifié. Connectez-vous avec le nouveau.</string>
 
+    <!-- Navigation principale -->
+    <string name="action_back">Retour</string>
+    <string name="tab_feed">Accueil</string>
+    <string name="tab_search">Rechercher</string>
+    <string name="tab_upload">Publier</string>
+    <string name="tab_shop">Boutique</string>
+    <string name="tab_profile">Profil</string>
+    <string name="member_fallback">Membre Poro</string>
+
+    <!-- Profil -->
+    <string name="profile_edit">Modifier le profil</string>
+    <string name="profile_settings">Paramètres</string>
+    <string name="profile_no_username">Choisissez un pseudo pour que l’on puisse vous trouver.</string>
+    <string name="profile_become_creator">Devenir créateur</string>
+    <string name="profile_creator_badge">Créateur</string>
+    <string name="profile_creator_hint">Un pseudo est nécessaire pour devenir créateur.</string>
+    <string name="profile_verify_email">Vérifiez votre adresse email pour sécuriser votre compte.</string>
+    <string name="profile_verify_email_action">Vérifier</string>
+    <string name="edit_profile_title">Modifier le profil</string>
+    <string name="username_label">Pseudo</string>
+    <string name="username_rules">3 à 30 caractères : lettres minuscules, chiffres, « . » et « _ ».</string>
+    <string name="username_checking">Vérification…</string>
+    <string name="username_available">Pseudo disponible.</string>
+    <string name="username_invalid">Pseudo invalide : 3 à 30 caractères parmi a-z, 0-9, « . » et « _ ».</string>
+    <string name="username_reserved">Ce pseudo est réservé.</string>
+    <string name="username_taken">Ce pseudo est déjà pris.</string>
+    <string name="display_name_label">Nom affiché</string>
+    <string name="bio_label">Bio</string>
+    <string name="action_save">Enregistrer</string>
+    <string name="profile_saved">Profil enregistré.</string>
+    <string name="avatar_change">Changer la photo</string>
+    <string name="avatar_remove">Retirer la photo</string>
+    <string name="avatar_description">Photo de profil</string>
+
+    <!-- Paramètres et appareils -->
+    <string name="settings_title">Paramètres</string>
+    <string name="settings_account">Compte</string>
+    <string name="settings_devices">Appareils connectés</string>
+    <string name="settings_this_device">Cet appareil</string>
+    <string name="settings_unknown_device">Appareil inconnu</string>
+    <string name="settings_last_active">Dernière activité : %1$s</string>
+    <string name="settings_sign_out_device">Déconnecter</string>
+    <string name="settings_sign_out_others">Déconnecter les autres appareils</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_delete_account">Supprimer mon compte</string>
+
+    <!-- Suppression du compte -->
+    <string name="delete_title">Supprimer mon compte</string>
+    <string name="delete_explanation">Votre compte sera supprimé dans 30 jours, avec vos vidéos, commentaires et données personnelles. Tous vos appareils seront déconnectés. Reconnectez-vous avant cette date pour annuler.</string>
+    <string name="delete_acknowledge">Je comprends que mon compte sera définitivement supprimé.</string>
+    <string name="delete_password_prompt">Confirmez avec votre mot de passe.</string>
+    <string name="delete_code_prompt">Confirmez avec un code envoyé par SMS au %1$s.</string>
+    <string name="delete_send_code">Recevoir le code</string>
+    <string name="action_delete_account">Supprimer mon compte</string>
+    <string name="delete_scheduled">Votre compte sera supprimé le %1$s. Reconnectez-vous avant cette date pour annuler.</string>
+
     <!-- Erreurs : une par code du contrat (jamais error.message, en anglais) -->
     <string name="error_network">Pas de connexion. Vérifiez votre réseau et réessayez.</string>
     <string name="error_invalid_request">Saisie invalide. Vérifiez et réessayez.</string>
@@ -102,6 +158,15 @@
     <string name="error_code_invalid">Code incorrect. Vérifiez l’email et réessayez.</string>
     <string name="error_code_expired">Ce code a expiré. Demandez-en un nouveau.</string>
     <string name="error_code_too_many_attempts">Trop d’essais avec ce code. Demandez-en un nouveau.</string>
+    <string name="error_reauth_required">Confirmez votre identité pour continuer.</string>
+    <string name="error_not_found">Contenu introuvable ou supprimé.</string>
+    <string name="error_forbidden">Action non autorisée.</string>
+    <string name="error_username_required">Choisissez d’abord un pseudo.</string>
+    <string name="error_display_name_invalid">Nom affiché invalide.</string>
+    <string name="error_bio_invalid">Bio invalide.</string>
+    <string name="error_avatar_too_large">Image trop lourde (5 Mo au plus).</string>
+    <string name="error_avatar_invalid">Image illisible. Choisissez une photo JPEG, PNG ou WebP.</string>
+    <string name="error_upload_rejected">L’envoi du fichier a été refusé. Réessayez.</string>
     <string name="error_unexpected">Une erreur inattendue est survenue. Réessayez.</string>
     <string name="error_reference">Référence : %1$s</string>
 </resources>

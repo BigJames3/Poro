@@ -36,6 +36,18 @@ fun ApiResult<*>.toErrorMessage(): ErrorMessage? = when (this) {
         ApiErrorCodes.CODE_INVALID -> ErrorMessage(R.string.error_code_invalid)
         ApiErrorCodes.CODE_EXPIRED -> ErrorMessage(R.string.error_code_expired)
         ApiErrorCodes.CODE_TOO_MANY_ATTEMPTS -> ErrorMessage(R.string.error_code_too_many_attempts)
+        ApiErrorCodes.REAUTH_REQUIRED -> ErrorMessage(R.string.error_reauth_required)
+        ApiErrorCodes.NOT_FOUND, ApiErrorCodes.PROFILE_NOT_FOUND -> ErrorMessage(R.string.error_not_found)
+        ApiErrorCodes.FORBIDDEN -> ErrorMessage(R.string.error_forbidden)
+        ApiErrorCodes.USERNAME_TAKEN -> ErrorMessage(R.string.username_taken)
+        ApiErrorCodes.USERNAME_INVALID -> ErrorMessage(R.string.username_invalid)
+        ApiErrorCodes.USERNAME_RESERVED -> ErrorMessage(R.string.username_reserved)
+        ApiErrorCodes.USERNAME_REQUIRED -> ErrorMessage(R.string.error_username_required)
+        ApiErrorCodes.DISPLAY_NAME_INVALID -> ErrorMessage(R.string.error_display_name_invalid)
+        ApiErrorCodes.BIO_INVALID -> ErrorMessage(R.string.error_bio_invalid)
+        ApiErrorCodes.AVATAR_TOO_LARGE -> ErrorMessage(R.string.error_avatar_too_large)
+        ApiErrorCodes.AVATAR_INVALID -> ErrorMessage(R.string.error_avatar_invalid)
+        ApiErrorCodes.UPLOAD_REJECTED -> ErrorMessage(R.string.error_upload_rejected)
         else -> ErrorMessage(R.string.error_unexpected, requestId)
     }
 }

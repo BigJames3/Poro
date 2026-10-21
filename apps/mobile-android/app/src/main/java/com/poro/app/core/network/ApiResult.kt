@@ -58,6 +58,24 @@ object ApiErrorCodes {
     const val CODE_EXPIRED = "code_expired"
     const val CODE_TOO_MANY_ATTEMPTS = "code_too_many_attempts"
 
+    // Compte et profil.
+    const val REAUTH_REQUIRED = "reauth_required"
+    const val NOT_FOUND = "not_found"
+    const val FORBIDDEN = "forbidden"
+    const val CONFLICT = "conflict"
+    const val USERNAME_TAKEN = "username_taken"
+    const val USERNAME_INVALID = "username_invalid"
+    const val USERNAME_RESERVED = "username_reserved"
+    const val USERNAME_REQUIRED = "username_required"
+    const val DISPLAY_NAME_INVALID = "display_name_invalid"
+    const val BIO_INVALID = "bio_invalid"
+    const val PROFILE_NOT_FOUND = "profile_not_found"
+    const val AVATAR_TOO_LARGE = "avatar_too_large"
+    const val AVATAR_INVALID = "avatar_invalid"
+
+    /** Le stockage a refusé un envoi direct (fichier trop gros, URL expirée) : propre au client. */
+    const val UPLOAD_REJECTED = "upload_rejected"
+
     /** Réponse d'erreur illisible (pas d'enveloppe) : propre au client. */
     const val UNEXPECTED_RESPONSE = "unexpected_response"
 

@@ -1,13 +1,20 @@
 package com.poro.app
 
 import android.content.Context
+import com.poro.app.core.media.ContentResolverMediaReader
+import com.poro.app.core.media.LocalMediaReader
 import com.poro.app.core.network.NetworkModule
+import com.poro.app.core.network.PresignedUploader
 import com.poro.app.core.security.EncryptedTokenStore
 import com.poro.app.core.security.TokenStore
 import com.poro.app.core.time.Clock
 import com.poro.app.core.time.SystemElapsedClock
+import com.poro.app.data.auth.AccountRepository
 import com.poro.app.data.auth.AuthRepository
+import com.poro.app.data.auth.DefaultAccountRepository
 import com.poro.app.data.auth.DefaultAuthRepository
+import com.poro.app.data.user.DefaultProfileRepository
+import com.poro.app.data.user.ProfileRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,6 +49,14 @@ class AppContainer(context: Context) {
     )
 
     val authRepository: AuthRepository = DefaultAuthRepository(network.authApi, tokenStore)
+
+    val accountRepository: AccountRepository = DefaultAccountRepository(network.authApi, tokenStore)
+
+    val mediaReader: LocalMediaReader = ContentResolverMediaReader(context)
+
+    val uploader = PresignedUploader(network.mediaClient)
+
+    val profileRepository: ProfileRepository = DefaultProfileRepository(network.api(), uploader)
 }
 
 sealed interface SessionEvent {
