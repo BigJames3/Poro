@@ -18,7 +18,7 @@ import (
 // LikeVideo likes a ready video. A second call changes nothing and publishes nothing.
 func (s *Social) LikeVideo(ctx context.Context, user, videoID uuid.UUID) (*dto.VideoStats, error) {
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
-		owner, err := readyVideo(ctx, tx, videoID)
+		owner, err := shownVideo(ctx, tx, videoID)
 		if err != nil {
 			return err
 		}
@@ -57,7 +57,7 @@ func (s *Social) UnlikeVideo(ctx context.Context, user, videoID uuid.UUID) (*dto
 	if err != nil {
 		return nil, err
 	}
-	return s.VideoStats(ctx, videoID, &user)
+	return s.videoStats(ctx, videoID, &user)
 }
 
 // removeLike deletes a like, updates the counter and publishes like.deleted,
@@ -81,9 +81,14 @@ func removeLike(ctx context.Context, tx pgx.Tx, user, videoID uuid.UUID, owner *
 
 // VideoStats returns the counters of a ready video. viewer may be nil.
 func (s *Social) VideoStats(ctx context.Context, videoID uuid.UUID, viewer *uuid.UUID) (*dto.VideoStats, error) {
-	if _, err := readyVideo(ctx, s.pool, videoID); err != nil {
+	if _, err := shownVideo(ctx, s.pool, videoID); err != nil {
 		return nil, asAPIError(err)
 	}
+	return s.videoStats(ctx, videoID, viewer)
+}
+
+// videoStats reads the counters without checking the video, already checked.
+func (s *Social) videoStats(ctx context.Context, videoID uuid.UUID, viewer *uuid.UUID) (*dto.VideoStats, error) {
 	c, err := repository.GetVideoCounters(ctx, s.pool, videoID)
 	if err != nil {
 		return nil, errInternal.WithCause(err)
@@ -133,7 +138,7 @@ func (s *Social) ListVideoLikes(ctx context.Context, videoID uuid.UUID, rawCurso
 	if err != nil {
 		return nil, err
 	}
-	if _, err := readyVideo(ctx, s.pool, videoID); err != nil {
+	if _, err := shownVideo(ctx, s.pool, videoID); err != nil {
 		return nil, asAPIError(err)
 	}
 	limit = model.PageSize(limit)
@@ -153,7 +158,7 @@ func (s *Social) ListUserLikes(ctx context.Context, userID uuid.UUID, rawCursor 
 	if err != nil {
 		return nil, err
 	}
-	if err := knownUser(ctx, s.pool, userID); err != nil {
+	if err := shownUser(ctx, s.pool, userID); err != nil {
 		return nil, asAPIError(err)
 	}
 	limit = model.PageSize(limit)

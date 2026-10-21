@@ -103,6 +103,39 @@ func readyVideo(ctx context.Context, db repository.DBTX, videoID uuid.UUID) (uui
 	return owner, err
 }
 
+// shownVideo is readyVideo for public reads and new actions: the video of an
+// account whose deletion is pending is not found. Removals (unlike, deleting
+// one's comment) keep readyVideo, so nobody is stuck with them.
+func shownVideo(ctx context.Context, db repository.DBTX, videoID uuid.UUID) (uuid.UUID, error) {
+	owner, err := readyVideo(ctx, db, videoID)
+	if err != nil {
+		return owner, err
+	}
+	hidden, err := repository.AccountHidden(ctx, db, owner)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if hidden {
+		return uuid.Nil, errVideoNotFound
+	}
+	return owner, nil
+}
+
+// shownUser is knownUser for public reads and new follows.
+func shownUser(ctx context.Context, db repository.DBTX, userID uuid.UUID) error {
+	if err := knownUser(ctx, db, userID); err != nil {
+		return err
+	}
+	hidden, err := repository.AccountHidden(ctx, db, userID)
+	if err != nil {
+		return err
+	}
+	if hidden {
+		return errUserNotFound
+	}
+	return nil
+}
+
 func knownUser(ctx context.Context, db repository.DBTX, userID uuid.UUID) error {
 	ok, err := repository.UserExists(ctx, db, userID)
 	if err != nil {

@@ -158,8 +158,12 @@ vérifient hors ligne.
 
 Les autres services effacent leurs données à la réception de `poro.auth.user.deleted`, chacun
 dans son groupe `poro-<service>-account-erasure`
-([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) ;
-pendant les 30 jours, le profil reste visible.
+([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)).
+Pendant les 30 jours, le compte est masqué : la demande publie
+`poro.auth.user.deletion_scheduled` et l'annulation `poro.auth.user.deletion_cancelled`, dans la
+transaction qui change la date ; user, video, feed, search et social cachent alors le profil et
+le contenu sans rien effacer
+([ADR-0019](../../docs/architecture/adr/0019-masquage-pendant-la-suppression.md)).
 
 À la création d'un compte, `poro.auth.user.created` est écrit dans l'outbox (même transaction) ;
 à son effacement, `poro.auth.user.deleted`.

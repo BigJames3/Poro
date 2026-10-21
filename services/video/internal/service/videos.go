@@ -240,6 +240,19 @@ func (s *Videos) Get(ctx context.Context, id uuid.UUID, viewer *uuid.UUID) (*dto
 	if (row.Status != model.StatusReady || row.ModerationStatus == model.ModerationRemoved) && !owner {
 		return nil, errNotFound
 	}
+	if !owner {
+		ownerID, err := uuid.Parse(row.UserID)
+		if err != nil {
+			return nil, errInternal.WithCause(err)
+		}
+		hidden, err := s.repo.OwnerHidden(ctx, ownerID)
+		if err != nil {
+			return nil, errInternal.WithCause(err)
+		}
+		if hidden {
+			return nil, errNotFound // deletion pending: shown again if it is cancelled
+		}
+	}
 	return s.view(row, owner), nil
 }
 

@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/poro/shared-go/hiding"
+
 	"github.com/poro/search/internal/index"
 	"github.com/poro/search/internal/repository"
 	"github.com/poro/search/internal/testdb"
@@ -100,6 +102,39 @@ func TestUserSuggestionsAndPaging(t *testing.T) {
 	none, err := idx.Videos(ctx, "le la les", 0, 3)
 	require.NoError(t, err, "a query of stop words is not an error")
 	require.NotNil(t, none.Items)
+}
+
+// A pending deletion hides the account and its videos from every search.
+func TestHiddenAccountIsNotFound(t *testing.T) {
+	testdb.Available(t)
+	ctx := context.Background()
+	idx := index.NewPostgres(testdb.Pool)
+	name := "awa" + uuid.NewString()[:6]
+	user := seedUser(t, name, 0)
+	video := uuid.Must(uuid.NewV7())
+	require.NoError(t, repository.UpsertReadyVideo(ctx, testdb.Pool, repository.Video{
+		VideoID: video, AuthorID: user, Title: name + " danse", PublishedAt: time.Now(),
+	}))
+	setHidden := func(hidden bool) {
+		_, err := testdb.Pool.Exec(ctx, hiding.Upsert, user, hidden, time.Now())
+		require.NoError(t, err)
+	}
+	found := func() (users, videos, suggested int) {
+		u, err := idx.Users(ctx, name, 0, 10)
+		require.NoError(t, err)
+		v, err := idx.Videos(ctx, name, 0, 10)
+		require.NoError(t, err)
+		s, err := idx.Suggest(ctx, "@"+name, 5)
+		require.NoError(t, err)
+		return len(u.Items), len(v.Items), len(s.Users)
+	}
+
+	setHidden(true)
+	u, v, s := found()
+	require.Zero(t, u+v+s)
+	setHidden(false)
+	u, v, s = found()
+	require.Equal(t, []int{1, 1, 1}, []int{u, v, s})
 }
 
 func TestCancelledQueriesFail(t *testing.T) {

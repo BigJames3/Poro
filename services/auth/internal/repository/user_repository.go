@@ -191,31 +191,78 @@ func (r *userRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+// ScheduleDeletion keeps an existing erasure date. Only a new schedule
+// publishes poro.auth.user.deletion_scheduled, in the same transaction: the
+// other services hide the account until it is erased or the deletion cancelled.
 func (r *userRepository) ScheduleDeletion(ctx context.Context, id uuid.UUID, at time.Time) (time.Time, error) {
-	const q = `
-		UPDATE users SET deletion_scheduled_at = COALESCE(deletion_scheduled_at, $2), updated_at = NOW()
-		WHERE id = $1 AND deleted_at IS NULL
-		RETURNING deletion_scheduled_at`
-	var scheduled time.Time
-	err := r.pool.QueryRow(ctx, q, id, at).Scan(&scheduled)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("schedule deletion: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var current *time.Time
+	err = tx.QueryRow(ctx, `SELECT deletion_scheduled_at FROM users WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, id).
+		Scan(&current)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return time.Time{}, fmt.Errorf("schedule deletion: %w", ErrUserNotFound)
 	}
 	if err != nil {
 		return time.Time{}, fmt.Errorf("schedule deletion: %w", err)
 	}
-	return scheduled, nil
+	if current != nil {
+		return *current, nil
+	}
+	now := time.Now().UTC()
+	if _, err := tx.Exec(ctx, `UPDATE users SET deletion_scheduled_at = $2, updated_at = $3 WHERE id = $1`, id, at, now); err != nil {
+		return time.Time{}, fmt.Errorf("schedule deletion: %w", err)
+	}
+	scheduled, err := events.New(events.TypeAuthUserDeletionScheduled, 1, EventSource, id.String(),
+		events.AuthUserDeletionScheduledV1{UserID: id.String(), EraseAt: at, ChangedAt: now}, now)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("schedule deletion: %w", err)
+	}
+	if err := outbox.Enqueue(ctx, tx, scheduled); err != nil {
+		return time.Time{}, fmt.Errorf("schedule deletion: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return time.Time{}, fmt.Errorf("schedule deletion: commit: %w", err)
+	}
+	return at, nil
 }
 
+// CancelDeletion clears the erasure date and publishes
+// poro.auth.user.deletion_cancelled in the same transaction, so that the other
+// services show the account again.
 func (r *userRepository) CancelDeletion(ctx context.Context, id uuid.UUID) (bool, error) {
-	const q = `
-		UPDATE users SET deletion_scheduled_at = NULL, updated_at = NOW()
-		WHERE id = $1 AND deleted_at IS NULL AND deletion_scheduled_at IS NOT NULL`
-	tag, err := r.pool.Exec(ctx, q, id)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("cancel deletion: begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	now := time.Now().UTC()
+	tag, err := tx.Exec(ctx, `
+		UPDATE users SET deletion_scheduled_at = NULL, updated_at = $2
+		WHERE id = $1 AND deleted_at IS NULL AND deletion_scheduled_at IS NOT NULL`, id, now)
 	if err != nil {
 		return false, fmt.Errorf("cancel deletion: %w", err)
 	}
-	return tag.RowsAffected() == 1, nil
+	if tag.RowsAffected() == 0 {
+		return false, nil
+	}
+	cancelled, err := events.New(events.TypeAuthUserDeletionCancelled, 1, EventSource, id.String(),
+		events.AuthUserDeletionCancelledV1{UserID: id.String(), ChangedAt: now}, now)
+	if err != nil {
+		return false, fmt.Errorf("cancel deletion: %w", err)
+	}
+	if err := outbox.Enqueue(ctx, tx, cancelled); err != nil {
+		return false, fmt.Errorf("cancel deletion: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("cancel deletion: commit: %w", err)
+	}
+	return true, nil
 }
 
 func (r *userRepository) ExistsByPhone(ctx context.Context, phone string) (bool, error) {

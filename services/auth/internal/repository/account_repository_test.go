@@ -45,6 +45,27 @@ func TestScheduleAndCancelDeletion(t *testing.T) {
 
 	_, err = repo.ScheduleDeletion(ctx, uuid.Must(uuid.NewV7()), first)
 	require.ErrorIs(t, err, repository.ErrUserNotFound)
+
+	// One event per real change: the second schedule and the second
+	// cancellation changed nothing and published nothing.
+	countTopic := func(topic string) int {
+		var n int
+		require.NoError(t, testPool.QueryRow(ctx,
+			`SELECT count(*) FROM outbox_events WHERE event_key = $1 AND topic = $2`, user.ID.String(), topic).Scan(&n))
+		return n
+	}
+	require.Equal(t, 1, countTopic(events.TypeAuthUserDeletionScheduled))
+	require.Equal(t, 1, countTopic(events.TypeAuthUserDeletionCancelled))
+	var payload []byte
+	require.NoError(t, testPool.QueryRow(ctx,
+		`SELECT payload FROM outbox_events WHERE event_key = $1 AND topic = $2`,
+		user.ID.String(), events.TypeAuthUserDeletionScheduled).Scan(&payload))
+	env, err := events.Decode(payload)
+	require.NoError(t, err)
+	var data events.AuthUserDeletionScheduledV1
+	require.NoError(t, env.DecodeData(&data))
+	require.True(t, first.Equal(data.EraseAt))
+	require.Equal(t, user.ID.String(), data.UserID)
 }
 
 func TestActiveSessionsAndRevokeOthers(t *testing.T) {

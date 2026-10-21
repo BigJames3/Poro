@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/poro/shared-go/health"
+	"github.com/poro/shared-go/hiding"
 	"github.com/poro/shared-go/httpx"
 	"github.com/poro/shared-go/jwtauth"
 	"github.com/poro/shared-go/kafka"
@@ -116,6 +117,15 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init account erasure consumer: %w", err)
 	}
+	hider, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   consumer.HidingGroup,
+		Topics:  hiding.Topics,
+		Metrics: m.Registry(),
+	}, hiding.Handler(pool), log)
+	if err != nil {
+		return fmt.Errorf("init account hiding consumer: %w", err)
+	}
 
 	app := fiber.New(fiber.Config{
 		AppName:                 "poro-social",
@@ -150,7 +160,7 @@ func run() error {
 	go func() {
 		defer close(consumerDone)
 		var wg sync.WaitGroup
-		for _, c := range []*kafka.Consumer{projections, erasure} {
+		for _, c := range []*kafka.Consumer{projections, erasure, hider} {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

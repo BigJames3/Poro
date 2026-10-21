@@ -39,7 +39,7 @@ func TestErasedAccountReachesKafka(t *testing.T) {
 	}
 	admin, err := kgo.NewClient(kgo.SeedBrokers(broker))
 	require.NoError(t, err)
-	_, err = kadm.NewClient(admin).CreateTopics(ctx, 1, 1, nil, events.TypeAuthUserCreated, events.TypeAuthUserDeleted)
+	_, err = kadm.NewClient(admin).CreateTopics(ctx, 1, 1, nil, events.TypeAuthUserCreated, events.TypeAuthUserDeletionScheduled, events.TypeAuthUserDeleted)
 	require.NoError(t, err)
 	admin.Close()
 
@@ -63,7 +63,7 @@ func TestErasedAccountReachesKafka(t *testing.T) {
 	require.NoError(t, err)
 	published, err := relay.PublishBatch(ctx)
 	require.NoError(t, err)
-	require.Equal(t, 2, published, "user.created then user.deleted")
+	require.Equal(t, 3, published, "user.created, user.deletion_scheduled, then user.deleted")
 
 	record := readOne(t, broker, events.TypeAuthUserDeleted)
 	require.Equal(t, user.ID.String(), string(record.Key), "keyed by account: ordered after its other events")

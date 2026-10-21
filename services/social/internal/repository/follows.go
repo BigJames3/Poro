@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/poro/shared-go/hiding"
+
 	"github.com/poro/social/internal/cursor"
 )
 
@@ -52,7 +54,7 @@ func IsFollowing(ctx context.Context, db DBTX, followerID, followingID uuid.UUID
 func ListFollowers(ctx context.Context, db DBTX, userID uuid.UUID, after *cursor.Position, limit int) ([]Follow, error) {
 	ts, id := keyset(after)
 	rows, err := db.Query(ctx, `SELECT id, follower_id, following_id, created_at FROM follows
-		WHERE following_id = $1 AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))
+		WHERE following_id = $1 AND `+hiding.NotHidden("follows.follower_id")+` AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))
 		ORDER BY created_at DESC, id DESC LIMIT $4`, userID, ts, id, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list followers: %w", err)
@@ -64,7 +66,7 @@ func ListFollowers(ctx context.Context, db DBTX, userID uuid.UUID, after *cursor
 func ListFollowing(ctx context.Context, db DBTX, userID uuid.UUID, after *cursor.Position, limit int) ([]Follow, error) {
 	ts, id := keyset(after)
 	rows, err := db.Query(ctx, `SELECT id, follower_id, following_id, created_at FROM follows
-		WHERE follower_id = $1 AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))
+		WHERE follower_id = $1 AND `+hiding.NotHidden("follows.following_id")+` AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))
 		ORDER BY created_at DESC, id DESC LIMIT $4`, userID, ts, id, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list following: %w", err)

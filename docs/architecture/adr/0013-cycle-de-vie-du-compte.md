@@ -46,8 +46,9 @@ hors ligne avec le JWKS.
 
 ## Conséquences
 
-- Pendant les 30 jours, le compte reste visible dans les autres services : seul auth sait
-  qu'il va disparaître.
+- ~~Pendant les 30 jours, le compte reste visible dans les autres services : seul auth sait
+  qu'il va disparaître.~~ Le compte est désormais masqué dès la demande
+  ([ADR-0019](0019-masquage-pendant-la-suppression.md)).
 - Un vendeur qui supprime son compte garde sa boutique tant que shop ne consomme pas
   `poro.auth.user.deleted` ; les commandes en cours seront traitées dans cette PR de shop.
   *Fait par l'[ADR-0018](0018-effacement-du-compte-dans-les-services.md) : chaque service

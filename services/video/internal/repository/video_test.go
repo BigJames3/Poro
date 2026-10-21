@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/poro/shared-go/hiding"
+
 	"github.com/poro/video/internal/model"
 	"github.com/poro/video/internal/repository"
 	"github.com/poro/video/internal/testdb"
@@ -68,4 +70,20 @@ func TestVideosCRUD(t *testing.T) {
 	require.NoError(t, tx.Commit(ctx))
 	_, err = repo.Get(ctx, id)
 	require.ErrorIs(t, err, repository.ErrNotFound)
+}
+
+func TestOwnerHidden(t *testing.T) {
+	testdb.Available(t)
+	ctx := context.Background()
+	repo := repository.New(testdb.Pool)
+	user := uuid.Must(uuid.NewV7())
+
+	hidden, err := repo.OwnerHidden(ctx, user)
+	require.NoError(t, err)
+	require.False(t, hidden)
+	_, err = testdb.Pool.Exec(ctx, hiding.Upsert, user, true, time.Now())
+	require.NoError(t, err)
+	hidden, err = repo.OwnerHidden(ctx, user)
+	require.NoError(t, err)
+	require.True(t, hidden)
 }

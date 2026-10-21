@@ -20,6 +20,10 @@ Groupe `poro-search-indexer` (inbox `processed_events`, DLQ). Le service ne publ
 | `poro.social.like.*`, `poro.social.comment.*`, `poro.social.share.created` | Compteurs de classement (jamais négatifs) |
 | `poro.social.follow.*` | Nombre d'abonnés des comptes |
 
+Groupe `poro-search-account-hiding` sur `poro.auth.user.deletion_scheduled` et `.deletion_cancelled`
+([ADR-0019](../../docs/architecture/adr/0019-masquage-pendant-la-suppression.md)) : un compte dont
+la suppression est demandée et ses vidéos sortent des résultats, jusqu'à l'annulation.
+
 Groupe `poro-search-account-erasure` sur `poro.auth.user.deleted`
 ([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) :
 le compte est désindexé ; son id seul reste dans `erased_users` pour qu'aucun événement

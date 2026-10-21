@@ -4,14 +4,16 @@ import "time"
 
 // Event types. The JSON Schema of each lives in packages/contracts/events.
 const (
-	TypeAuthUserCreated      = "poro.auth.user.created"
-	TypeAuthUserDeleted      = "poro.auth.user.deleted"
-	TypeUserCreatorActivated = "poro.user.creator.activated"
-	TypeUserProfileUpdated   = "poro.user.profile.updated"
-	TypeVideoUploaded        = "poro.video.uploaded"
-	TypeVideoReady           = "poro.video.ready"
-	TypeVideoFailed          = "poro.video.failed"
-	TypeVideoDeleted         = "poro.video.deleted"
+	TypeAuthUserCreated           = "poro.auth.user.created"
+	TypeAuthUserDeleted           = "poro.auth.user.deleted"
+	TypeAuthUserDeletionScheduled = "poro.auth.user.deletion_scheduled"
+	TypeAuthUserDeletionCancelled = "poro.auth.user.deletion_cancelled"
+	TypeUserCreatorActivated      = "poro.user.creator.activated"
+	TypeUserProfileUpdated        = "poro.user.profile.updated"
+	TypeVideoUploaded             = "poro.video.uploaded"
+	TypeVideoReady                = "poro.video.ready"
+	TypeVideoFailed               = "poro.video.failed"
+	TypeVideoDeleted              = "poro.video.deleted"
 
 	TypeSocialLikeCreated    = "poro.social.like.created"
 	TypeSocialLikeDeleted    = "poro.social.like.deleted"
@@ -56,6 +58,24 @@ type AuthUserCreatedV1 struct {
 type AuthUserDeletedV1 struct {
 	UserID    string    `json:"user_id"`
 	DeletedAt time.Time `json:"deleted_at"`
+}
+
+// AuthUserDeletionScheduledV1 is published by auth when an owner asks to
+// delete their account. Until EraseAt, the account is hidden: services stop
+// showing its profile and content, but keep the data so that a cancellation
+// restores everything. ChangedAt orders it against a cancellation, which
+// travels on another topic.
+type AuthUserDeletionScheduledV1 struct {
+	UserID    string    `json:"user_id"`
+	EraseAt   time.Time `json:"erase_at"`
+	ChangedAt time.Time `json:"changed_at"`
+}
+
+// AuthUserDeletionCancelledV1 is published by auth when a scheduled deletion
+// is cancelled, explicitly or by signing in again: the account is shown again.
+type AuthUserDeletionCancelledV1 struct {
+	UserID    string    `json:"user_id"`
+	ChangedAt time.Time `json:"changed_at"`
 }
 
 // UserCreatorActivatedV1 is published by the user service when a profile becomes a creator.

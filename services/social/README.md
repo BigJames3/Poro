@@ -45,6 +45,7 @@ Fiber v2, pgx v5, port **8085**, base `poro_social`).
 | Consommé | `poro.auth.user.created` → `users_projection` | groupe `poro-social-projections` |
 | Consommé | `poro.moderation.content.removed` / `.restored` | groupe `poro-social-projections` |
 | Consommé | `poro.auth.user.deleted` → likes, likes de commentaires, partages et abonnements supprimés (avec compteurs et `*.deleted`), commentaires supprimés et vidés, projection et compteurs supprimés, id gardé dans `erased_users` ([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) | groupe `poro-social-account-erasure` |
+| Consommé | `poro.auth.user.deletion_scheduled` / `.deletion_cancelled` → compte masqué pendant les 30 jours : ses vidéos et son compte en 404, ses commentaires, likes et abonnements hors des listes ; les retraits restent possibles ([ADR-0019](../../docs/architecture/adr/0019-masquage-pendant-la-suppression.md)) | groupe `poro-social-account-hiding` |
 
 Modération : une vidéo retirée passe à `removed` (plus aucune action ni lecture,
 `404 video_not_found`) jusqu'à sa restauration ; un `poro.video.ready` tardif ne

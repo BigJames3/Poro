@@ -12,6 +12,9 @@ rôles, sessions) reste dans auth.
   - consommé : `poro.auth.user.deleted` (groupe `poro-user-account-erasure`,
     [ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) :
     profil anonymisé (id et `deleted_at` seuls), pseudo libéré, avatars supprimés du stockage
+  - consommés : `poro.auth.user.deletion_scheduled` et `.deletion_cancelled` (groupe
+    `poro-user-account-hiding`, [ADR-0019](../../docs/architecture/adr/0019-masquage-pendant-la-suppression.md)) :
+    profil masqué (404) pendant les 30 jours, données gardées
   - produits : `poro.user.creator.activated`, `poro.user.profile.updated`
     (contrats dans [`packages/contracts/events`](../../packages/contracts/events))
 

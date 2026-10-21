@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/poro/shared-go/health"
+	"github.com/poro/shared-go/hiding"
 	"github.com/poro/shared-go/httpx"
 	"github.com/poro/shared-go/jwtauth"
 	"github.com/poro/shared-go/kafka"
@@ -121,6 +122,16 @@ func run() error {
 		return fmt.Errorf("init account erasure: %w", err)
 	}
 
+	hider, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   consumer.HidingGroup,
+		Topics:  hiding.Topics,
+		Metrics: m.Registry(),
+	}, hiding.Handler(pool), log)
+	if err != nil {
+		return fmt.Errorf("init account hiding: %w", err)
+	}
+
 	svc := service.New(pool,
 		session.NewStore(redis.Conn(), model.SessionTTL),
 		session.NewCache(redis.Conn(), model.FirstPageTTL),
@@ -155,7 +166,7 @@ func run() error {
 	})
 
 	var background sync.WaitGroup
-	background.Add(3)
+	background.Add(4)
 	go func() {
 		defer background.Done()
 		_ = projector.Run(ctx)
@@ -163,6 +174,10 @@ func run() error {
 	go func() {
 		defer background.Done()
 		_ = eraser.Run(ctx)
+	}()
+	go func() {
+		defer background.Done()
+		_ = hider.Run(ctx)
 	}()
 	go func() {
 		defer background.Done()

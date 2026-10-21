@@ -7,6 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/poro/shared-go/hiding"
 )
 
 // Postgres ranks with full-text search (search_fr: French stems without
@@ -31,6 +33,7 @@ func (p *Postgres) Videos(ctx context.Context, query string, offset, limit int) 
 			v.author_id, u.username, u.display_name, u.avatar_url
 		FROM videos v CROSS JOIN q LEFT JOIN users u ON u.user_id = v.author_id
 		WHERE v.published_at IS NOT NULL AND v.deleted_at IS NULL AND v.moderation_status = 'approved'
+			AND `+hiding.NotHidden("v.author_id")+`
 			AND (v.document @@ q.tsq OR q.folded <% search_fold(v.title))
 		ORDER BY (ts_rank_cd(v.document, q.tsq, 32) + word_similarity(q.folded, search_fold(v.title)))
 			* (1 + ln(1 + v.likes_count + 2 * v.comments_count + 3 * v.shares_count) / 10)
@@ -62,7 +65,7 @@ func (p *Postgres) Users(ctx context.Context, query string, offset, limit int) (
 				search_fold($1) AS folded, lower(ltrim(btrim($1), '@')) AS handle)
 		SELECT u.user_id, u.username, u.display_name, u.avatar_url, u.is_creator, u.followers_count
 		FROM users u CROSS JOIN q
-		WHERE u.username IS NOT NULL
+		WHERE u.username IS NOT NULL AND `+hiding.NotHidden("u.user_id")+`
 			AND (u.document @@ q.tsq
 				OR q.folded <% search_fold(coalesce(u.username, '') || ' ' || coalesce(u.display_name, ''))
 				OR lower(u.username) LIKE `+likePrefix("q.handle")+`)
@@ -111,7 +114,7 @@ func (p *Postgres) Suggest(ctx context.Context, prefix string, perKind int) (Sug
 	pattern := escapeLike(clean) + "%"
 	rows, err := p.pool.Query(ctx, `
 		SELECT user_id, username, display_name, avatar_url, is_creator, followers_count FROM users
-		WHERE username IS NOT NULL AND lower(username) LIKE $1
+		WHERE username IS NOT NULL AND lower(username) LIKE $1 AND `+hiding.NotHidden("users.user_id")+`
 		ORDER BY followers_count DESC, username LIMIT $2`, pattern, perKind)
 	if err != nil {
 		return Suggestions{}, fmt.Errorf("suggest users: %w", err)

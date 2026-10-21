@@ -25,7 +25,7 @@ func (s *Social) Share(ctx context.Context, user, videoID uuid.UUID, req dto.Sha
 	}
 	share := repository.Share{ID: newID(), UserID: user, VideoID: videoID, Channel: req.Channel}
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
-		owner, err := readyVideo(ctx, tx, videoID)
+		owner, err := shownVideo(ctx, tx, videoID)
 		if err != nil {
 			return err
 		}
