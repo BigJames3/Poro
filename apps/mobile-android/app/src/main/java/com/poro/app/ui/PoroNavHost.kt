@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -46,6 +47,7 @@ import com.poro.app.ui.notification.FeedNotificationBell
 import com.poro.app.ui.notification.notificationGraph
 import com.poro.app.ui.profile.profileGraph
 import com.poro.app.ui.search.searchGraph
+import com.poro.app.ui.shop.shopGraph
 import com.poro.app.ui.social.MyFollowCounts
 import com.poro.app.ui.social.SocialVideoActions
 import com.poro.app.ui.social.socialGraph
@@ -62,6 +64,7 @@ enum class TopLevelTab(
     Home(HomeRoute, R.string.tab_feed, Icons.Filled.Home, { it.hasRoute<HomeRoute>() }),
     Search(SearchRoute, R.string.tab_search, Icons.Filled.Search, { it.hasRoute<SearchRoute>() }),
     Upload(UploadRoute, R.string.tab_upload, Icons.Filled.AddCircle, { it.hasRoute<UploadRoute>() }),
+    Shop(ShopHomeRoute, R.string.tab_shop, Icons.Filled.ShoppingCart, { it.hasRoute<ShopHomeRoute>() }),
     Profile(ProfileRoute, R.string.tab_profile, Icons.Filled.Person, { it.hasRoute<ProfileRoute>() }),
 }
 
@@ -142,7 +145,8 @@ private fun PoroNavGraph(
                 feedTopEnd = { FeedNotificationBell(nav) },
             )
             searchGraph(nav)
-            notificationGraph(nav, onOpenOrder = { _, _ -> })
+            notificationGraph(nav, onOpenOrder = { orderId, asSeller -> nav.controller.navigate(OrderRoute(orderId, asSeller)) })
+            shopGraph(nav)
             socialGraph(nav)
             uploadGraph(nav)
             profileGraph(nav) { me ->

@@ -71,3 +71,34 @@ data object SettingsRoute
 
 @Serializable
 data object DeleteAccountRoute
+
+/** Onglet « Boutique » : panier, commandes, recherche d'une boutique par identifiant, vente. */
+@Serializable
+data object ShopHomeRoute
+
+/** Vitrine d'une boutique, par son identifiant « @… ». */
+@Serializable
+data class ShopRoute(val handle: String)
+
+@Serializable
+data class ProductRoute(val productId: String)
+
+@Serializable
+data object CartRoute
+
+@Serializable
+data object CheckoutRoute
+
+/** Ses achats, ou les commandes reçues par sa boutique ([asSeller]). */
+@Serializable
+data class OrdersRoute(val asSeller: Boolean = false)
+
+@Serializable
+data class OrderRoute(val orderId: String, val asSeller: Boolean = false)
+
+@Serializable
+data object MyShopRoute
+
+/** Création ([productId] null) ou modification d'un produit ; [currency] : celle de la boutique. */
+@Serializable
+data class ProductEditorRoute(val productId: String? = null, val currency: String)

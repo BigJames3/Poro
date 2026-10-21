@@ -150,7 +150,7 @@ private fun CountryPicker(
 }
 
 @StringRes
-private fun LaunchCountry.label(): Int = when (this) {
+internal fun LaunchCountry.label(): Int = when (this) {
     LaunchCountry.CI -> R.string.country_ci
     LaunchCountry.SN -> R.string.country_sn
     LaunchCountry.CM -> R.string.country_cm

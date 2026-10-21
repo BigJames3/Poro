@@ -65,4 +65,43 @@ object Formats {
         val totalSeconds = millis / 1000
         return "${totalSeconds / 60}:${(totalSeconds % 60).toString().padStart(2, '0')}"
     }
+
+    /**
+     * Montant en unités mineures : XOF et XAF n'en ont pas (« 12 500 FCFA »), NGN est en kobo
+     * (« ₦1 250,50 »). Séparateur de milliers : espace insécable.
+     */
+    fun money(amount: Long, currency: String): String = when (currency) {
+        "NGN" -> {
+            val naira = grouped(amount / 100)
+            val kobo = amount % 100
+            if (kobo == 0L) "₦$naira" else "₦$naira,${kobo.toString().padStart(2, '0')}"
+        }
+        "XOF", "XAF" -> "${grouped(amount)}\u00A0FCFA"
+        else -> "${grouped(amount)}\u00A0$currency"
+    }
+
+    /**
+     * Prix saisi par un vendeur, en unités mineures ; null s'il est invalide. Espaces ignorés ;
+     * décimales (virgule ou point, 2 au plus) seulement en NGN.
+     */
+    fun parseMoney(input: String, currency: String): Long? {
+        val compact = input.replace(Regex("[\\s\u00A0]"), "").replace(',', '.')
+        if (compact.isEmpty()) return null
+        return if (currency == "NGN") {
+            val match = Regex("^(\\d{1,10})(?:\\.(\\d{1,2}))?$").matchEntire(compact) ?: return null
+            val kobo = match.groupValues[2].padEnd(2, '0')
+            match.groupValues[1].toLong() * 100 + kobo.toLong()
+        } else {
+            compact.takeIf { Regex("^\\d{1,12}$").matches(it) }?.toLong()
+        }
+    }
+
+    /** Valeur à préremplir dans un champ de prix : l'inverse de [parseMoney], sans séparateurs. */
+    fun moneyInput(amount: Long, currency: String): String = when (currency) {
+        "NGN" -> if (amount % 100 == 0L) (amount / 100).toString() else "${amount / 100},${(amount % 100).toString().padStart(2, '0')}"
+        else -> amount.toString()
+    }
+
+    private fun grouped(value: Long): String =
+        value.toString().reversed().chunked(3).joinToString("\u00A0").reversed()
 }

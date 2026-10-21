@@ -49,4 +49,24 @@ class FormatsTest {
         assertEquals("0:42", Formats.duration(42_300))
         assertEquals("2:05", Formats.duration(125_000))
     }
+
+    @Test
+    fun `money in CFA francs has no decimals, naira is in kobo`() {
+        assertEquals("12\u00A0500\u00A0FCFA", Formats.money(12_500, "XOF"))
+        assertEquals("750\u00A0FCFA", Formats.money(750, "XAF"))
+        assertEquals("₦1\u00A0250,50", Formats.money(125_050, "NGN"))
+        assertEquals("₦1\u00A0250", Formats.money(125_000, "NGN"))
+    }
+
+    @Test
+    fun `seller prices are read in the shop currency`() {
+        assertEquals(12_500L, Formats.parseMoney("12 500", "XOF"))
+        assertEquals(null, Formats.parseMoney("12,5", "XOF"))
+        assertEquals(125_050L, Formats.parseMoney("1 250,5", "NGN"))
+        assertEquals(125_000L, Formats.parseMoney("1250", "NGN"))
+        assertEquals(null, Formats.parseMoney("1250,505", "NGN"))
+        assertEquals(null, Formats.parseMoney("", "NGN"))
+        assertEquals("1250,50", Formats.moneyInput(125_050, "NGN"))
+        assertEquals("12500", Formats.moneyInput(12_500, "XOF"))
+    }
 }
