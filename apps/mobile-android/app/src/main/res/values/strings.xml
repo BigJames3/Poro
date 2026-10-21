@@ -2,6 +2,7 @@
     <string name="app_name">Poro</string>
     <string name="loading">Chargement…</string>
     <string name="action_retry">Réessayer</string>
+    <string name="code_field_description">Code de vérification à 6 chiffres</string>
 
     <!-- Accueil provisoire -->
     <string name="home_api_reachable">API joignable ✓</string>
@@ -30,7 +31,6 @@
     <!-- Saisie du code -->
     <string name="otp_title">Saisissez le code</string>
     <string name="otp_subtitle">Code à 6 chiffres envoyé par SMS au %1$s.</string>
-    <string name="otp_field_description">Code de vérification à 6 chiffres</string>
     <string name="otp_expired_hint">Ce code a expiré. Demandez-en un nouveau.</string>
     <string name="otp_code_resent">Nouveau code envoyé.</string>
     <string name="otp_resend">Renvoyer le code</string>

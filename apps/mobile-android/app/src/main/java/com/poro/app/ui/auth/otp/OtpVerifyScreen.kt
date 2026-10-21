@@ -1,20 +1,13 @@
 package com.poro.app.ui.auth.otp
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -24,26 +17,20 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.autofill.ContentType
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.core.phone.PhoneNumber
+import com.poro.app.ui.auth.CodeField
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.quantityString
 import com.poro.app.ui.theme.PoroTheme
@@ -68,7 +55,7 @@ fun OtpVerifyScreen(
             modifier = Modifier.semantics { heading() },
         )
         Text(stringResource(R.string.otp_subtitle, phone), style = MaterialTheme.typography.bodyLarge)
-        OtpCodeField(
+        CodeField(
             code = state.code,
             enabled = !state.verifying && !state.needsNewCode,
             onCodeChange = onCodeChange,
@@ -136,56 +123,6 @@ private fun expiryText(seconds: Int): String =
     }
 
 private const val SECONDS_PER_MINUTE = 60
-
-/**
- * Un seul champ invisible dessiné en 6 cases : le collage et le remplissage automatique du code
- * reçu par SMS (ContentType.SmsOtpCode) arrivent en une fois, comme une saisie au clavier.
- */
-@Composable
-private fun OtpCodeField(
-    code: String,
-    enabled: Boolean,
-    onCodeChange: (String) -> Unit,
-    onDone: () -> Unit,
-) {
-    val focusRequester = remember { FocusRequester() }
-    // À l'ouverture et après une vérification refusée : le clavier revient sans toucher le champ.
-    LaunchedEffect(enabled) { if (enabled) focusRequester.requestFocus() }
-    val description = stringResource(R.string.otp_field_description)
-    BasicTextField(
-        value = code,
-        onValueChange = onCodeChange,
-        enabled = enabled,
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { onDone() }),
-        modifier = Modifier
-            .focusRequester(focusRequester)
-            .semantics {
-                contentType = ContentType.SmsOtpCode
-                contentDescription = description
-            },
-        decorationBox = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                repeat(OtpUiState.CODE_LENGTH) { index ->
-                    val active = enabled && index == code.length
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(width = 44.dp, height = 56.dp)
-                            .border(
-                                width = if (active) 2.dp else 1.dp,
-                                color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                shape = RoundedCornerShape(8.dp),
-                            ),
-                    ) {
-                        Text(code.getOrNull(index)?.toString().orEmpty(), style = MaterialTheme.typography.headlineSmall)
-                    }
-                }
-            }
-        },
-    )
-}
 
 @Preview(showBackground = true)
 @Composable

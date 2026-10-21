@@ -5,14 +5,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.poro.app.core.network.ApiErrorCodes
 import com.poro.app.core.network.ApiResult
-import com.poro.app.core.network.retryDelaySeconds
 import com.poro.app.core.time.Clock
 import com.poro.app.data.auth.AuthRepository
+import com.poro.app.ui.auth.Countdown
 import com.poro.app.ui.auth.ErrorMessage
+import com.poro.app.ui.auth.RateLimitBackoff
 import com.poro.app.ui.auth.toErrorMessage
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,15 +48,15 @@ sealed interface OtpEvent {
 }
 
 /**
- * Saisie du code reçu par SMS. Les échéances (renvoi possible, expiration du code) sont gardées
- * dans [savedState] en temps absolu de [clock] : elles survivent à la mort du processus.
+ * Saisie du code reçu par SMS. Les échéances (renvoi possible, expiration du code) sont des
+ * [Countdown] : elles survivent à la mort du processus.
  */
 class OtpVerifyViewModel(
     phone: String,
     expiresInSeconds: Int,
     private val auth: AuthRepository,
-    private val savedState: SavedStateHandle,
-    private val clock: Clock,
+    savedState: SavedStateHandle,
+    clock: Clock,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(OtpUiState(phone = phone))
@@ -66,15 +65,21 @@ class OtpVerifyViewModel(
     private val _events = Channel<OtpEvent>(Channel.BUFFERED)
     val events: Flow<OtpEvent> = _events.receiveAsFlow()
 
-    private var consecutive429 = 0
-    private var ticker: Job? = null
+    private val backoff = RateLimitBackoff()
+    private val resendCountdown = Countdown(viewModelScope, savedState, KEY_RESEND_AT, clock) { seconds ->
+        _state.update { it.copy(resendInSeconds = seconds) }
+    }
+    private val expiryCountdown = Countdown(viewModelScope, savedState, KEY_EXPIRES_AT, clock) { seconds ->
+        _state.update { it.copy(expiresInSeconds = seconds) }
+    }
 
     init {
-        if (savedState.get<Long>(KEY_RESEND_AT) == null) {
+        if (resendCountdown.isSet) {
+            resendCountdown.restore()
+            expiryCountdown.restore()
+        } else {
             // Première ouverture : le code vient d'être envoyé par l'écran précédent.
             codeSent(expiresInSeconds)
-        } else {
-            startTicker()
         }
     }
 
@@ -121,54 +126,27 @@ class OtpVerifyViewModel(
         if (!current.canResend) return
         _state.update { it.copy(resending = true, error = null, codeResent = false) }
         viewModelScope.launch {
-            when (val result = auth.requestOtp(current.phone)) {
-                is ApiResult.Success -> {
-                    consecutive429 = 0
-                    codeSent(result.data.expiresIn)
-                    _state.update { it.copy(resending = false, code = "", needsNewCode = false, codeResent = true) }
-                }
-                is ApiResult.Failure -> {
-                    if (result.httpStatus == 429) consecutive429++ else consecutive429 = 0
-                    result.retryDelaySeconds(consecutive429)?.let { delay ->
-                        savedState[KEY_RESEND_AT] = clock.elapsedMillis() + delay * TICK_MS
-                        startTicker()
-                    }
-                    _state.update { it.copy(resending = false, error = result.toErrorMessage()) }
-                }
-                is ApiResult.NetworkError -> _state.update { it.copy(resending = false, error = result.toErrorMessage()) }
+            val result = auth.requestOtp(current.phone)
+            backoff.delayAfter(result)?.let(resendCountdown::start)
+            if (result is ApiResult.Success) {
+                codeSent(result.data.expiresIn)
+                _state.update { it.copy(resending = false, code = "", needsNewCode = false, codeResent = true) }
+            } else {
+                _state.update { it.copy(resending = false, error = result.toErrorMessage()) }
             }
         }
     }
 
     private fun codeSent(expiresInSeconds: Int) {
-        val now = clock.elapsedMillis()
-        savedState[KEY_RESEND_AT] = now + RESEND_COOLDOWN_MS
-        savedState[KEY_EXPIRES_AT] = now + expiresInSeconds.coerceAtLeast(0) * TICK_MS
-        startTicker()
+        resendCountdown.start(RESEND_COOLDOWN_SECONDS)
+        expiryCountdown.start(expiresInSeconds.coerceAtLeast(0).toLong())
     }
-
-    private fun startTicker() {
-        ticker?.cancel()
-        ticker = viewModelScope.launch {
-            while (true) {
-                val resendIn = secondsUntil(savedState[KEY_RESEND_AT])
-                val expiresIn = secondsUntil(savedState[KEY_EXPIRES_AT])
-                _state.update { it.copy(resendInSeconds = resendIn, expiresInSeconds = expiresIn) }
-                if (resendIn == 0 && expiresIn == 0) break
-                delay(TICK_MS)
-            }
-        }
-    }
-
-    private fun secondsUntil(deadline: Long?): Int =
-        if (deadline == null) 0 else ((deadline - clock.elapsedMillis() + TICK_MS - 1) / TICK_MS).coerceAtLeast(0).toInt()
 
     private companion object {
         const val KEY_RESEND_AT = "resend_at"
         const val KEY_EXPIRES_AT = "expires_at"
-        const val TICK_MS = 1000L
 
         /** Le serveur accepte un code par numéro toutes les 60 s. */
-        const val RESEND_COOLDOWN_MS = 60_000L
+        const val RESEND_COOLDOWN_SECONDS = 60L
     }
 }
