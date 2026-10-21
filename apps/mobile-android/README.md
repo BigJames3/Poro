@@ -6,8 +6,17 @@ Application Android de Poro (Kotlin, Jetpack Compose), module unique `:app`.
 
 - Android Studio récent (AGP 9.4), SDK Platform 37 ; le JDK est téléchargé par Gradle.
 - Backend local : `docker compose up` à la racine du monorepo, gateway sur `127.0.0.1:8000`.
-- Émulateur : l'application de debug appelle `http://10.0.2.2:8000/`. Téléphone physique :
-  `adb reverse tcp:8000 tcp:8000`.
+- Émulateur : l'application de debug appelle `http://10.0.2.2:8000/`.
+- Téléphone physique, ou émulateur qui ne joint pas l'hôte (`SocketTimeoutException` vers
+  `10.0.2.2` dans Logcat) : passer par le tunnel adb, à relancer après chaque redémarrage de
+  l'appareil, puis rebuild.
+
+  ```bash
+  adb reverse tcp:8000 tcp:8000   # API (gateway)
+  adb reverse tcp:9000 tcp:9000   # médias (SeaweedFS : vidéos, images, envois)
+  ```
+
+  et dans `local.properties` (non versionné) : `poro.debugApiBaseUrl=http://127.0.0.1:8000/`.
 
 ```bash
 ./gradlew testDebugUnitTest assembleDebug

@@ -5,12 +5,27 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+/** local.properties (ignoré par Git) : réglages propres au poste, comme l'URL de debug. */
+val localProperties = java.util.Properties().apply {
+    rootProject.file("local.properties").takeIf { it.isFile }?.reader()?.use { load(it) }
+}
+
 /**
- * Valeur de build fournie par une propriété Gradle (`-Pporo.x=…`) ou une variable d'environnement
- * (CI). Jamais de secret dans le dépôt : sans valeur, le build de release n'est pas signé.
+ * Valeur de build fournie par une propriété Gradle (`-Pporo.x=…`), local.properties ou une
+ * variable d'environnement (CI). Jamais de secret dans le dépôt : sans valeur, le build de
+ * release n'est pas signé.
  */
 fun buildValue(property: String, env: String): String? =
-    (findProperty(property) as String?)?.takeIf { it.isNotBlank() } ?: System.getenv(env)?.takeIf { it.isNotBlank() }
+    (findProperty(property) as String?)?.takeIf { it.isNotBlank() }
+        ?: localProperties.getProperty(property)?.takeIf { it.isNotBlank() }
+        ?: System.getenv(env)?.takeIf { it.isNotBlank() }
+
+// Émulateur : 10.0.2.2 est le poste de développement, où la gateway écoute sur 127.0.0.1:8000.
+// Téléphone physique, ou émulateur dont le réseau ne joint pas l'hôte : `adb reverse tcp:8000 tcp:8000`
+// puis `poro.debugApiBaseUrl=http://127.0.0.1:8000/` dans local.properties.
+val debugApiUrl = (buildValue("poro.debugApiBaseUrl", "PORO_DEBUG_API_BASE_URL") ?: "http://10.0.2.2:8000/").also {
+    require(it.endsWith("/")) { "poro.debugApiBaseUrl doit se terminer par /" }
+}
 
 val releaseApiUrl = (buildValue("poro.apiBaseUrl", "PORO_API_BASE_URL") ?: "https://api.poro.invalid/").also {
     // Le build de release refuse le trafic en clair (network_security_config) : HTTPS obligatoire.
@@ -55,9 +70,8 @@ android {
 
     buildTypes {
         debug {
-            // Émulateur : 10.0.2.2 est le poste de développement, où la gateway écoute sur 127.0.0.1:8000.
-            // Téléphone physique : `adb reverse tcp:8000 tcp:8000` puis http://127.0.0.1:8000.
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/\"")
+            // Voir debugApiUrl en tête de fichier ; le HTTP n'est autorisé que vers 10.0.2.2 et 127.0.0.1.
+            buildConfigField("String", "API_BASE_URL", "\"$debugApiUrl\"")
             applicationIdSuffix = ".debug"
         }
         release {
