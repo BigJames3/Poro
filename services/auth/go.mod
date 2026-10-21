@@ -2,7 +2,7 @@ module github.com/poro/auth
 
 go 1.26.0
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	github.com/alexedwards/argon2id v1.0.0
