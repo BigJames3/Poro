@@ -15,6 +15,10 @@ import com.poro.app.data.auth.DefaultAccountRepository
 import com.poro.app.data.auth.DefaultAuthRepository
 import com.poro.app.data.feed.DefaultFeedRepository
 import com.poro.app.data.feed.FeedRepository
+import com.poro.app.data.notification.DefaultNotificationRepository
+import com.poro.app.data.notification.NotificationRepository
+import com.poro.app.data.search.DefaultSearchRepository
+import com.poro.app.data.search.SearchRepository
 import com.poro.app.data.social.DefaultSocialRepository
 import com.poro.app.data.social.SocialRepository
 import com.poro.app.data.user.DefaultProfileRepository
@@ -71,6 +75,10 @@ class AppContainer(context: Context) {
     val videoRepository: VideoRepository = DefaultVideoRepository(network.api())
 
     val socialRepository: SocialRepository = DefaultSocialRepository(network.api())
+
+    val searchRepository: SearchRepository = DefaultSearchRepository(network.api())
+
+    val notificationRepository: NotificationRepository = DefaultNotificationRepository(network.api())
 
     val uploadManager = UploadManager(
         client = VideoUploader(network.api(), uploader, mediaReader),

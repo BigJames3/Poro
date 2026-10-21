@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -41,7 +42,10 @@ import com.poro.app.core.security.SessionState
 import com.poro.app.ui.auth.authGraph
 import com.poro.app.data.social.VideoStatsDto
 import com.poro.app.ui.feed.feedGraph
+import com.poro.app.ui.notification.FeedNotificationBell
+import com.poro.app.ui.notification.notificationGraph
 import com.poro.app.ui.profile.profileGraph
+import com.poro.app.ui.search.searchGraph
 import com.poro.app.ui.social.MyFollowCounts
 import com.poro.app.ui.social.SocialVideoActions
 import com.poro.app.ui.social.socialGraph
@@ -56,6 +60,7 @@ enum class TopLevelTab(
     val matches: (NavDestination) -> Boolean,
 ) {
     Home(HomeRoute, R.string.tab_feed, Icons.Filled.Home, { it.hasRoute<HomeRoute>() }),
+    Search(SearchRoute, R.string.tab_search, Icons.Filled.Search, { it.hasRoute<SearchRoute>() }),
     Upload(UploadRoute, R.string.tab_upload, Icons.Filled.AddCircle, { it.hasRoute<UploadRoute>() }),
     Profile(ProfileRoute, R.string.tab_profile, Icons.Filled.Person, { it.hasRoute<ProfileRoute>() }),
 }
@@ -134,7 +139,10 @@ private fun PoroNavGraph(
                     SocialVideoActions(nav, item.videoId, item.title, VideoStatsDto(item.videoId, item.stats.likes, item.stats.comments, item.stats.shares))
                 },
                 videoActions = { video -> SocialVideoActions(nav, video.id, video.title, VideoStatsDto(video.id)) },
+                feedTopEnd = { FeedNotificationBell(nav) },
             )
+            searchGraph(nav)
+            notificationGraph(nav, onOpenOrder = { _, _ -> })
             socialGraph(nav)
             uploadGraph(nav)
             profileGraph(nav) { me ->

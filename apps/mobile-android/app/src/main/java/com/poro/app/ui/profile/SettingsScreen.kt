@@ -37,6 +37,7 @@ fun SettingsScreen(
     onRetrySessions: () -> Unit,
     onRevoke: (String) -> Unit,
     onRevokeOthers: () -> Unit,
+    onNotifications: () -> Unit,
     onDeleteAccount: () -> Unit,
     onLogout: () -> Unit,
 ) {
@@ -71,6 +72,7 @@ fun SettingsScreen(
             state.error?.let { item { ErrorMessageText(it, Modifier.padding(16.dp)) } }
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item { SectionTitle(stringResource(R.string.settings_account)) }
+            item { SettingsAction(stringResource(R.string.settings_notifications), onNotifications) }
             item { SettingsAction(stringResource(R.string.action_logout), onLogout, enabled = !state.signingOut) }
             item {
                 SettingsAction(

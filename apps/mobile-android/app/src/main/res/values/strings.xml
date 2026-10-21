@@ -152,6 +152,34 @@
     <string name="status_failed">Échec</string>
     <string name="status_removed">Retirée</string>
 
+    <!-- Recherche -->
+    <string name="search_placeholder">Vidéos, comptes, #hashtags</string>
+    <string name="search_clear">Effacer la recherche</string>
+    <string name="search_hint">Cherchez une vidéo, un créateur ou un #hashtag.</string>
+    <string name="search_tab_videos">Vidéos</string>
+    <string name="search_tab_users">Comptes</string>
+    <string name="search_tab_hashtags">Hashtags</string>
+    <string name="search_no_results">Aucun résultat.</string>
+    <string name="search_likes">%1$s j’aime</string>
+    <string name="search_hashtag_videos">%1$s vidéos</string>
+
+    <!-- Notifications -->
+    <string name="notifications_title">Notifications</string>
+    <string name="notifications_read_all">Tout lire</string>
+    <string name="notifications_empty">Aucune notification pour le moment.</string>
+    <plurals name="notifications_unread">
+        <item quantity="one">Notifications, %d non lue</item>
+        <item quantity="other">Notifications, %d non lues</item>
+    </plurals>
+    <string name="prefs_push">Notifications sur le téléphone</string>
+    <string name="prefs_push_hint">Désactivées, les notifications restent visibles dans l’application.</string>
+    <string name="prefs_likes">J’aime</string>
+    <string name="prefs_comments">Commentaires et réponses</string>
+    <string name="prefs_follows">Nouveaux abonnés</string>
+    <string name="prefs_video_ready">Vidéo publiée</string>
+    <string name="prefs_orders">Commandes</string>
+    <string name="prefs_orders_hint">Coupe seulement l’alerte sur le téléphone : les commandes restent dans l’application.</string>
+
     <!-- Profil -->
     <string name="profile_edit">Modifier le profil</string>
     <string name="profile_settings">Paramètres</string>

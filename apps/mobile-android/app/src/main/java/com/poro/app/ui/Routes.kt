@@ -38,6 +38,16 @@ data object HomeRoute
 @Serializable
 data class EmailVerifyRoute(val codeAlreadySent: Boolean = true)
 
+/** Onglet « Rechercher ». */
+@Serializable
+data object SearchRoute
+
+@Serializable
+data object NotificationsRoute
+
+@Serializable
+data object NotificationPreferencesRoute
+
 /** Onglet « Publier ». */
 @Serializable
 data object UploadRoute
