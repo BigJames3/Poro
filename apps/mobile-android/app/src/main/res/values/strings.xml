@@ -31,7 +31,7 @@
     <!-- Saisie du code -->
     <string name="otp_title">Saisissez le code</string>
     <string name="otp_subtitle">Code à 6 chiffres envoyé par SMS au %1$s.</string>
-    <string name="otp_expired_hint">Ce code a expiré. Demandez-en un nouveau.</string>
+        <string name="otp_expired_hint">Ce code a expiré. Demandez-en un nouveau.</string>
     <string name="otp_code_resent">Nouveau code envoyé.</string>
     <string name="otp_resend">Renvoyer le code</string>
     <string name="otp_change_number">Modifier le numéro</string>
@@ -49,6 +49,37 @@
         <item quantity="other">Ce code expire dans %d secondes</item>
     </plurals>
 
+    <!-- Connexion par email -->
+    <string name="phone_use_email">Se connecter avec un email</string>
+    <string name="email_label">Adresse email</string>
+    <string name="email_invalid_hint">Adresse email invalide.</string>
+    <string name="password_label">Mot de passe</string>
+    <string name="new_password_label">Nouveau mot de passe</string>
+    <string name="password_rules_hint">8 caractères au moins.</string>
+    <string name="password_show">Afficher</string>
+    <string name="password_hide">Masquer</string>
+    <string name="full_name_label">Nom complet</string>
+    <string name="full_name_hint">2 caractères au moins.</string>
+    <string name="email_login_title">Connexion par email</string>
+    <string name="action_sign_in">Se connecter</string>
+    <string name="email_forgot_password">Mot de passe oublié ?</string>
+    <string name="email_create_account">Créer un compte</string>
+    <string name="email_use_phone">Se connecter avec un numéro de téléphone</string>
+    <string name="email_register_title">Créer un compte</string>
+    <string name="action_register">Créer mon compte</string>
+    <string name="email_have_account">J’ai déjà un compte</string>
+    <string name="email_verify_title">Vérifiez votre adresse</string>
+    <string name="email_verify_subtitle">Nous avons envoyé un code à 6 chiffres à votre adresse email. Il est valable 15 minutes.</string>
+    <string name="email_verify_later">Plus tard</string>
+    <string name="email_verified">Adresse email vérifiée.</string>
+    <string name="email_code_resent">Nouveau code envoyé par email.</string>
+    <string name="forgot_title">Mot de passe oublié</string>
+    <string name="forgot_subtitle">Entrez l’adresse de votre compte : nous y enverrons un code pour choisir un nouveau mot de passe.</string>
+    <string name="reset_title">Nouveau mot de passe</string>
+    <string name="reset_subtitle">Si un compte utilise %1$s, un code à 6 chiffres vient d’y être envoyé.</string>
+    <string name="action_change_password">Changer le mot de passe</string>
+    <string name="password_changed">Mot de passe modifié. Connectez-vous avec le nouveau.</string>
+
     <!-- Erreurs : une par code du contrat (jamais error.message, en anglais) -->
     <string name="error_network">Pas de connexion. Vérifiez votre réseau et réessayez.</string>
     <string name="error_invalid_request">Saisie invalide. Vérifiez et réessayez.</string>
@@ -56,12 +87,21 @@
     <string name="error_phone_unreachable">Impossible d’envoyer un SMS à ce numéro. Vérifiez-le.</string>
     <string name="error_otp_throttled">Trop de codes demandés pour ce numéro. Patientez avant de réessayer.</string>
     <string name="error_rate_limited">Trop de tentatives. Patientez avant de réessayer.</string>
-    <string name="error_sms_unavailable">L’envoi de SMS est momentanément indisponible. Réessayez plus tard.</string>
+    <string name="error_sms_unavailable">L’envoi de SMS est momentanément indisponible. Réessayez plus tard ou connectez-vous par email.</string>
     <string name="error_otp_invalid">Code incorrect. Vérifiez le SMS et réessayez.</string>
     <string name="error_otp_expired">Ce code a expiré. Demandez-en un nouveau.</string>
     <string name="error_otp_too_many_attempts">Trop d’essais avec ce code. Demandez-en un nouveau.</string>
     <string name="error_account_blocked">Ce compte est bloqué. Contactez le support.</string>
     <string name="error_storage_failed">Impossible d’enregistrer la session sur cet appareil. Réessayez.</string>
+    <string name="error_email_taken">Un compte existe déjà avec cette adresse. Connectez-vous.</string>
+    <string name="error_invalid_credentials">Adresse ou mot de passe incorrect.</string>
+    <string name="error_login_throttled">Trop d’essais avec ce compte. Patientez avant de réessayer.</string>
+    <string name="error_email_throttled">Trop d’emails envoyés à cette adresse. Patientez avant de réessayer.</string>
+    <string name="error_email_unavailable">L’envoi d’email est momentanément indisponible. Réessayez.</string>
+    <string name="error_email_missing">Ce compte n’a pas d’adresse email : il se connecte par téléphone.</string>
+    <string name="error_code_invalid">Code incorrect. Vérifiez l’email et réessayez.</string>
+    <string name="error_code_expired">Ce code a expiré. Demandez-en un nouveau.</string>
+    <string name="error_code_too_many_attempts">Trop d’essais avec ce code. Demandez-en un nouveau.</string>
     <string name="error_unexpected">Une erreur inattendue est survenue. Réessayez.</string>
     <string name="error_reference">Référence : %1$s</string>
 </resources>

@@ -27,6 +27,15 @@ class AuthErrorMessagesTest {
             ApiErrorCodes.OTP_TOO_MANY_ATTEMPTS to R.string.error_otp_too_many_attempts,
             ApiErrorCodes.ACCOUNT_BLOCKED to R.string.error_account_blocked,
             ApiErrorCodes.STORAGE_FAILED to R.string.error_storage_failed,
+            ApiErrorCodes.EMAIL_TAKEN to R.string.error_email_taken,
+            ApiErrorCodes.INVALID_CREDENTIALS to R.string.error_invalid_credentials,
+            ApiErrorCodes.LOGIN_THROTTLED to R.string.error_login_throttled,
+            ApiErrorCodes.EMAIL_THROTTLED to R.string.error_email_throttled,
+            ApiErrorCodes.EMAIL_UNAVAILABLE to R.string.error_email_unavailable,
+            ApiErrorCodes.EMAIL_MISSING to R.string.error_email_missing,
+            ApiErrorCodes.CODE_INVALID to R.string.error_code_invalid,
+            ApiErrorCodes.CODE_EXPIRED to R.string.error_code_expired,
+            ApiErrorCodes.CODE_TOO_MANY_ATTEMPTS to R.string.error_code_too_many_attempts,
         )
         for ((code, text) in expected) {
             assertEquals(code, ErrorMessage(text), failure(code).toErrorMessage())
