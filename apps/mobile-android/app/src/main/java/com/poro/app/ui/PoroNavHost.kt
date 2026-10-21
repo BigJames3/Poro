@@ -19,7 +19,9 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -27,6 +29,21 @@ import androidx.navigation.toRoute
 import com.poro.app.AppContainer
 import com.poro.app.R
 import com.poro.app.core.security.SessionState
+import com.poro.app.ui.auth.email.EmailLoginEvent
+import com.poro.app.ui.auth.email.EmailLoginScreen
+import com.poro.app.ui.auth.email.EmailLoginViewModel
+import com.poro.app.ui.auth.email.EmailRegisterEvent
+import com.poro.app.ui.auth.email.EmailRegisterScreen
+import com.poro.app.ui.auth.email.EmailRegisterViewModel
+import com.poro.app.ui.auth.email.EmailVerifyEvent
+import com.poro.app.ui.auth.email.EmailVerifyScreen
+import com.poro.app.ui.auth.email.EmailVerifyViewModel
+import com.poro.app.ui.auth.email.ForgotPasswordEvent
+import com.poro.app.ui.auth.email.ForgotPasswordScreen
+import com.poro.app.ui.auth.email.ForgotPasswordViewModel
+import com.poro.app.ui.auth.email.ResetPasswordEvent
+import com.poro.app.ui.auth.email.ResetPasswordScreen
+import com.poro.app.ui.auth.email.ResetPasswordViewModel
 import com.poro.app.ui.auth.otp.OtpEvent
 import com.poro.app.ui.auth.otp.OtpVerifyScreen
 import com.poro.app.ui.auth.otp.OtpVerifyViewModel
@@ -48,6 +65,23 @@ data class OtpRoute(val phone: String, val expiresInSeconds: Int)
 
 @Serializable
 data object HomeRoute
+
+@Serializable
+data object EmailLoginRoute
+
+@Serializable
+data object EmailRegisterRoute
+
+/** Après l'inscription, session ouverte : vérification de l'adresse, que l'on peut remettre à plus tard. */
+@Serializable
+data object EmailVerifyRoute
+
+/** [email] : adresse déjà saisie sur l'écran de connexion, reprise pour éviter de la retaper. */
+@Serializable
+data class ForgotPasswordRoute(val email: String = "")
+
+@Serializable
+data class ResetPasswordRoute(val email: String)
 
 @Composable
 fun PoroNavHost(container: AppContainer, snackbar: SnackbarHostState, modifier: Modifier = Modifier) {
@@ -72,13 +106,14 @@ private fun PoroNavGraph(
     val scope = rememberCoroutineScope()
     val expiredMessage = stringResource(R.string.session_expired)
     val deletionCancelledMessage = stringResource(R.string.home_deletion_cancelled)
+    val emailVerifiedMessage = stringResource(R.string.email_verified)
+    val passwordChangedMessage = stringResource(R.string.password_changed)
 
     // Déconnexion, session expirée ou révoquée depuis un autre appareil : retour à la connexion.
     LaunchedEffect(navController) {
         container.tokenStore.session.collect { state ->
             val destination = navController.currentDestination ?: return@collect
-            val onAuthScreen = destination.hasRoute<PhoneRoute>() || destination.hasRoute<OtpRoute>()
-            if (state == SessionState.SignedOut && !onAuthScreen) {
+            if (state == SessionState.SignedOut && !destination.isSignInScreen()) {
                 navController.navigate(PhoneRoute) { popUpTo(navController.graph.id) { inclusive = true } }
             }
         }
@@ -107,6 +142,7 @@ private fun PoroNavGraph(
                 onCountryChange = vm::onCountryChange,
                 onInputChange = vm::onInputChange,
                 onSubmit = vm::submit,
+                onUseEmail = { navController.navigate(EmailLoginRoute) },
             )
         }
         composable<OtpRoute> { entry ->
@@ -129,8 +165,7 @@ private fun PoroNavGraph(
                 vm.events.collect { event ->
                     when (event) {
                         is OtpEvent.SignedIn -> {
-                            // L'écran de connexion quitte la pile : « retour » ferme l'application.
-                            navController.navigate(HomeRoute) { popUpTo(navController.graph.id) { inclusive = true } }
+                            navController.goHome()
                             if (event.deletionCancelled) scope.launch { snackbar.showSnackbar(deletionCancelledMessage) }
                         }
                     }
@@ -142,6 +177,137 @@ private fun PoroNavGraph(
                 onVerify = vm::verify,
                 onResend = vm::resend,
                 onChangeNumber = { navController.popBackStack() },
+            )
+        }
+        composable<EmailLoginRoute> {
+            val vm: EmailLoginViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer { EmailLoginViewModel(container.authRepository, createSavedStateHandle(), container.clock) }
+                },
+            )
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(vm) {
+                vm.events.collect { event ->
+                    when (event) {
+                        is EmailLoginEvent.SignedIn -> {
+                            navController.goHome()
+                            if (event.deletionCancelled) scope.launch { snackbar.showSnackbar(deletionCancelledMessage) }
+                        }
+                    }
+                }
+            }
+            EmailLoginScreen(
+                state = state,
+                onEmailChange = vm::onEmailChange,
+                onPasswordChange = vm::onPasswordChange,
+                onSubmit = vm::submit,
+                onForgotPassword = { navController.navigate(ForgotPasswordRoute(state.email)) },
+                onCreateAccount = { navController.navigate(EmailRegisterRoute) },
+                onUsePhone = {
+                    if (!navController.popBackStack<PhoneRoute>(inclusive = false)) navController.navigate(PhoneRoute)
+                },
+            )
+        }
+        composable<EmailRegisterRoute> {
+            val vm: EmailRegisterViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer { EmailRegisterViewModel(container.authRepository, createSavedStateHandle(), container.clock) }
+                },
+            )
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(vm) {
+                vm.events.collect { event ->
+                    when (event) {
+                        // Session ouverte : les écrans de connexion quittent la pile.
+                        EmailRegisterEvent.Registered ->
+                            navController.navigate(EmailVerifyRoute) { popUpTo(navController.graph.id) { inclusive = true } }
+                    }
+                }
+            }
+            EmailRegisterScreen(
+                state = state,
+                onFullNameChange = vm::onFullNameChange,
+                onEmailChange = vm::onEmailChange,
+                onPasswordChange = vm::onPasswordChange,
+                onSubmit = vm::submit,
+                onHaveAccount = {
+                    if (!navController.popBackStack<EmailLoginRoute>(inclusive = false)) navController.navigate(EmailLoginRoute)
+                },
+            )
+        }
+        composable<EmailVerifyRoute> {
+            val vm: EmailVerifyViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer { EmailVerifyViewModel(container.authRepository, createSavedStateHandle(), container.clock) }
+                },
+            )
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(vm) {
+                vm.events.collect { event ->
+                    when (event) {
+                        EmailVerifyEvent.Verified -> {
+                            navController.goHome()
+                            scope.launch { snackbar.showSnackbar(emailVerifiedMessage) }
+                        }
+                    }
+                }
+            }
+            EmailVerifyScreen(
+                state = state,
+                onCodeChange = vm::onCodeChange,
+                onVerify = vm::verify,
+                onResend = vm::resend,
+                onLater = { navController.goHome() },
+            )
+        }
+        composable<ForgotPasswordRoute> { entry ->
+            val route = entry.toRoute<ForgotPasswordRoute>()
+            val vm: ForgotPasswordViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer {
+                        ForgotPasswordViewModel(route.email, container.authRepository, createSavedStateHandle(), container.clock)
+                    }
+                },
+            )
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(vm) {
+                vm.events.collect { event ->
+                    when (event) {
+                        is ForgotPasswordEvent.CodeSent -> navController.navigate(ResetPasswordRoute(event.email))
+                    }
+                }
+            }
+            ForgotPasswordScreen(state = state, onEmailChange = vm::onEmailChange, onSubmit = vm::submit)
+        }
+        composable<ResetPasswordRoute> { entry ->
+            val route = entry.toRoute<ResetPasswordRoute>()
+            val vm: ResetPasswordViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer {
+                        ResetPasswordViewModel(route.email, container.authRepository, createSavedStateHandle(), container.clock)
+                    }
+                },
+            )
+            val state by vm.state.collectAsStateWithLifecycle()
+            LaunchedEffect(vm) {
+                vm.events.collect { event ->
+                    when (event) {
+                        // Retour à la connexion par email (adresse conservée) avec le nouveau mot de passe.
+                        ResetPasswordEvent.PasswordChanged -> {
+                            if (!navController.popBackStack<EmailLoginRoute>(inclusive = false)) {
+                                navController.navigate(EmailLoginRoute) { popUpTo(navController.graph.id) { inclusive = true } }
+                            }
+                            scope.launch { snackbar.showSnackbar(passwordChangedMessage) }
+                        }
+                    }
+                }
+            }
+            ResetPasswordScreen(
+                state = state,
+                onCodeChange = vm::onCodeChange,
+                onPasswordChange = vm::onPasswordChange,
+                onSubmit = vm::submit,
+                onResend = vm::resend,
             )
         }
         composable<HomeRoute> {
@@ -156,6 +322,16 @@ private fun PoroNavGraph(
         }
     }
 }
+
+/** Session ouverte : accueil, en retirant les écrans de connexion de la pile (« retour » ferme l'app). */
+private fun NavHostController.goHome() {
+    navigate(HomeRoute) { popUpTo(graph.id) { inclusive = true } }
+}
+
+/** Écrans utilisables sans session : une déconnexion n'a pas à les quitter. */
+private fun NavDestination.isSignInScreen(): Boolean =
+    hasRoute<PhoneRoute>() || hasRoute<OtpRoute>() || hasRoute<EmailLoginRoute>() || hasRoute<EmailRegisterRoute>() ||
+        hasRoute<ForgotPasswordRoute>() || hasRoute<ResetPasswordRoute>()
 
 /** Pendant la lecture des jetons au démarrage (quelques dizaines de millisecondes). */
 @Composable

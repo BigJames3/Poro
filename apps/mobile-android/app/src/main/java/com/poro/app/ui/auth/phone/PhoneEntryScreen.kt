@@ -41,6 +41,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.core.phone.LaunchCountry
+import com.poro.app.ui.auth.AuthLink
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.quantityString
 import com.poro.app.ui.theme.PoroTheme
@@ -51,6 +52,7 @@ fun PhoneEntryScreen(
     onCountryChange: (LaunchCountry) -> Unit,
     onInputChange: (String) -> Unit,
     onSubmit: () -> Unit,
+    onUseEmail: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // L'indication n'apparaît qu'une fois assez de chiffres saisis, pas pendant la frappe.
@@ -107,6 +109,8 @@ fun PhoneEntryScreen(
                 else -> Text(stringResource(R.string.action_send_code))
             }
         }
+        // Autre méthode, aussi le recours quand l'envoi de SMS est indisponible (sms_unavailable).
+        AuthLink(stringResource(R.string.phone_use_email), onUseEmail, enabled = !state.sending)
     }
 }
 
@@ -162,6 +166,7 @@ private fun PhoneEntryScreenPreview() {
             onCountryChange = {},
             onInputChange = {},
             onSubmit = {},
+            onUseEmail = {},
         )
     }
 }
