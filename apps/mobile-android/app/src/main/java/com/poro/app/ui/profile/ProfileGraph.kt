@@ -17,6 +17,7 @@ import com.poro.app.ui.EmailVerifyRoute
 import com.poro.app.ui.NotificationPreferencesRoute
 import com.poro.app.ui.ProfileRoute
 import com.poro.app.ui.RESULT_PROFILE_CHANGED
+import com.poro.app.ui.LegalDocumentRoute
 import com.poro.app.ui.SettingsRoute
 import com.poro.app.ui.poroViewModel
 
@@ -75,6 +76,7 @@ fun NavGraphBuilder.profileGraph(nav: AppNav, profileExtra: @Composable (MyAccou
             onRevoke = vm::revoke,
             onRevokeOthers = vm::revokeOthers,
             onNotifications = { nav.controller.navigate(NotificationPreferencesRoute) },
+            onLegal = { id -> nav.controller.navigate(LegalDocumentRoute(id)) },
             onDeleteAccount = { nav.controller.navigate(DeleteAccountRoute) },
             onLogout = vm::logout,
         )

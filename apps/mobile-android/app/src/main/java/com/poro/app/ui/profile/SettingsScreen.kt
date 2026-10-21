@@ -23,12 +23,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.poro.app.BuildConfig
 import com.poro.app.R
 import com.poro.app.core.format.Formats
 import com.poro.app.data.auth.SessionDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.BackTopBar
 import com.poro.app.ui.common.Loadable
+import com.poro.app.ui.legal.LegalDocument
 
 @Composable
 fun SettingsScreen(
@@ -38,6 +40,7 @@ fun SettingsScreen(
     onRevoke: (String) -> Unit,
     onRevokeOthers: () -> Unit,
     onNotifications: () -> Unit,
+    onLegal: (String) -> Unit,
     onDeleteAccount: () -> Unit,
     onLogout: () -> Unit,
 ) {
@@ -73,12 +76,24 @@ fun SettingsScreen(
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item { SectionTitle(stringResource(R.string.settings_account)) }
             item { SettingsAction(stringResource(R.string.settings_notifications), onNotifications) }
+            item { SectionTitle(stringResource(R.string.settings_legal)) }
+            item { SettingsAction(stringResource(R.string.legal_tos), onClick = { onLegal(LegalDocument.Terms.id) }) }
+            item { SettingsAction(stringResource(R.string.legal_privacy), onClick = { onLegal(LegalDocument.Privacy.id) }) }
+            item { SettingsAction(stringResource(R.string.legal_mentions), onClick = { onLegal(LegalDocument.Mentions.id) }) }
             item { SettingsAction(stringResource(R.string.action_logout), onLogout, enabled = !state.signingOut) }
             item {
                 SettingsAction(
                     stringResource(R.string.settings_delete_account),
                     onDeleteAccount,
                     color = MaterialTheme.colorScheme.error,
+                )
+            }
+            item {
+                Text(
+                    stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
         }

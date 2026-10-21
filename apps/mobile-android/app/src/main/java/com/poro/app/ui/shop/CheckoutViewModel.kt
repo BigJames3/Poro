@@ -10,6 +10,7 @@ import com.poro.app.data.order.AddressDto
 import com.poro.app.data.order.Delivery
 import com.poro.app.data.order.OrderDto
 import com.poro.app.data.order.OrderRepository
+import com.poro.app.data.order.Placed
 import com.poro.app.data.order.PreviewDto
 import com.poro.app.data.order.PreviewRequest
 import com.poro.app.ui.auth.ErrorMessage
@@ -34,6 +35,9 @@ data class DeliveryForm(
     val isValid: Boolean
         get() = fullName.trim().length in 1..80 && PHONE.matches(phone.trim()) && city.trim().length in 1..80 &&
             address.trim().isNotEmpty() && address.length <= 300
+
+    val isBlank: Boolean
+        get() = fullName.isBlank() && phone.isBlank() && city.isBlank() && address.isBlank() && landmark.isBlank()
 
     fun toDelivery() = Delivery(
         fullName = fullName.trim(),
@@ -80,24 +84,63 @@ class CheckoutViewModel(
     val events: Flow<CheckoutEvent> = _events.receiveAsFlow()
 
     init {
+        load(restoreForm = true)
+    }
+
+    /** Relance le préremplissage après une erreur réseau, sans perdre une saisie déjà commencée. */
+    fun retryLoad() = load(restoreForm = false)
+
+    private fun load(restoreForm: Boolean) {
         viewModelScope.launch {
+            val restored = if (restoreForm) savedState.get<String>(KEY_NAME)?.let { rememberForm() } else null
+            val keepTyped = !restoreForm && !_state.value.form.isBlank
+            _state.update { it.copy(loading = restored == null && !keepTyped, error = null) }
             val addresses = (orders.addresses() as? ApiResult.Success)?.data.orEmpty()
-            val restored = savedState.get<String>(KEY_NAME)?.let {
-                DeliveryForm(it, savedState[KEY_PHONE] ?: "", savedState[KEY_CITY] ?: "", savedState[KEY_ADDRESS] ?: "", savedState[KEY_LANDMARK] ?: "")
+            if (restored != null) {
+                _state.update { it.copy(loading = false, form = restored, addresses = addresses) }
+                return@launch
             }
-            val form = restored ?: (orders.prefill() as? ApiResult.Success)?.data?.delivery?.let {
-                DeliveryForm(it.fullName.orEmpty(), it.phone.orEmpty(), it.city.orEmpty(), it.address.orEmpty(), it.landmark.orEmpty())
-            } ?: DeliveryForm()
-            _state.update { it.copy(loading = false, form = form, addresses = addresses) }
+            when (val prefill = orders.prefill()) {
+                is ApiResult.Success -> {
+                    val form = if (keepTyped) {
+                        _state.value.form
+                    } else {
+                        val d = prefill.data.delivery
+                        DeliveryForm(
+                            d.fullName.orEmpty(),
+                            d.phone.orEmpty(),
+                            d.city.orEmpty(),
+                            d.address.orEmpty(),
+                            d.landmark.orEmpty(),
+                        ).also(::persist)
+                    }
+                    _state.update { it.copy(loading = false, form = form, addresses = addresses) }
+                }
+                else -> _state.update {
+                    it.copy(loading = false, addresses = addresses, error = prefill.toErrorMessage())
+                }
+            }
         }
     }
 
-    fun onFormChange(form: DeliveryForm) {
+    private fun rememberForm() = DeliveryForm(
+        savedState[KEY_NAME] ?: "",
+        savedState[KEY_PHONE] ?: "",
+        savedState[KEY_CITY] ?: "",
+        savedState[KEY_ADDRESS] ?: "",
+        savedState[KEY_LANDMARK] ?: "",
+    )
+
+    private fun persist(form: DeliveryForm) {
         savedState[KEY_NAME] = form.fullName
         savedState[KEY_PHONE] = form.phone
         savedState[KEY_CITY] = form.city
         savedState[KEY_ADDRESS] = form.address
         savedState[KEY_LANDMARK] = form.landmark
+    }
+
+    fun onFormChange(form: DeliveryForm) {
+        persist(form)
         _state.update { it.copy(form = form, error = null) }
     }
 
@@ -130,7 +173,7 @@ class CheckoutViewModel(
         if (_state.value.working) return
         _state.update { it.copy(working = true, error = null) }
         viewModelScope.launch {
-            when (val result = orders.confirm(preview.previewId)) {
+            when (val result = place(preview.previewId)) {
                 is ApiResult.Success -> {
                     _state.update { it.copy(working = false) }
                     _events.send(CheckoutEvent.Placed(result.data.orders))
@@ -150,6 +193,15 @@ class CheckoutViewModel(
                 is ApiResult.NetworkError -> _state.update { it.copy(working = false, error = result.toErrorMessage()) }
             }
         }
+    }
+
+    /**
+     * Le confirm est idempotent : un premier appel sans réponse est rejoué une fois avant
+     * d'afficher l'erreur réseau (le tap suivant reprend encore).
+     */
+    private suspend fun place(previewId: String): ApiResult<Placed> {
+        val first = orders.confirm(previewId)
+        return if (first is ApiResult.NetworkError) orders.confirm(previewId) else first
     }
 
     private companion object {

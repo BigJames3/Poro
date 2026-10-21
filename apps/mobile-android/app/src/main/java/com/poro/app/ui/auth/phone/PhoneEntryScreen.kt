@@ -53,6 +53,7 @@ fun PhoneEntryScreen(
     onInputChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onUseEmail: () -> Unit,
+    onOpenLegal: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // L'indication n'apparaît qu'une fois assez de chiffres saisis, pas pendant la frappe.
@@ -61,6 +62,10 @@ fun PhoneEntryScreen(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium)
+            Text(".", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.headlineMedium)
+        }
         Text(
             stringResource(R.string.phone_title),
             style = MaterialTheme.typography.headlineMedium,
@@ -111,6 +116,7 @@ fun PhoneEntryScreen(
         }
         // Autre méthode, aussi le recours quand l'envoi de SMS est indisponible (sms_unavailable).
         AuthLink(stringResource(R.string.phone_use_email), onUseEmail, enabled = !state.sending)
+        AuthLink(stringResource(R.string.legal_link), onOpenLegal, enabled = !state.sending)
     }
 }
 
@@ -167,6 +173,7 @@ private fun PhoneEntryScreenPreview() {
             onInputChange = {},
             onSubmit = {},
             onUseEmail = {},
+            onOpenLegal = {},
         )
     }
 }

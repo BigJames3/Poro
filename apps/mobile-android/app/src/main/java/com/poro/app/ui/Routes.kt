@@ -69,6 +69,13 @@ data object EditProfileRoute
 @Serializable
 data object SettingsRoute
 
+/** Liste des documents légaux ; accessible sans session. */
+@Serializable
+data object LegalRoute
+
+@Serializable
+data class LegalDocumentRoute(val id: String)
+
 @Serializable
 data object DeleteAccountRoute
 

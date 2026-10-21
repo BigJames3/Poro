@@ -70,9 +70,16 @@ class ProductViewModel(
         if (!current.canAdd) return
         _state.update { it.copy(adding = true, error = null) }
         viewModelScope.launch {
-            val result = orders.setQuantity(variantId, current.quantity)
-            _state.update { it.copy(adding = false, error = result.toErrorMessage()) }
-            if (result is ApiResult.Success) _events.send(ProductEvent.AddedToCart)
+            // PUT remplace la quantité : on relit le panier pour additionner, plafonné à 99.
+            when (val cart = orders.cart()) {
+                is ApiResult.Success -> {
+                    val next = (cart.data.quantityOf(variantId) + current.quantity).coerceAtMost(MAX_QUANTITY)
+                    val result = orders.setQuantity(variantId, next)
+                    _state.update { it.copy(adding = false, error = result.toErrorMessage()) }
+                    if (result is ApiResult.Success) _events.send(ProductEvent.AddedToCart)
+                }
+                else -> _state.update { it.copy(adding = false, error = cart.toErrorMessage()) }
+            }
         }
     }
 

@@ -17,6 +17,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -33,36 +34,73 @@ import okhttp3.OkHttpClient
 @Stable
 class VideoPlayer internal constructor(internal val exo: ExoPlayer) {
     private val playing = mutableStateOf(false)
+    private val mutedState = mutableStateOf(false)
+    private val errorState = mutableStateOf(false)
+    private val bufferingState = mutableStateOf(false)
     private var currentUrl: String? = null
 
     /** L'utilisateur a mis en pause : le retour au premier plan ne relance pas la lecture. */
     private var pausedByUser = false
 
     val isPlaying: State<Boolean> get() = playing
+    val isMuted: State<Boolean> get() = mutedState
+    val hasError: State<Boolean> get() = errorState
+    val isBuffering: State<Boolean> get() = bufferingState
 
     init {
         exo.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 playing.value = isPlaying
             }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                bufferingState.value = playbackState == Player.STATE_BUFFERING
+                if (playbackState == Player.STATE_READY) errorState.value = false
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                errorState.value = true
+                playing.value = false
+                bufferingState.value = false
+            }
         })
+        exo.volume = PlaybackRules.volume(muted = false)
     }
 
     /** Lit [url] en boucle depuis le début (nouvelle vidéo affichée). */
     fun play(url: String) {
         pausedByUser = false
-        if (url != currentUrl) {
+        if (PlaybackRules.shouldPrepare(url, currentUrl, errorState.value)) {
             currentUrl = url
+            errorState.value = false
             exo.setMediaItem(MediaItem.Builder().setUri(url).setMimeType(MimeTypes.APPLICATION_M3U8).build())
             exo.prepare()
         }
         exo.playWhenReady = true
     }
 
-    /** Appui sur la vidéo : pause ou reprise. */
+    /** Appui sur la vidéo : pause ou reprise. En erreur, relance la préparation. */
     fun toggle() {
+        if (errorState.value) {
+            retry()
+            return
+        }
         pausedByUser = exo.playWhenReady
         exo.playWhenReady = !exo.playWhenReady
+    }
+
+    fun toggleMute() {
+        mutedState.value = !mutedState.value
+        exo.volume = PlaybackRules.volume(mutedState.value)
+    }
+
+    fun retry() {
+        val url = currentUrl ?: return
+        errorState.value = false
+        pausedByUser = false
+        exo.setMediaItem(MediaItem.Builder().setUri(url).setMimeType(MimeTypes.APPLICATION_M3U8).build())
+        exo.prepare()
+        exo.playWhenReady = true
     }
 
     internal fun onBackground() {
@@ -124,3 +162,11 @@ private fun buildExoPlayer(context: Context, client: OkHttpClient): ExoPlayer =
         .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(client)))
         .build()
         .apply { repeatMode = Player.REPEAT_MODE_ONE }
+
+/** Règles de lecture testables sans instancier ExoPlayer. */
+internal object PlaybackRules {
+    fun volume(muted: Boolean): Float = if (muted) 0f else 1f
+
+    fun shouldPrepare(url: String, currentUrl: String?, hasError: Boolean): Boolean =
+        url != currentUrl || hasError
+}

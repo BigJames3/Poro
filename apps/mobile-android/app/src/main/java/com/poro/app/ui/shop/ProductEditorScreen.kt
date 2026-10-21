@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -107,7 +109,7 @@ fun ProductEditorScreen(state: ProductEditorUiState, currency: String, onBack: (
                             image.url,
                             contentDescription = stringResource(R.string.product_photo, i + 1, state.images.size),
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(96.dp),
+                            modifier = Modifier.size(96.dp).clip(RoundedCornerShape(8.dp)),
                         )
                         TextButton(onClick = { actions.onRemoveImage(image.imageId) }, enabled = !state.working) { Text(stringResource(R.string.action_delete)) }
                     }
@@ -115,7 +117,7 @@ fun ProductEditorScreen(state: ProductEditorUiState, currency: String, onBack: (
             }
             OutlinedButton(
                 onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                enabled = !state.working && state.images.size < 8,
+                enabled = !state.working && state.canAddImage,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.product_add_photo)) }
             when (state.status) {

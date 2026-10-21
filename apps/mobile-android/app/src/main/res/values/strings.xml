@@ -92,8 +92,12 @@
     <string name="feed_trending">Tendances</string>
     <string name="feed_empty">Aucune vidéo pour le moment. Revenez bientôt !</string>
     <string name="feed_following_empty">Abonnez-vous à des créateurs pour voir leurs vidéos ici.</string>
+    <string name="feed_following_search">Rechercher des créateurs</string>
     <string name="feed_video_description">Vidéo : %1$s, par %2$s</string>
     <string name="feed_play_pause">Lire ou mettre en pause</string>
+    <string name="feed_mute">Couper le son</string>
+    <string name="feed_unmute">Activer le son</string>
+    <string name="feed_playback_error">Cette vidéo n’a pas pu être lue.</string>
     <string name="video_processing">Vidéo en cours de traitement. Elle sera visible dans quelques minutes.</string>
     <string name="video_failed">Le traitement de cette vidéo a échoué.</string>
     <string name="video_removed">Cette vidéo a été retirée par la modération.</string>
@@ -123,6 +127,21 @@
     <string name="share_title">Partager la vidéo</string>
     <string name="share_whatsapp">WhatsApp</string>
     <string name="share_other">Autres applications</string>
+    <string name="report_menu">Plus d’actions</string>
+    <string name="action_report">Signaler</string>
+    <string name="report_title">Signaler</string>
+    <string name="report_reason_spam">Spam ou publicité indésirable</string>
+    <string name="report_reason_nudity">Nudité ou contenu sexuel</string>
+    <string name="report_reason_violence">Violence ou danger</string>
+    <string name="report_reason_harassment">Harcèlement</string>
+    <string name="report_reason_hate">Haine ou discrimination</string>
+    <string name="report_reason_fraud">Arnaque ou fraude</string>
+    <string name="report_reason_other">Autre</string>
+    <string name="report_comment_label">Précisions (facultatif)</string>
+    <string name="report_comment_counter">%1$d/%2$d</string>
+    <string name="report_submit">Envoyer le signalement</string>
+    <string name="report_sent">Signalement envoyé. Notre équipe va l’examiner.</string>
+    <string name="report_already">Vous avez déjà signalé ce contenu.</string>
     <string name="profile_followers">%1$s abonnés</string>
     <string name="profile_following">%1$s abonnements</string>
 
@@ -216,6 +235,15 @@
     <string name="settings_sign_out_others">Déconnecter les autres appareils</string>
     <string name="settings_notifications">Notifications</string>
     <string name="settings_delete_account">Supprimer mon compte</string>
+    <string name="settings_legal">Informations légales</string>
+    <string name="settings_version">Version %1$s</string>
+    <string name="legal_title">Informations légales</string>
+    <string name="legal_link">Conditions et confidentialité</string>
+    <string name="legal_tos">Conditions d’utilisation</string>
+    <string name="legal_privacy">Politique de confidentialité</string>
+    <string name="legal_mentions">Mentions légales</string>
+    <string name="legal_unavailable">Document non encore validé.</string>
+    <string name="legal_unavailable_notice">À valider — ce texte n’a aucune valeur juridique. Les conditions d’utilisation et la politique de confidentialité de Poro seront publiées ici après validation.</string>
 
     <!-- Suppression du compte -->
     <string name="delete_title">Supprimer mon compte</string>
@@ -288,6 +316,8 @@
     <string name="error_order_status_conflict">Cette commande a changé d’état : rechargez-la.</string>
     <string name="error_order_not_found">Commande introuvable.</string>
     <string name="error_tracking_invalid">Suivi invalide : 200 caractères au plus.</string>
+    <string name="error_cannot_report_self">Vous ne pouvez pas signaler votre propre contenu.</string>
+    <string name="error_unavailable">Service momentanément indisponible. Réessayez plus tard.</string>
     <string name="error_unexpected">Une erreur inattendue est survenue. Réessayez.</string>
     <string name="error_reference">Référence : %1$s</string>
     <!-- Boutique et commandes -->

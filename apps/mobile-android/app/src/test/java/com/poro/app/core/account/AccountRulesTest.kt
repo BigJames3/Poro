@@ -37,4 +37,10 @@ class AccountRulesTest {
         assertTrue(AccountRules.isValidFullName("Awa Koné"))
         assertFalse(AccountRules.isValidFullName("x".repeat(101)))
     }
+
+    @Test
+    fun `display name and bio match the user service limits`() {
+        assertEquals(50, AccountRules.DISPLAY_NAME_MAX)
+        assertEquals(160, AccountRules.BIO_MAX)
+    }
 }

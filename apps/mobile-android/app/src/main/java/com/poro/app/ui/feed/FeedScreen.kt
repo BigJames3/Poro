@@ -1,5 +1,6 @@
 package com.poro.app.ui.feed
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,15 +9,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -33,8 +39,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -47,9 +55,19 @@ import com.poro.app.data.feed.FeedItem
 import com.poro.app.data.feed.FeedKind
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
+import com.poro.app.ui.common.EmptyState
+import com.poro.app.ui.common.PoroIcons
 import com.poro.app.ui.common.displayNameOf
 import com.poro.app.ui.player.VideoPlayer
 import com.poro.app.ui.player.VideoSurface
+import com.poro.app.ui.theme.OverlaySystemBars
+import com.poro.app.ui.theme.PoroOrange
+import com.poro.app.ui.theme.PoroOverlayInk
+import com.poro.app.ui.theme.PoroOverlayMuted
+import com.poro.app.ui.theme.PoroScrimBottomEnd
+import com.poro.app.ui.theme.PoroScrimTop
+import com.poro.app.ui.theme.PoroSize
+import com.poro.app.ui.theme.PoroSpace
 
 /**
  * Fil plein écran : une vidéo par page, défilement vertical. [actions] dessine la colonne
@@ -64,9 +82,11 @@ fun FeedScreen(
     onRetry: () -> Unit,
     onOpenAuthor: (FeedItem) -> Unit,
     modifier: Modifier = Modifier,
+    onFindCreators: () -> Unit = {},
     actions: @Composable (FeedItem) -> Unit = {},
     topEnd: @Composable () -> Unit = {},
 ) {
+    OverlaySystemBars()
     val list = state.current
     Box(modifier.fillMaxSize().background(Color.Black)) {
         when {
@@ -81,19 +101,26 @@ fun FeedScreen(
                 ErrorMessageText(list.error)
                 OutlinedButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
             }
-            list.isEmpty -> Text(
-                stringResource(if (state.kind == FeedKind.Following) R.string.feed_following_empty else R.string.feed_empty),
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.Center).padding(32.dp),
+            list.isEmpty -> EmptyState(
+                title = stringResource(if (state.kind == FeedKind.Following) R.string.feed_following_empty else R.string.feed_empty),
+                actionLabel = if (state.kind == FeedKind.Following) stringResource(R.string.feed_following_search) else null,
+                onAction = if (state.kind == FeedKind.Following) onFindCreators else null,
+                color = PoroOverlayInk,
+                modifier = Modifier.align(Alignment.Center),
             )
             else -> {
                 val loading = stringResource(R.string.loading)
                 CircularProgressIndicator(Modifier.align(Alignment.Center).semantics { contentDescription = loading })
             }
         }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(88.dp)
+                .background(Brush.verticalGradient(listOf(PoroScrimTop, Color.Transparent))),
+        )
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = PoroSpace.xs, start = PoroSpace.xs, end = PoroSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
@@ -113,12 +140,27 @@ private fun FeedTab(kind: FeedKind, selected: Boolean, onClick: () -> Unit) {
             FeedKind.Trending -> R.string.feed_trending
         },
     )
-    TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp).semantics { this.selected = selected }) {
-        Text(
-            label,
-            color = if (selected) Color.White else Color.White.copy(alpha = 0.7f),
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-        )
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.heightIn(min = PoroSize.touch).semantics {
+            this.selected = selected
+            this.role = Role.Tab
+        },
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                label,
+                color = if (selected) PoroOverlayInk else PoroOverlayInk.copy(alpha = 0.8f),
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            )
+            Box(
+                Modifier
+                    .padding(top = 2.dp)
+                    .width(16.dp)
+                    .height(2.dp)
+                    .background(if (selected) PoroOrange else Color.Transparent),
+            )
+        }
     }
 }
 
@@ -163,12 +205,15 @@ fun VideoPage(
     description: String? = null,
 ) {
     val isPlaying by player.isPlaying
+    val hasError by player.hasError
+    val isBuffering by player.isBuffering
     val author = displayNameOf(item.author.displayName, item.author.username)
     val spoken = stringResource(R.string.feed_video_description, item.title, author)
+    val tapLabel = stringResource(if (hasError) R.string.action_retry else R.string.feed_play_pause)
     Box(
         Modifier
             .fillMaxSize()
-            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.feed_play_pause)) { player.toggle() }
+            .clickable(role = Role.Button, onClickLabel = tapLabel) { player.toggle() }
             .semantics { contentDescription = spoken },
     ) {
         AsyncImage(
@@ -177,13 +222,35 @@ fun VideoPage(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
         )
-        if (active) VideoSurface(player, Modifier.fillMaxSize())
-        if (active && !isPlaying) {
+        if (active && !hasError) VideoSurface(player, Modifier.fillMaxSize())
+        if (active && hasError) {
+            Column(
+                Modifier.align(Alignment.Center).padding(PoroSpace.lg),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(PoroSpace.md),
+            ) {
+                Text(stringResource(R.string.feed_playback_error), color = PoroOverlayInk, textAlign = TextAlign.Center)
+                OutlinedButton(
+                    onClick = { player.retry() },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = PoroOverlayInk),
+                    border = BorderStroke(1.dp, PoroOverlayInk),
+                ) { Text(stringResource(R.string.action_retry)) }
+            }
+        } else if (active && isBuffering && !isPlaying) {
+            val loading = stringResource(R.string.loading)
+            CircularProgressIndicator(
+                Modifier.align(Alignment.Center).semantics { contentDescription = loading },
+                color = PoroOverlayInk,
+            )
+        } else if (active && !isPlaying) {
             Icon(
                 Icons.Filled.PlayArrow,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.8f),
-                modifier = Modifier.align(Alignment.Center).size(72.dp),
+                tint = PoroOverlayInk,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(PoroSize.playGlyph)
+                    .shadow(8.dp, CircleShape),
             )
         }
         // Dégradé sous le texte : lisible sur une vidéo claire.
@@ -191,35 +258,51 @@ fun VideoPage(
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))))
-                .padding(16.dp),
+                .background(Brush.verticalGradient(listOf(Color.Transparent, PoroScrimBottomEnd)))
+                .padding(PoroSpace.md),
         ) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onOpenAuthor),
+                        horizontalArrangement = Arrangement.spacedBy(PoroSpace.xs),
+                        modifier = Modifier.heightIn(min = PoroSize.touch).clickable(role = Role.Button, onClick = onOpenAuthor),
                     ) {
-                        Avatar(item.author.avatarUrl, item.author.displayName ?: item.author.username, size = 36.dp)
-                        Text(author, color = Color.White, style = MaterialTheme.typography.titleSmall)
+                        Avatar(item.author.avatarUrl, item.author.displayName ?: item.author.username, size = PoroSize.avatarM)
+                        Text(author, color = PoroOverlayInk, style = MaterialTheme.typography.titleSmall)
                     }
-                    Text(item.title, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(item.title, color = PoroOverlayInk, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     description?.takeIf { it.isNotBlank() }?.let {
-                        Text(it, color = Color.White.copy(alpha = 0.85f), maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        Text(it, color = PoroOverlayMuted, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
                     if (item.hashtags.isNotEmpty()) {
                         Text(
                             item.hashtags.joinToString(" ") { "#$it" },
-                            color = Color.White.copy(alpha = 0.85f),
+                            color = PoroOverlayMuted,
                             style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
-                actions()
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(PoroSpace.sm)) {
+                    if (active) MuteButton(player)
+                    actions()
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun MuteButton(player: VideoPlayer) {
+    val muted by player.isMuted
+    IconButton(onClick = { player.toggleMute() }, modifier = Modifier.size(PoroSize.touch)) {
+        Icon(
+            if (muted) PoroIcons.VolumeOff else PoroIcons.VolumeOn,
+            contentDescription = stringResource(if (muted) R.string.feed_unmute else R.string.feed_mute),
+            tint = PoroOverlayInk,
+            modifier = Modifier.size(PoroSize.actionIcon),
+        )
     }
 }

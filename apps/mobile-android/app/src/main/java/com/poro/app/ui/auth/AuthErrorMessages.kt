@@ -49,6 +49,8 @@ fun ApiResult<*>.toErrorMessage(): ErrorMessage? = when (this) {
         ApiErrorCodes.AVATAR_INVALID -> ErrorMessage(R.string.error_avatar_invalid)
         ApiErrorCodes.UPLOAD_REJECTED -> ErrorMessage(R.string.error_upload_rejected)
         ApiErrorCodes.VIDEO_NOT_FOUND, ApiErrorCodes.COMMENT_NOT_FOUND, ApiErrorCodes.USER_NOT_FOUND -> ErrorMessage(R.string.error_not_found)
+        ApiErrorCodes.CANNOT_REPORT_SELF -> ErrorMessage(R.string.error_cannot_report_self)
+        ApiErrorCodes.UNAVAILABLE -> ErrorMessage(R.string.error_unavailable)
         ApiErrorCodes.COMMENT_INVALID -> ErrorMessage(R.string.error_comment_invalid)
         ApiErrorCodes.TITLE_INVALID -> ErrorMessage(R.string.error_title_invalid)
         ApiErrorCodes.DESCRIPTION_INVALID -> ErrorMessage(R.string.error_description_invalid)

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,8 +27,11 @@ import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
+import com.poro.app.ui.common.CreatorBadge
 import com.poro.app.ui.common.LoadableContent
 import com.poro.app.ui.common.displayNameOf
+import com.poro.app.ui.theme.PoroSize
+import com.poro.app.ui.theme.PoroSpace
 
 /**
  * Profil de l'utilisateur connecté. [extra] accueille ce qui dépend d'autres services
@@ -49,11 +51,11 @@ fun ProfileScreen(
     LoadableContent(state.content, onRetry, modifier) { me ->
         val profile = me.profile
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(PoroSpace.lg),
+            verticalArrangement = Arrangement.spacedBy(PoroSpace.xs),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Avatar(profile.avatarUrl, profile.displayName ?: profile.username, size = 96.dp)
+            Avatar(profile.avatarUrl, profile.displayName ?: profile.username, size = PoroSize.avatarL)
             Text(
                 displayNameOf(profile.displayName, profile.username),
                 style = MaterialTheme.typography.headlineSmall,
@@ -64,7 +66,7 @@ fun ProfileScreen(
             } else {
                 Text(stringResource(R.string.profile_no_username), textAlign = TextAlign.Center)
             }
-            if (profile.isCreator) AssistChip(onClick = {}, label = { Text(stringResource(R.string.profile_creator_badge)) })
+            if (profile.isCreator) CreatorBadge()
             profile.bio?.takeIf { it.isNotBlank() }?.let { Text(it, textAlign = TextAlign.Center) }
             if (me.needsEmailVerification) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {

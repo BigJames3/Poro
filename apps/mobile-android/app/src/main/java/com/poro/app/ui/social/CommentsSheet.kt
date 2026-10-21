@@ -36,6 +36,8 @@ import com.poro.app.core.format.Formats
 import com.poro.app.data.social.CommentDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
+import com.poro.app.ui.moderation.OverflowAction
+import com.poro.app.ui.moderation.OverflowMenu
 
 /** Actions de la feuille des commentaires, transmises par l'écran qui l'ouvre. */
 class CommentsActions(
@@ -47,6 +49,7 @@ class CommentsActions(
     val onPost: () -> Unit,
     val onLike: (CommentDto) -> Unit,
     val onDelete: (CommentDto) -> Unit,
+    val onReport: (CommentDto) -> Unit,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -142,6 +145,7 @@ private fun CommentRow(comment: CommentDto, myUserId: String?, actions: Comments
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { actions.onReplyTo(comment) }) { Text(stringResource(R.string.comments_reply)) }
                     if (mine) TextButton(onClick = { actions.onDelete(comment) }) { Text(stringResource(R.string.action_delete)) }
+                    OverflowMenu(items = listOf(OverflowAction(stringResource(R.string.action_report)) { actions.onReport(comment) }))
                 }
             }
         }

@@ -37,6 +37,9 @@ data class VariantDraft(
     fun isValid(currency: String): Boolean = title.trim().length in 1..60 && priceIn(currency) != null && stockValue != null
 }
 
+/** Plafond du contrat boutique (`too_many_images`) : 10 photos par produit. */
+const val MAX_PRODUCT_IMAGES = 10
+
 data class ProductEditorUiState(
     val loading: Boolean = false,
     val productId: String? = null,
@@ -48,6 +51,8 @@ data class ProductEditorUiState(
     val working: Boolean = false,
     val error: ErrorMessage? = null,
 ) {
+    val canAddImage: Boolean get() = images.size < MAX_PRODUCT_IMAGES
+
     fun canSave(currency: String): Boolean =
         !working && title.trim().length in 1..120 && description.length <= 2000 &&
             variants.isNotEmpty() && variants.size <= 50 && variants.all { it.isValid(currency) }
@@ -126,6 +131,10 @@ class ProductEditorViewModel(
 
     fun onImagePicked(uri: String) {
         val id = _state.value.productId ?: return
+        if (_state.value.images.size >= MAX_PRODUCT_IMAGES) {
+            _state.update { it.copy(error = ErrorMessage(R.string.error_too_many_images)) }
+            return
+        }
         viewModelScope.launch {
             val local = media.describe(uri)
             if (local == null || local.mimeType !in MyShopViewModel.IMAGE_TYPES || local.sizeBytes > MyShopViewModel.IMAGE_MAX_BYTES) {

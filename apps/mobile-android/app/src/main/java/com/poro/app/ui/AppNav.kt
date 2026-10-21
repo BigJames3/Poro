@@ -74,7 +74,8 @@ fun ConsumeResult(entry: NavBackStackEntry, key: String, onResult: () -> Unit) {
 /** Écrans utilisables sans session : une déconnexion n'a pas à les quitter. */
 fun NavDestination.isSignInScreen(): Boolean =
     hasRoute<PhoneRoute>() || hasRoute<OtpRoute>() || hasRoute<EmailLoginRoute>() || hasRoute<EmailRegisterRoute>() ||
-        hasRoute<ForgotPasswordRoute>() || hasRoute<ResetPasswordRoute>()
+        hasRoute<ForgotPasswordRoute>() || hasRoute<ResetPasswordRoute>() ||
+        hasRoute<LegalRoute>() || hasRoute<LegalDocumentRoute>()
 
 /**
  * ViewModel d'une destination, créé avec ses dépendances (injection manuelle). [key] distingue

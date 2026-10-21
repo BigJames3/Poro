@@ -21,13 +21,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.poro.app.R
+import com.poro.app.ui.theme.PoroSize
 
 /** Photo de profil ronde ; à défaut, l'initiale du nom sur fond de couleur. Décorative pour TalkBack. */
 @Composable
-fun Avatar(url: String?, name: String?, modifier: Modifier = Modifier, size: Dp = 48.dp) {
+fun Avatar(url: String?, name: String?, modifier: Modifier = Modifier, size: Dp = PoroSize.avatarM) {
     Box(
         modifier = modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center,
@@ -37,7 +37,7 @@ fun Avatar(url: String?, name: String?, modifier: Modifier = Modifier, size: Dp 
         } else {
             Text(
                 text = name?.trim()?.firstOrNull()?.uppercase() ?: "?",
-                style = if (size >= 64.dp) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleMedium,
+                style = if (size >= PoroSize.avatarL) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }

@@ -21,6 +21,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,7 @@ fun CheckoutScreen(
     onReview: () -> Unit,
     onEdit: () -> Unit,
     onConfirm: () -> Unit,
+    onRetryLoad: () -> Unit,
 ) {
     val preview = state.preview
     // Sur le récapitulatif, « retour » revient à la livraison plutôt que de quitter la commande.
@@ -66,6 +68,11 @@ fun CheckoutScreen(
             if (preview == null) {
                 DeliveryFields(state, onFormChange, onUseAddress, onSaveAddressChange)
                 state.error?.let { ErrorMessageText(it) }
+                if (state.error != null) {
+                    TextButton(onClick = onRetryLoad, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.action_retry))
+                    }
+                }
                 SubmitButton(stringResource(R.string.checkout_continue), enabled = state.form.isValid, loading = state.working, onClick = onReview)
             } else {
                 Review(preview)
@@ -157,4 +164,5 @@ private fun Review(preview: PreviewDto) {
     }
     Text(stringResource(R.string.checkout_payment), style = MaterialTheme.typography.titleSmall)
     Text(preview.paymentMethodLabel.ifBlank { stringResource(R.string.payment_cash_on_delivery) })
+    Text(stringResource(R.string.cart_payment_notice), style = MaterialTheme.typography.bodySmall)
 }

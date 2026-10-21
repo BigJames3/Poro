@@ -9,6 +9,7 @@ import com.poro.app.data.order.PrefillDelivery
 import com.poro.app.data.order.PreviewDto
 import com.poro.app.testing.FakeOrderRepository
 import com.poro.app.testing.MainDispatcherRule
+import java.io.IOException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
@@ -83,6 +84,56 @@ class CheckoutViewModelTest {
 
         assertNull(vm.state.value.preview)
         assertEquals(R.string.checkout_preview_outdated, vm.state.value.error?.text)
+    }
+
+    @Test
+    fun `a failed prefill is shown and can be retried`() = runTest {
+        orders.prefill = ApiResult.NetworkError(IOException())
+        val vm = CheckoutViewModel(orders, SavedStateHandle())
+        runCurrent()
+
+        assertFalse(vm.state.value.loading)
+        assertEquals(R.string.error_network, vm.state.value.error?.text)
+
+        orders.prefill = ApiResult.Success(Prefill("account", delivery = PrefillDelivery(fullName = "Awa", phone = "+2250701020304", city = "Abidjan")))
+        vm.retryLoad()
+        runCurrent()
+
+        assertEquals("Awa", vm.state.value.form.fullName)
+        assertNull(vm.state.value.error)
+    }
+
+    @Test
+    fun `a network error on confirm is retried once because the call is idempotent`() = runTest {
+        orders.confirmResults += ApiResult.NetworkError(IOException())
+        val vm = CheckoutViewModel(orders, SavedStateHandle())
+        runCurrent()
+        vm.onFormChange(vm.state.value.form.copy(address = "Cocody"))
+        vm.review()
+        runCurrent()
+
+        vm.confirm()
+        val event = vm.events.first()
+        assertEquals("o1", (event as CheckoutEvent.Placed).orders.single().orderId)
+        assertEquals(2, orders.calls.count { it.startsWith("confirm:") })
+    }
+
+    @Test
+    fun `two network errors on confirm leave the buyer on the summary`() = runTest {
+        orders.confirmResults += ApiResult.NetworkError(IOException())
+        orders.confirm = ApiResult.NetworkError(IOException())
+        val vm = CheckoutViewModel(orders, SavedStateHandle())
+        runCurrent()
+        vm.onFormChange(vm.state.value.form.copy(address = "Cocody"))
+        vm.review()
+        runCurrent()
+
+        vm.confirm()
+        runCurrent()
+
+        assertNotNull(vm.state.value.preview)
+        assertEquals(R.string.error_network, vm.state.value.error?.text)
+        assertFalse(vm.state.value.working)
     }
 
     @Test

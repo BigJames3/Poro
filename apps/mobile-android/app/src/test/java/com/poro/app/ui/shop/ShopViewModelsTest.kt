@@ -8,17 +8,20 @@ import com.poro.app.data.order.CartLine
 import com.poro.app.data.order.CartShop
 import com.poro.app.data.order.OrderDto
 import com.poro.app.data.shop.ProductDto
+import com.poro.app.data.shop.ProductImage
 import com.poro.app.data.shop.VariantDto
 import com.poro.app.testing.FakeMediaReader
 import com.poro.app.testing.FakeOrderRepository
 import com.poro.app.testing.FakeShopRepository
 import com.poro.app.testing.MainDispatcherRule
+import java.io.IOException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -58,7 +61,71 @@ class ShopViewModelsTest {
         vm.addToCart()
 
         assertEquals(ProductEvent.AddedToCart, vm.events.first())
+        assertTrue("cart" in orders.calls)
         assertTrue("setQuantity:v2:99" in orders.calls)
+    }
+
+    @Test
+    fun `adding to cart sums the quantity already in the cart`() = runTest {
+        shops.product = ApiResult.Success(ProductDto("p1", variants = listOf(VariantDto("v2", "M", 5000))))
+        orders.cart = ApiResult.Success(CartDto(shops = listOf(CartShop(items = listOf(CartLine("v2", quantity = 1))))))
+        val vm = ProductViewModel("p1", shops, orders)
+        runCurrent()
+
+        vm.setQuantity(1)
+        vm.addToCart()
+
+        assertEquals(ProductEvent.AddedToCart, vm.events.first())
+        assertTrue("setQuantity:v2:2" in orders.calls)
+    }
+
+    @Test
+    fun `adding to cart does not replace the line if the cart cannot be read`() = runTest {
+        shops.product = ApiResult.Success(ProductDto("p1", variants = listOf(VariantDto("v2", "M", 5000))))
+        orders.cart = ApiResult.NetworkError(IOException())
+        val vm = ProductViewModel("p1", shops, orders)
+        runCurrent()
+
+        vm.addToCart()
+        runCurrent()
+
+        assertEquals(R.string.error_network, vm.state.value.error?.text)
+        assertFalse(orders.calls.any { it.startsWith("setQuantity") })
+    }
+
+    @Test
+    fun `a network error does not pretend the account has no shop`() = runTest {
+        val vm = ShopHomeViewModel(shops, orders)
+        vm.refresh()
+        runCurrent()
+        assertEquals(true, vm.state.value.hasShop)
+
+        shops.shop = ApiResult.NetworkError(IOException())
+        vm.refresh()
+        runCurrent()
+        assertEquals(true, vm.state.value.hasShop)
+
+        shops.shop = ApiResult.Failure(404, ApiErrorCodes.SHOP_NOT_FOUND, "none", null, null)
+        vm.refresh()
+        runCurrent()
+        assertEquals(false, vm.state.value.hasShop)
+    }
+
+    @Test
+    fun `an unread shop stays unknown rather than offering to open one`() = runTest {
+        shops.shop = ApiResult.NetworkError(IOException())
+        val vm = ShopHomeViewModel(shops, orders)
+        vm.refresh()
+        runCurrent()
+        assertNull(vm.state.value.hasShop)
+    }
+
+    @Test
+    fun `the editor accepts ten product photos`() {
+        val nine = ProductEditorUiState(images = List(9) { ProductImage("i$it", "u") })
+        val ten = ProductEditorUiState(images = List(10) { ProductImage("i$it", "u") })
+        assertTrue(nine.canAddImage)
+        assertFalse(ten.canAddImage)
     }
 
     @Test

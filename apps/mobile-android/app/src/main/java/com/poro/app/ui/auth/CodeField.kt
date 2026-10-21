@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.poro.app.R
+import com.poro.app.ui.theme.PoroSize
 
 /**
  * Code à 6 chiffres : un seul champ invisible dessiné en 6 cases. Le collage et le remplissage
@@ -67,7 +68,7 @@ fun CodeField(
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(width = 44.dp, height = 56.dp)
+                            .size(width = PoroSize.otpCellWidth, height = PoroSize.otpCellHeight)
                             .border(
                                 width = if (active) 2.dp else 1.dp,
                                 color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,

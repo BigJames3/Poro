@@ -24,6 +24,7 @@ import com.poro.app.data.video.VideoDto
 import com.poro.app.ui.common.Loadable
 import com.poro.app.ui.common.LoadableContent
 import com.poro.app.ui.player.VideoPlayer
+import com.poro.app.ui.theme.OverlaySystemBars
 
 /** Une vidéo plein écran ; une vidéo pas encore prête (ou retirée) n'affiche que son statut. */
 @Composable
@@ -35,6 +36,7 @@ fun VideoScreen(
     onOpenAuthor: (userId: String) -> Unit,
     actions: @Composable (VideoDto) -> Unit = {},
 ) {
+    OverlaySystemBars()
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         LoadableContent(state, onRetry) { video ->
             if (video.isReady && video.hlsUrl != null) {

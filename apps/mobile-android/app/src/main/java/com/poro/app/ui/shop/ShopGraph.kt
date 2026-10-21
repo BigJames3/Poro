@@ -115,6 +115,7 @@ fun NavGraphBuilder.shopGraph(nav: AppNav) {
             onReview = vm::review,
             onEdit = vm::edit,
             onConfirm = vm::confirm,
+            onRetryLoad = vm::retryLoad,
         )
     }
     composable<OrdersRoute> { entry ->

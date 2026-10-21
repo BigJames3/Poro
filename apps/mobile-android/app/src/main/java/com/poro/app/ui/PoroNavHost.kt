@@ -10,7 +10,7 @@ import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ShoppingCart
+import com.poro.app.ui.common.PoroIcons
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -43,6 +43,7 @@ import com.poro.app.core.security.SessionState
 import com.poro.app.ui.auth.authGraph
 import com.poro.app.data.social.VideoStatsDto
 import com.poro.app.ui.feed.feedGraph
+import com.poro.app.ui.legal.legalGraph
 import com.poro.app.ui.notification.FeedNotificationBell
 import com.poro.app.ui.notification.notificationGraph
 import com.poro.app.ui.profile.profileGraph
@@ -64,7 +65,7 @@ enum class TopLevelTab(
     Home(HomeRoute, R.string.tab_feed, Icons.Filled.Home, { it.hasRoute<HomeRoute>() }),
     Search(SearchRoute, R.string.tab_search, Icons.Filled.Search, { it.hasRoute<SearchRoute>() }),
     Upload(UploadRoute, R.string.tab_upload, Icons.Filled.AddCircle, { it.hasRoute<UploadRoute>() }),
-    Shop(ShopHomeRoute, R.string.tab_shop, Icons.Filled.ShoppingCart, { it.hasRoute<ShopHomeRoute>() }),
+    Shop(ShopHomeRoute, R.string.tab_shop, PoroIcons.Store, { it.hasRoute<ShopHomeRoute>() }),
     Profile(ProfileRoute, R.string.tab_profile, Icons.Filled.Person, { it.hasRoute<ProfileRoute>() }),
 }
 
@@ -135,6 +136,7 @@ private fun PoroNavGraph(
     ) { padding ->
         NavHost(navController = navController, startDestination = start, modifier = Modifier.padding(padding)) {
             authGraph(nav)
+            legalGraph(nav)
             feedGraph(
                 nav,
                 onOpenAuthor = { userId, username -> nav.controller.navigate(PublicProfileRoute(userId, username)) },

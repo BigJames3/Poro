@@ -18,11 +18,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.core.format.Formats
 import com.poro.app.data.social.VideoStatsDto
 import com.poro.app.ui.common.PoroIcons
+import com.poro.app.ui.moderation.OverflowAction
+import com.poro.app.ui.moderation.OverflowMenu
+import com.poro.app.ui.theme.PoroLike
+import com.poro.app.ui.theme.PoroOverlayInk
+import com.poro.app.ui.theme.PoroSize
+import com.poro.app.ui.theme.PoroSpace
 
 /** Colonne d'actions sur une vidéo : j'aime, commentaires, partage, avec leurs compteurs. */
 @Composable
@@ -31,12 +36,13 @@ fun VideoActions(
     onLike: () -> Unit,
     onComments: () -> Unit,
     onShare: () -> Unit,
+    onReport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(PoroSpace.sm), horizontalAlignment = Alignment.CenterHorizontally) {
         ActionButton(
             icon = if (stats.likedByMe) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-            tint = if (stats.likedByMe) Color(0xFFFF3B5C) else Color.White,
+            tint = if (stats.likedByMe) PoroLike else PoroOverlayInk,
             count = stats.likes,
             description = stringResource(if (stats.likedByMe) R.string.action_unlike else R.string.action_like, Formats.count(stats.likes)),
             onClick = onLike,
@@ -53,6 +59,10 @@ fun VideoActions(
             description = stringResource(R.string.action_share, Formats.count(stats.shares)),
             onClick = onShare,
         )
+        OverflowMenu(
+            items = listOf(OverflowAction(stringResource(R.string.action_report), onReport)),
+            tint = PoroOverlayInk,
+        )
     }
 }
 
@@ -60,12 +70,12 @@ fun VideoActions(
 private fun ActionButton(icon: ImageVector, count: Long, description: String, onClick: () -> Unit, tint: Color = Color.White) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         IconButton(onClick = onClick) {
-            Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(32.dp))
+            Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(PoroSize.actionIcon))
         }
         // Le compteur est déjà dans la description du bouton : TalkBack ne le lit pas deux fois.
         Text(
             Formats.count(count),
-            color = Color.White,
+            color = PoroOverlayInk,
             style = MaterialTheme.typography.labelMedium,
             modifier = Modifier.clearAndSetSemantics {},
         )

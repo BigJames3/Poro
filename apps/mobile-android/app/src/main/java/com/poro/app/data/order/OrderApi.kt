@@ -79,7 +79,14 @@ data class CartDto(
     /** Lignes dont le produit n'est plus en vente : à retirer avant de commander. */
     val unavailable: List<CartLine> = emptyList(),
     @SerialName("item_count") val itemCount: Int = 0,
-)
+) {
+    /** Quantité déjà au panier pour cette déclinaison (PUT est une valeur absolue). */
+    fun quantityOf(variantId: String): Int =
+        (shops.asSequence().flatMap { it.items.asSequence() } + unavailable.asSequence())
+            .firstOrNull { it.variantId == variantId }
+            ?.quantity
+            ?: 0
+}
 
 @Serializable
 data class CartShop(val shop: CartShopRef = CartShopRef(), val items: List<CartLine> = emptyList(), val subtotal: Long = 0)

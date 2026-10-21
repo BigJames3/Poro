@@ -17,6 +17,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -29,7 +31,11 @@ import com.poro.app.data.order.CartLine
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.common.EmptyState
 import com.poro.app.ui.common.LoadableContent
+import com.poro.app.ui.common.PriceText
+import com.poro.app.ui.theme.PoroSize
+import com.poro.app.ui.theme.PoroSpace
 
 @Composable
 fun CartScreen(
@@ -44,10 +50,10 @@ fun CartScreen(
     Scaffold(topBar = { BackTopBar(stringResource(R.string.cart_title), onBack) }) { padding ->
         LoadableContent(state.cart, onRetry, Modifier.padding(padding)) { cart ->
             if (cart.shops.isEmpty() && cart.unavailable.isEmpty()) {
-                Text(stringResource(R.string.cart_empty), Modifier.padding(padding).padding(24.dp))
+                EmptyState(stringResource(R.string.cart_empty))
                 return@LoadableContent
             }
-            LazyColumn(Modifier.fillMaxSize().padding(padding), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(PoroSpace.xs)) {
                 cart.shops.forEach { group ->
                     item(key = "shop-${group.shop.shopId}") {
                         Text(group.shop.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp).semantics { heading() })
@@ -98,12 +104,19 @@ private fun CartLineRow(
     onRemove: (String) -> Unit,
 ) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        AsyncImage(line.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(72.dp))
+        AsyncImage(
+            line.imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(PoroSize.productThumb).clip(RoundedCornerShape(PoroSize.radiusImage)),
+        )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             val title = line.title ?: stringResource(R.string.cart_item_unknown)
             line.productId?.let { id -> TextButton(onClick = { onOpenProduct(id) }) { Text(title) } } ?: Text(title)
             line.variantTitle?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            if (currency != null && line.lineTotal != null) Text(Formats.money(line.lineTotal, currency), style = MaterialTheme.typography.titleSmall)
+            if (currency != null && line.lineTotal != null) {
+                PriceText(line.lineTotal, currency, style = MaterialTheme.typography.titleSmall)
+            }
             if (line.available && !line.inStock) Text(stringResource(R.string.product_out_of_stock), color = MaterialTheme.colorScheme.error)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (line.available) QuantityStepper(line.quantity, { onQuantityChange(line.variantId, it) }, enabled = !busy)

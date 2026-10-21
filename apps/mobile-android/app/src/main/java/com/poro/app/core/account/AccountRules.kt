@@ -10,8 +10,8 @@ object AccountRules {
     const val PASSWORD_MAX = 128
     const val FULL_NAME_MIN = 2
     const val FULL_NAME_MAX = 100
-    const val DISPLAY_NAME_MAX = 200
-    const val BIO_MAX = 1000
+    const val DISPLAY_NAME_MAX = 50
+    const val BIO_MAX = 160
     const val USERNAME_MAX = 30
 
     private val EMAIL = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")

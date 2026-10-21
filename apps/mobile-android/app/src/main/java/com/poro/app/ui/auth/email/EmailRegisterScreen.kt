@@ -30,6 +30,7 @@ fun EmailRegisterScreen(
     onPasswordChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onHaveAccount: () -> Unit,
+    onOpenLegal: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val editable = !state.registering
@@ -72,6 +73,7 @@ fun EmailRegisterScreen(
             onClick = onSubmit,
         )
         AuthLink(stringResource(R.string.email_have_account), onHaveAccount, enabled = editable)
+        AuthLink(stringResource(R.string.legal_link), onOpenLegal, enabled = editable)
     }
 }
 
@@ -86,6 +88,7 @@ private fun EmailRegisterScreenPreview() {
             onPasswordChange = {},
             onSubmit = {},
             onHaveAccount = {},
+            onOpenLegal = {},
         )
     }
 }

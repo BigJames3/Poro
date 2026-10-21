@@ -10,6 +10,7 @@ import com.poro.app.data.feed.FeedItem
 import com.poro.app.data.video.VideoDto
 import com.poro.app.ui.AppNav
 import com.poro.app.ui.HomeRoute
+import com.poro.app.ui.SearchRoute
 import com.poro.app.ui.VideoRoute
 import com.poro.app.ui.player.rememberVideoPlayer
 import com.poro.app.ui.poroViewModel
@@ -39,6 +40,7 @@ fun NavGraphBuilder.feedGraph(
             onItemShown = vm::onItemShown,
             onRetry = { vm.refresh() },
             onOpenAuthor = { item -> onOpenAuthor(item.author.id, item.author.username) },
+            onFindCreators = { nav.controller.navigate(SearchRoute) },
             actions = feedActions,
             topEnd = feedTopEnd,
         )

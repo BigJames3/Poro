@@ -19,6 +19,7 @@ class FakeOrderRepository : OrderRepository {
     var addresses: ApiResult<List<AddressDto>> = ApiResult.Success(emptyList())
     var preview: ApiResult<PreviewDto> = ApiResult.Success(PreviewDto("pv1"))
     var confirm: ApiResult<Placed> = ApiResult.Success(Placed("c1", listOf(OrderDto("o1"))))
+    val confirmResults = ArrayDeque<ApiResult<Placed>>()
     var order: ApiResult<OrderDto> = ApiResult.Success(OrderDto("o1", status = OrderDto.CONFIRMED))
     var orders: ApiResult<PageDto<OrderDto>> = ApiResult.Success(PageDto(emptyList(), null))
     var lastPreview: PreviewRequest? = null
@@ -41,7 +42,10 @@ class FakeOrderRepository : OrderRepository {
         return preview
     }
 
-    override suspend fun confirm(previewId: String) = confirm.also { calls += "confirm:$previewId" }
+    override suspend fun confirm(previewId: String): ApiResult<Placed> {
+        calls += "confirm:$previewId"
+        return if (confirmResults.isNotEmpty()) confirmResults.removeFirst() else confirm
+    }
 
     override suspend fun orders(cursor: String?) = orders.also { calls += "orders:$cursor" }
 

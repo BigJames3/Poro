@@ -13,11 +13,13 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import com.poro.app.BuildConfig
+import com.poro.app.data.moderation.ReportTargets
 import com.poro.app.data.social.ShareChannel
 import com.poro.app.data.social.VideoStatsDto
 import com.poro.app.ui.AppNav
 import com.poro.app.ui.CollectEvents
 import com.poro.app.ui.PublicProfileRoute
+import com.poro.app.ui.moderation.ReportHost
 import com.poro.app.ui.poroViewModel
 
 /** Profil public d'un autre compte (depuis le fil, la recherche ou une notification). */
@@ -28,7 +30,11 @@ fun NavGraphBuilder.socialGraph(nav: AppNav) {
             PublicProfileViewModel(route.userId, route.username, nav.container.profileRepository, nav.container.socialRepository)
         }
         val state by vm.state.collectAsStateWithLifecycle()
-        PublicProfileScreen(state = state, onBack = nav::back, onToggleFollow = vm::toggleFollow)
+        var showReport by rememberSaveable { mutableStateOf(false) }
+        PublicProfileScreen(state = state, onBack = nav::back, onToggleFollow = vm::toggleFollow, onReport = { showReport = true })
+        if (showReport) {
+            ReportHost(nav, ReportTargets.USER, route.userId, onDismiss = { showReport = false })
+        }
     }
 }
 
@@ -45,6 +51,7 @@ fun SocialVideoActions(nav: AppNav, videoId: String, title: String, fallback: Vi
     val context = LocalContext.current
     var showComments by rememberSaveable(videoId) { mutableStateOf(false) }
     var showShare by rememberSaveable(videoId) { mutableStateOf(false) }
+    var showReport by rememberSaveable(videoId) { mutableStateOf(false) }
     val stats = state.stats[videoId] ?: fallback.copy(videoId = videoId)
 
     LaunchedEffect(videoId) { vm.onShown(videoId) }
@@ -60,10 +67,14 @@ fun SocialVideoActions(nav: AppNav, videoId: String, title: String, fallback: Vi
         onLike = { vm.toggleLike(videoId, stats) },
         onComments = { showComments = true },
         onShare = { showShare = true },
+        onReport = { showReport = true },
         modifier = modifier,
     )
     if (showComments) {
         CommentsHost(nav, videoId, onCountChanged = { delta -> vm.onCommentsChanged(videoId, delta, stats) }, onDismiss = { showComments = false })
+    }
+    if (showReport) {
+        ReportHost(nav, ReportTargets.VIDEO, videoId, onDismiss = { showReport = false })
     }
     if (showShare) {
         ShareSheet(
@@ -90,6 +101,7 @@ private fun CommentsHost(nav: AppNav, videoId: String, onCountChanged: (Int) -> 
         CommentsViewModel(videoId, container.socialRepository, container.profileRepository)
     }
     val state by vm.state.collectAsStateWithLifecycle()
+    var reportCommentId by rememberSaveable { mutableStateOf<String?>(null) }
     CollectEvents(vm.events) { event ->
         when (event) {
             is CommentsEvent.CountChanged -> onCountChanged(event.delta)
@@ -106,9 +118,13 @@ private fun CommentsHost(nav: AppNav, videoId: String, onCountChanged: (Int) -> 
             onPost = vm::post,
             onLike = vm::toggleLike,
             onDelete = vm::delete,
+            onReport = { comment -> reportCommentId = comment.id },
         ),
         onDismiss = onDismiss,
     )
+    reportCommentId?.let { commentId ->
+        ReportHost(nav, ReportTargets.COMMENT, commentId, onDismiss = { reportCommentId = null })
+    }
 }
 
 /** Abonnés et abonnements de son propre compte, sur l'onglet Profil. */

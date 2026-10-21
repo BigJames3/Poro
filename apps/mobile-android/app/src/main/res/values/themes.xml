@@ -1,4 +1,9 @@
 <resources>
-    <!-- Thème de la fenêtre uniquement : l'interface est en Jetpack Compose (ui/theme). -->
-    <style name="Theme.Poro" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Fenêtre seulement : l'UI est Compose. Suit le thème clair ; values-night pour le sombre. -->
+    <style name="Theme.Poro" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFFBF8</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 </resources>

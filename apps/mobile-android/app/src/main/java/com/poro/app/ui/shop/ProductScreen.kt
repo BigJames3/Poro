@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -26,11 +27,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.poro.app.R
-import com.poro.app.core.format.Formats
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.common.BackTopBar
 import com.poro.app.ui.common.LoadableContent
+import com.poro.app.ui.common.PriceText
+import com.poro.app.ui.theme.PoroSize
+import com.poro.app.ui.theme.PoroSpace
 
 @Composable
 fun ProductScreen(
@@ -46,8 +49,8 @@ fun ProductScreen(
         LoadableContent(state.product, onRetry, Modifier.padding(padding)) { product ->
             val selected = product.variants.firstOrNull { it.variantId == state.variantId }
             Column(
-                Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(PoroSpace.sm),
             ) {
                 if (product.images.isNotEmpty()) {
                     val pager = rememberPagerState(pageCount = { product.images.size })
@@ -60,9 +63,9 @@ fun ProductScreen(
                         )
                     }
                 }
-                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.padding(horizontal = PoroSpace.md), verticalArrangement = Arrangement.spacedBy(PoroSpace.sm)) {
+                    selected?.let { PriceText(it.price, product.currency, style = MaterialTheme.typography.titleLarge) }
                     Text(product.title, style = MaterialTheme.typography.headlineSmall)
-                    selected?.let { Text(Formats.money(it.price, product.currency), style = MaterialTheme.typography.titleLarge) }
                     TextButton(onClick = { onOpenShop(product.shop.handle) }) {
                         Text(stringResource(R.string.product_sold_by, product.shop.name))
                     }
@@ -98,11 +101,11 @@ fun ProductScreen(
 @Composable
 fun QuantityStepper(quantity: Int, onChange: (Int) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        OutlinedButton(onClick = { onChange(quantity - 1) }, enabled = enabled && quantity > 1) {
+        OutlinedButton(onClick = { onChange(quantity - 1) }, enabled = enabled && quantity > 1, modifier = Modifier.heightIn(min = PoroSize.touch)) {
             Text("−", modifier = Modifier.padding(horizontal = 4.dp))
         }
         Text(stringResource(R.string.quantity, quantity), modifier = Modifier.padding(horizontal = 8.dp))
-        OutlinedButton(onClick = { onChange(quantity + 1) }, enabled = enabled && quantity < 99) {
+        OutlinedButton(onClick = { onChange(quantity + 1) }, enabled = enabled && quantity < 99, modifier = Modifier.heightIn(min = PoroSize.touch)) {
             Text("+", modifier = Modifier.padding(horizontal = 4.dp))
         }
     }

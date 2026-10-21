@@ -30,26 +30,37 @@ import com.poro.app.data.social.UserStatsDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.common.CreatorBadge
 import com.poro.app.ui.common.displayNameOf
+import com.poro.app.ui.theme.PoroSize
+import com.poro.app.ui.theme.PoroSpace
+import com.poro.app.ui.moderation.OverflowAction
+import com.poro.app.ui.moderation.OverflowMenu
 
 @Composable
-fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggleFollow: () -> Unit) {
+fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggleFollow: () -> Unit, onReport: () -> Unit) {
     val profile = state.profile
     val name = displayNameOf(profile?.displayName, profile?.username)
-    Scaffold(topBar = { BackTopBar(name, onBack) }) { padding ->
+    Scaffold(
+        topBar = {
+            BackTopBar(name, onBack) {
+                OverflowMenu(items = listOf(OverflowAction(stringResource(R.string.action_report), onReport)))
+            }
+        },
+    ) { padding ->
         if (state.loading) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             return@Scaffold
         }
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(PoroSpace.lg),
+            verticalArrangement = Arrangement.spacedBy(PoroSpace.xs),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Avatar(profile?.avatarUrl, profile?.displayName ?: profile?.username, size = 96.dp)
+            Avatar(profile?.avatarUrl, profile?.displayName ?: profile?.username, size = PoroSize.avatarL)
             Text(name, style = MaterialTheme.typography.headlineSmall)
             profile?.username?.let { Text("@$it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (profile?.isCreator == true) Text(stringResource(R.string.profile_creator_badge), color = MaterialTheme.colorScheme.primary)
+            if (profile?.isCreator == true) CreatorBadge()
             profile?.bio?.takeIf { it.isNotBlank() }?.let { Text(it, textAlign = TextAlign.Center) }
             state.stats?.let { FollowCounts(it) }
             if (!state.isMe) {
