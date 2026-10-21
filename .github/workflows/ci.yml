@@ -30,6 +30,7 @@ jobs:
       shop: ${{ steps.filter.outputs.shop }}
       order: ${{ steps.filter.outputs.order }}
       mobile: ${{ steps.filter.outputs.mobile }}
+      business-card: ${{ steps.filter.outputs.business-card }}
       gateway: ${{ steps.filter.outputs.gateway }}
       storage: ${{ steps.filter.outputs.storage }}
       backup: ${{ steps.filter.outputs.backup }}
@@ -114,6 +115,10 @@ jobs:
               - '.github/actions/**'
             mobile:
               - 'apps/mobile-android/**'
+            business-card:
+              - 'apps/business-card/**'
+              - '.github/workflows/ci.yml'
+              - '.github/actions/**'
             gateway:
               - 'infra/gateway/**'
               - 'docs/api/**'
@@ -789,6 +794,45 @@ jobs:
         working-directory: apps/mobile-android
         run: bash ./gradlew --no-daemon testDebugUnitTest assembleDebug
 
+  business-card:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.business-card == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/business-card
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/business-card/package-lock.json
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: npm audit (production, high and critical)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Format
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests (desktop and mobile Chromium)
+        run: npm run test:e2e
+      - name: Production build refuses a missing PUBLIC_URL
+        run: "! npm run build:prod"
+      - name: Docker build
+        run: docker build --build-arg PUBLIC_URL=https://card.example.com/ -t poro-business-card:${{ github.sha }} .
+      - name: Trivy image scan (poro-business-card)
+        uses: ./.github/actions/trivy-image
+        with:
+          image: poro-business-card:${{ github.sha }}
+
   repo-checks:
     # Every change: a broken workflow, docker-compose.yml or infra script
     # breaks CI or every developer's environment, whatever the service touched.
@@ -832,6 +876,7 @@ jobs:
       - feed
       - search
       - mobile-build
+      - business-card
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed or was not needed

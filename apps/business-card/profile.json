@@ -1,0 +1,38 @@
+{
+  "$comment": "Seule source des données de la carte. Après modification : npm run build (et npm run assets si le nom, les initiales ou les couleurs changent).",
+  "slug": "bintou-saida-diabate",
+  "lang": "fr",
+  "person": {
+    "honorific": "Madame",
+    "givenName": "Bintou Saïda",
+    "familyName": "DIABATÉ",
+    "title": "Responsable Customer service, Qualité et Coordination logistique",
+    "photo": null
+  },
+  "organization": {
+    "name": "Foods’ Co",
+    "legalForm": "S.A.",
+    "website": "https://www.foodsco.ci",
+    "city": "Abidjan",
+    "country": "Côte d’Ivoire"
+  },
+  "contact": {
+    "phone": { "e164": "+2250768620497", "display": "+225 07 68 62 04 97" },
+    "whatsapp": {
+      "e164": "+2250768620497",
+      "message": "Bonjour Madame DIABATÉ, je vous contacte depuis votre carte de visite Foods’ Co."
+    },
+    "email": "responsablequalite@foodsco.ci",
+    "address": {
+      "display": "Abidjan Treichville, Zone 3, rue de la Glacière, en face du commissariat du 4ème Arr. – 15 BP 292 Abidjan",
+      "street": "Zone 3, rue de la Glacière, en face du commissariat du 4ème Arr.",
+      "district": "Treichville",
+      "locality": "Abidjan",
+      "poBox": "15 BP 292 Abidjan",
+      "country": "Côte d’Ivoire",
+      "mapsQuery": "Foods'Co Treichville Zone 3 rue de la glacière Abidjan"
+    }
+  },
+  "socials": [],
+  "theme": { "brand": "#d3202a", "brandDark": "#a8151e" }
+}

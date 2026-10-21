@@ -7,6 +7,7 @@ Plateforme sociale vidéo africaine avec marketplace intégrée.
 | Dossier | Contenu |
 |---|---|
 | `apps/mobile-android` | Application Android (Kotlin, Compose) |
+| `apps/business-card` | Carte de visite numérique statique et PWA : vCard, QR code, partage ([README](apps/business-card/README.md)) |
 | `services/` | Services de l'API, détaillés ci-dessous |
 | `packages/shared-go` | HTTP, JWT/JWKS, santé, métriques, tracing, outbox/inbox, Kafka, catalogue d'événements |
 | `packages/contracts` | Schémas JSON des événements (`poro.{domaine}.{entité}.{action}`) |
