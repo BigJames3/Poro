@@ -5,6 +5,20 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+/**
+ * Valeur de build fournie par une propriété Gradle (`-Pporo.x=…`) ou une variable d'environnement
+ * (CI). Jamais de secret dans le dépôt : sans valeur, le build de release n'est pas signé.
+ */
+fun buildValue(property: String, env: String): String? =
+    (findProperty(property) as String?)?.takeIf { it.isNotBlank() } ?: System.getenv(env)?.takeIf { it.isNotBlank() }
+
+val releaseApiUrl = (buildValue("poro.apiBaseUrl", "PORO_API_BASE_URL") ?: "https://api.poro.invalid/").also {
+    // Le build de release refuse le trafic en clair (network_security_config) : HTTPS obligatoire.
+    require(it.startsWith("https://") && it.endsWith("/")) { "poro.apiBaseUrl doit être une URL https:// terminée par /" }
+}
+val shareBaseUrl = buildValue("poro.shareBaseUrl", "PORO_SHARE_BASE_URL") ?: ""
+val releaseKeystore = buildValue("poro.keystore", "PORO_KEYSTORE_FILE")
+
 android {
     // Identifiant définitif sur le Play Store : ne plus le changer après la première publication.
     namespace = "com.poro.app"
@@ -16,14 +30,27 @@ android {
         applicationId = "com.poro.app"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        // La CI fournit un numéro croissant (numéro de run) ; 1 en local.
+        versionCode = buildValue("poro.versionCode", "PORO_VERSION_CODE")?.toInt() ?: 1
+        versionName = buildValue("poro.versionName", "PORO_VERSION_NAME") ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Base des liens de partage (ex. https://poro.africa) : vide tant que le site et les liens
         // d'application n'existent pas ; le partage n'envoie alors que le titre.
-        buildConfigField("String", "SHARE_BASE_URL", "\"\"")
+        buildConfigField("String", "SHARE_BASE_URL", "\"$shareBaseUrl\"")
+    }
+
+    signingConfigs {
+        // Keystore de publication hors du dépôt : chemin et mots de passe viennent des secrets CI.
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = buildValue("poro.keystorePassword", "PORO_KEYSTORE_PASSWORD")
+                keyAlias = buildValue("poro.keyAlias", "PORO_KEY_ALIAS")
+                keyPassword = buildValue("poro.keyPassword", "PORO_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -34,11 +61,14 @@ android {
             applicationIdSuffix = ".debug"
         }
         release {
-            // URL HTTPS de staging/production à renseigner quand l'hébergement existera (docs/runbooks/deploy.md).
-            buildConfigField("String", "API_BASE_URL", "\"https://api.poro.invalid/\"")
+            // URL HTTPS de staging/production (docs/runbooks/deploy.md), fournie au build de publication.
+            buildConfigField("String", "API_BASE_URL", "\"$releaseApiUrl\"")
+            // R8 : réduction, obscurcissement et réduction des ressources. Règles propres à l'app
+            // dans src/main/keepRules (Retrofit et kotlinx.serialization fournissent les leurs).
             optimization {
-                enable = false
+                enable = true
             }
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 

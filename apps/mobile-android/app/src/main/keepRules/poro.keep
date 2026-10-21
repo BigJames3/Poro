@@ -1,0 +1,22 @@
+# Règles R8 propres à Poro. Retrofit, OkHttp, Coil, Media3 et kotlinx.serialization embarquent
+# leurs propres règles ; celles-ci couvrent ce que la réflexion de Retrofit lit dans notre code.
+
+# Interfaces Retrofit : méthodes, annotations et types génériques (Response<ApiEnvelope<T>>)
+# lus par réflexion à l'exécution.
+-keepattributes Signature, InnerClasses, EnclosingMethod, RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations, AnnotationDefault
+-keep,allowobfuscation interface com.poro.app.data.**.*Api
+-keepclassmembers,allowobfuscation interface com.poro.app.data.**.*Api { <methods>; }
+-keep,allowobfuscation,allowshrinking class retrofit2.Response
+-keep,allowobfuscation,allowshrinking interface kotlin.coroutines.Continuation
+
+# Enveloppe et DTO : leurs sérialiseurs générés sont retrouvés via le compagnon.
+-keepclassmembers @kotlinx.serialization.Serializable class com.poro.app.** {
+    *** Companion;
+    *** INSTANCE;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keepclasseswithmembers class com.poro.app.**$$serializer { *; }
+
+# Traces de plantage lisibles une fois désobscurcies (mapping.txt conservé par la CI).
+-keepattributes SourceFile, LineNumberTable
+-renamesourcefileattribute SourceFile
