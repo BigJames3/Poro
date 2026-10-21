@@ -50,6 +50,11 @@ fun ApiResult<*>.toErrorMessage(): ErrorMessage? = when (this) {
         ApiErrorCodes.UPLOAD_REJECTED -> ErrorMessage(R.string.error_upload_rejected)
         ApiErrorCodes.VIDEO_NOT_FOUND, ApiErrorCodes.COMMENT_NOT_FOUND, ApiErrorCodes.USER_NOT_FOUND -> ErrorMessage(R.string.error_not_found)
         ApiErrorCodes.COMMENT_INVALID -> ErrorMessage(R.string.error_comment_invalid)
+        ApiErrorCodes.TITLE_INVALID -> ErrorMessage(R.string.error_title_invalid)
+        ApiErrorCodes.DESCRIPTION_INVALID -> ErrorMessage(R.string.error_description_invalid)
+        ApiErrorCodes.CONTENT_TYPE_INVALID -> ErrorMessage(R.string.upload_error_format)
+        ApiErrorCodes.SIZE_INVALID, ApiErrorCodes.PAYLOAD_TOO_LARGE -> ErrorMessage(R.string.upload_error_size)
+        ApiErrorCodes.INVALID_MEDIA, ApiErrorCodes.UPLOAD_INCOMPLETE -> ErrorMessage(R.string.error_invalid_media)
         else -> ErrorMessage(R.string.error_unexpected, requestId)
     }
 }

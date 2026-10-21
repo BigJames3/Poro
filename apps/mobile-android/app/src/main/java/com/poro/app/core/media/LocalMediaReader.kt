@@ -2,8 +2,11 @@ package com.poro.app.core.media
 
 import java.io.IOException
 
-/** Fichier choisi par l'utilisateur (sélecteur de photos ou de vidéos), désigné par son URI. */
-data class LocalMedia(val uri: String, val mimeType: String, val sizeBytes: Long)
+/**
+ * Fichier choisi par l'utilisateur (sélecteur de photos ou de vidéos), désigné par son URI.
+ * [durationMs] : durée d'une vidéo, null si inconnue (ou pour une image).
+ */
+data class LocalMedia(val uri: String, val mimeType: String, val sizeBytes: Long, val durationMs: Long? = null)
 
 /**
  * Accès aux fichiers choisis par l'utilisateur. Interface pour les tests : les ViewModels ne

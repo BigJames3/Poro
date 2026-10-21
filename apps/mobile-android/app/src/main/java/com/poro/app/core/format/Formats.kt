@@ -54,6 +54,12 @@ object Formats {
         return if (tenths < 100 && tenths % 10 != 0L) "${tenths / 10},${tenths % 10} $suffix" else "${value / unit} $suffix"
     }
 
+    /** Taille de fichier en Mo, une décimale : « 12,4 Mo ». */
+    fun megabytes(bytes: Long): String {
+        val tenths = bytes * 10 / (1024 * 1024)
+        return "${tenths / 10},${tenths % 10} Mo"
+    }
+
     /** Durée de vidéo « 0:42 » ou « 2:05 ». */
     fun duration(millis: Long): String {
         val totalSeconds = millis / 1000

@@ -1,6 +1,7 @@
 package com.poro.app.core.media
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
 import java.io.IOException
@@ -8,7 +9,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class ContentResolverMediaReader(context: Context) : LocalMediaReader {
-    private val resolver = context.applicationContext.contentResolver
+    private val appContext = context.applicationContext
+    private val resolver = appContext.contentResolver
 
     override suspend fun describe(uri: String): LocalMedia? = withContext(Dispatchers.IO) {
         val parsed = Uri.parse(uri)
@@ -16,7 +18,20 @@ class ContentResolverMediaReader(context: Context) : LocalMediaReader {
         val size = resolver.query(parsed, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
             if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
         } ?: return@withContext null
-        LocalMedia(uri, type, size)
+        LocalMedia(uri, type, size, if (type.startsWith("video/")) durationOf(parsed) else null)
+    }
+
+    /** Durée lue dans les métadonnées du conteneur ; null si le fichier ne la donne pas. */
+    private fun durationOf(uri: Uri): Long? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(appContext, uri)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+        } catch (e: RuntimeException) {
+            null
+        } finally {
+            retriever.release()
+        }
     }
 
     override suspend fun read(uri: String, offset: Long, length: Int): ByteArray = withContext(Dispatchers.IO) {

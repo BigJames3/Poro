@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CircularProgressIndicator
@@ -44,6 +45,8 @@ import com.poro.app.ui.profile.profileGraph
 import com.poro.app.ui.social.MyFollowCounts
 import com.poro.app.ui.social.SocialVideoActions
 import com.poro.app.ui.social.socialGraph
+import com.poro.app.ui.upload.MyVideos
+import com.poro.app.ui.upload.uploadGraph
 
 /** Onglets de la barre du bas, visibles sur leurs propres écrans seulement. */
 enum class TopLevelTab(
@@ -53,6 +56,7 @@ enum class TopLevelTab(
     val matches: (NavDestination) -> Boolean,
 ) {
     Home(HomeRoute, R.string.tab_feed, Icons.Filled.Home, { it.hasRoute<HomeRoute>() }),
+    Upload(UploadRoute, R.string.tab_upload, Icons.Filled.AddCircle, { it.hasRoute<UploadRoute>() }),
     Profile(ProfileRoute, R.string.tab_profile, Icons.Filled.Person, { it.hasRoute<ProfileRoute>() }),
 }
 
@@ -132,7 +136,11 @@ private fun PoroNavGraph(
                 videoActions = { video -> SocialVideoActions(nav, video.id, video.title, VideoStatsDto(video.id)) },
             )
             socialGraph(nav)
-            profileGraph(nav, profileExtra = { me -> MyFollowCounts(nav, me.profile.userId) })
+            uploadGraph(nav)
+            profileGraph(nav) { me ->
+                MyFollowCounts(nav, me.profile.userId)
+                MyVideos(nav)
+            }
         }
     }
 }

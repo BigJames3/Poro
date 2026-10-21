@@ -72,6 +72,15 @@ object ApiErrorCodes {
     const val CANNOT_FOLLOW_SELF = "cannot_follow_self"
     const val COMMENT_INVALID = "comment_invalid"
     const val COMMENT_EDIT_WINDOW_CLOSED = "comment_edit_window_closed"
+
+    // Vidéos (docs/api/video.openapi.yaml).
+    const val TITLE_INVALID = "title_invalid"
+    const val DESCRIPTION_INVALID = "description_invalid"
+    const val CONTENT_TYPE_INVALID = "content_type_invalid"
+    const val SIZE_INVALID = "size_invalid"
+    const val INVALID_MEDIA = "invalid_media"
+    const val UPLOAD_INCOMPLETE = "upload_incomplete"
+    const val PAYLOAD_TOO_LARGE = "payload_too_large"
     const val USERNAME_TAKEN = "username_taken"
     const val USERNAME_INVALID = "username_invalid"
     const val USERNAME_RESERVED = "username_reserved"

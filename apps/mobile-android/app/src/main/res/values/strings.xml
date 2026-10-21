@@ -126,6 +126,32 @@
     <string name="profile_followers">%1$s abonnés</string>
     <string name="profile_following">%1$s abonnements</string>
 
+    <!-- Publication -->
+    <string name="upload_title">Publier une vidéo</string>
+    <string name="upload_rules">MP4, MOV ou WebM, 3 minutes et 256 Mo au plus.</string>
+    <string name="upload_pick">Choisir une vidéo</string>
+    <string name="upload_pick_other">Choisir une autre vidéo</string>
+    <string name="upload_video_title">Titre</string>
+    <string name="upload_video_description">Description</string>
+    <string name="upload_hashtags_hint">Ajoutez des #hashtags pour être trouvé dans la recherche.</string>
+    <string name="upload_publish">Publier</string>
+    <string name="upload_sending">Envoi de « %1$s » : %2$d %%</string>
+    <string name="upload_keep_open">Gardez l’application ouverte jusqu’à la fin de l’envoi.</string>
+    <string name="upload_new">Publier une autre vidéo</string>
+    <string name="upload_ready">Votre vidéo est en ligne !</string>
+    <string name="upload_watch">Voir la vidéo</string>
+    <string name="upload_error_format">Format non pris en charge. Choisissez une vidéo MP4, MOV ou WebM.</string>
+    <string name="upload_error_size">Vidéo trop lourde : 256 Mo au plus.</string>
+    <string name="upload_error_duration">Vidéo trop longue : 3 minutes au plus.</string>
+    <string name="my_videos_title">Mes vidéos</string>
+    <string name="my_videos_empty">Vous n’avez encore rien publié.</string>
+    <string name="my_videos_more">Afficher plus</string>
+    <string name="my_videos_delete_title">Supprimer la vidéo ?</string>
+    <string name="my_videos_delete_text">« %1$s » ne sera plus visible. Cette action est définitive.</string>
+    <string name="status_processing">En traitement</string>
+    <string name="status_failed">Échec</string>
+    <string name="status_removed">Retirée</string>
+
     <!-- Profil -->
     <string name="profile_edit">Modifier le profil</string>
     <string name="profile_settings">Paramètres</string>
@@ -205,6 +231,10 @@
     <string name="error_avatar_invalid">Image illisible. Choisissez une photo JPEG, PNG ou WebP.</string>
     <string name="error_upload_rejected">L’envoi du fichier a été refusé. Réessayez.</string>
     <string name="error_comment_invalid">Commentaire invalide : 1 000 caractères et 20 retours à la ligne au plus.</string>
+    <string name="error_title_invalid">Titre invalide : 1 à 100 caractères.</string>
+    <string name="error_description_invalid">Description invalide : 1 000 caractères au plus.</string>
+    <string name="error_invalid_media">Fichier vidéo illisible. Choisissez une autre vidéo.</string>
+    <string name="error_payload_too_large">Fichier trop lourd.</string>
     <string name="error_unexpected">Une erreur inattendue est survenue. Réessayez.</string>
     <string name="error_reference">Référence : %1$s</string>
 </resources>

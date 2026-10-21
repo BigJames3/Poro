@@ -20,6 +20,8 @@ import com.poro.app.data.social.SocialRepository
 import com.poro.app.data.user.DefaultProfileRepository
 import com.poro.app.data.user.ProfileRepository
 import com.poro.app.data.video.DefaultVideoRepository
+import com.poro.app.data.video.UploadManager
+import com.poro.app.data.video.VideoUploader
 import com.poro.app.data.video.VideoRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +37,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
  */
 class AppContainer(context: Context) {
 
-    /** Vit autant que le processus : travaux qui ne dépendent d'aucun écran. */
+    /** Vit autant que le processus : travaux qui ne dépendent d'aucun écran (envoi de vidéo). */
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val tokenStore: TokenStore = EncryptedTokenStore(context, applicationScope)
@@ -69,6 +71,12 @@ class AppContainer(context: Context) {
     val videoRepository: VideoRepository = DefaultVideoRepository(network.api())
 
     val socialRepository: SocialRepository = DefaultSocialRepository(network.api())
+
+    val uploadManager = UploadManager(
+        client = VideoUploader(network.api(), uploader, mediaReader),
+        videos = videoRepository,
+        scope = applicationScope,
+    )
 }
 
 sealed interface SessionEvent {
