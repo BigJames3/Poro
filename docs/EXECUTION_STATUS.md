@@ -1,7 +1,7 @@
 # État d'exécution — socle essentiel
 
 Suivi du mandat « finaliser le socle essentiel ». Mis à jour à chaque étape cohérente.
-Statuts : À FAIRE · EN COURS · BLOQUÉE · TERMINÉE.
+Statuts : À FAIRE · EN COURS · À VALIDER · BLOQUÉE · TERMINÉE.
 
 Branche d'intégration : `feat/socle-essentiel`, partie de `main` (`a949cea`). Elle fusionne
 (commits de fusion, aucun historique réécrit) les branches livrées mais non fusionnées, puis
@@ -17,7 +17,11 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
 | 3 | PORO-011 CI et images | TERMINÉE (protection de branche : action humaine) | prérequis de toute livraison (staging, CD) |
 | 4 | PORO-009 observabilité | TERMINÉE (routage des alertes : action humaine) | prérequis d'une exploitation de staging |
 | 5 | PORO-010/012 staging, CD, sauvegardes | TERMINÉE côté code ; mise en service BLOQUÉE (hébergeur, secrets) | dépend de 3 et 4 ; accès hébergeur absents |
-| 6 | PORO-013 Android et connexion API | BLOQUÉE côté Android (périmètre interdit) ; côté backend TERMINÉE | code Android hors périmètre autorisé (voir plus bas) |
+| 6 | PORO-013 Android et connexion API | DÉPASSÉE en partie | le guide backend reste valable ; l'app n'est plus un gabarit (voir §6) |
+| 7 | UX mobile lots 1–3 (boutique, signalement, légal) | VALIDÉE (conception / code) ; QA appareil encore ouverte | validé le 21 oct. 2026 ; textes juridiques Q-03 ouverts |
+| 8 | Médias, import et enregistrement (conception) | VALIDÉE | spec `docs/product/mobile-media/` ; pas de Kotlin |
+| 9 | Mode visiteur (conception) | VALIDÉE | spec `docs/product/guest-mode/` ; implémentation bloquée par B-FEED |
+| 10 | Mapping backend → UI (audit) | VALIDÉE | `docs/product/backend-ui-mapping/` ; 107 endpoints |
 
 ## 0. Intégration des branches en attente — TERMINÉE
 
@@ -289,31 +293,107 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
   Tant que ces éléments manquent, les services refusent de démarrer en `APP_ENV=staging` et le
   workflow s'arrête en listant ce qui manque.
 
-## 6. PORO-013 — Android et connexion API — BLOQUÉE côté Android ; TERMINÉE côté backend
+## 6. PORO-013 — Android et connexion API — guide backend terminé ; l'app n'est plus un gabarit
 
-- **Restriction respectée** : `apps/mobile-android/` est hors du périmètre autorisé. C'est une
-  règle permanente du propriétaire, et `.github/dependabot.yml` attribue ce dossier à l'équipe
-  mobile. Aucun fichier Android n'a été modifié ni généré (pas de build local).
-- **Fait côté backend** :
-  - `docs/api/ANDROID-INTEGRATION.md` :
-    - URL de l'API pour l'émulateur et le téléphone (`adb reverse`) ;
-    - enveloppe d'erreur, `X-Request-ID`, `Retry-After` ;
-    - cycle des jetons avec rafraîchissement sérialisé, révocation immédiate ;
-    - suppression de compte ;
-    - upload multipart présigné et formats acceptés ;
-    - enregistrement FCM.
+Ce qui suit corrige le constat du socle. À la clôture de `feat/socle-essentiel`, le dossier
+Android n'avait pas été touché. Ce n'est plus l'état du dépôt.
 
-    Les affirmations ont été vérifiées contre les contrats OpenAPI.
-  - **CI** : `mobile-build` assemble réellement l'APK debug, au lieu d'un `echo` qui passait
-    toujours.
-- **Dépendances bloquantes (équipe mobile)** :
-  - code Kotlin applicatif ;
-  - permission `INTERNET` ;
-  - *network security config* de dev ;
-  - projet Firebase et `google-services.json` ;
-  - identifiant d'application définitif (aujourd'hui `com.example.myporo`).
+- **Constat au 21 octobre 2026** (`apps/mobile-android`, `applicationId` `com.poro.app`) :
+  - application Jetpack Compose, activité `MainActivity`, permission `INTERNET`,
+    `networkSecurityConfig` ;
+  - client Retrofit / OkHttp vers l'API (auth, fil, vidéo, profil, boutique, commandes,
+    modération) ;
+  - écrans de connexion (téléphone, OTP, email, mot de passe oublié), fil, recherche,
+    notifications, upload, profil, réglages, documents légaux, suppression de compte,
+    boutique, panier, commande.
+- **Toujours absent** : Firebase, `google-services.json`, FCM. L'enregistrement push décrit
+  dans le guide n'a pas de client.
+- **Fait côté backend** (inchangé) : `docs/api/ANDROID-INTEGRATION.md` (URL émulateur,
+  enveloppe d'erreur, jetons, suppression de compte, upload). La CI `mobile-build` assemble
+  l'APK debug.
 - **Vérification finale de la gateway** : contrat des 133 routes et e2e avec le vrai service auth,
-  tous deux verts sur la branche intégrée.
+  tous deux verts sur la branche intégrée du socle. Ce résultat ne couvre pas les changements
+  Android non commités de la branche courante.
+
+## 7. UX mobile lots 1–3 — VALIDÉE (conception / code) ; QA appareil ouverte
+
+Livré dans `apps/mobile-android` après autorisation explicite. Lot 4 (invité) non commencé
+(backend trending JWT). Wave / FCM / WorkManager hors périmètre.
+
+- **Lot 1 — boutique** : somme panier (GET puis PUT absolu ≤ 99) ; 10 photos produit ;
+  confirm réseau rejoué une fois ; préremplissage en erreur visible + Réessayer ;
+  `hasShop` null ≠ « ouvrir » ; badge créateur non cliquable.
+- **Lot 2 — signalement** : `POST /api/v1/moderation/reports` seulement (pas la file staff) ;
+  ⋮ vidéo / commentaire / profil ; 7 motifs ; 201 / doublon 200 / 422 self / 429.
+- **Lot 3 — légal** : 3 documents depuis Paramètres + lien auth ; routes accessibles
+  déconnectées ; corps **indisponible**, marqué « À valider », aucune clause opposable.
+- **Tests** : `testDebugUnitTest` vert (ViewModels panier, checkout, report, légal, messages
+  d'erreur).
+- **Reste à valider (humain / appareil / juridique)** :
+  - AC-MX et AC-MOD sur gateway réelle (dont confirm COD, 10e photo, 11e report / h) ;
+  - AC-LEG-03 sur appareil (Phone → légal, pas de bounce login) ;
+  - NR-01 à 06 sur le fil réel ;
+  - textes TOS / confidentialité / mentions (Q-03).
+- **Validé le 21 octobre 2026** (propriétaire produit) : le code des lots 1–3 est accepté.
+  QA appareil + gateway et textes Q-03 restent à faire.
+- **Non fait** : PR, mode invité, Firebase.
+
+## 8. Médias, import et enregistrement — conception VALIDÉE
+
+Exigence produit (vidéos/images sociales, marketplace images seules, enregistrer
+localement). **Aucun** fichier de `apps/mobile-android`, `services/*` ou
+`docs/api/*.yaml` n’a été modifié. Pack : `docs/product/mobile-media/`.
+
+- **Cible produit social** : une page = **vidéo ou image**. Spec [04](product/mobile-media/04-social-media-spec.md).
+- **Faits backend** : le contrat actuel ne porte que des clips HLS (`video_id`).
+  Pas de `kind`, pas d’URL de post image, actions sociales scopées `/videos/{id}`.
+  Boutique / avatar = JPEG/PNG/WebP, 5 Mio, 10 photos/produit — **hors fil**.
+- **Faits Android** : Publier = `VideoOnly` ; shop/avatar = `ImageOnly`. Pas
+  d’Enregistrer. On n’ouvre pas un picker photo social tant que B-IMG-POST tient.
+- **Livrable plus tard (M1–M2)** : description vidéo 500 runes ; aperçu photo
+  boutique avant envoi.
+- **Bloqué (ne pas simuler)** :
+  - afficher / publier une **image** dans le fil — B-IMG-POST (lot M5 après API) ;
+  - enregistrer une **vidéo** — B-VID-SAVE ;
+  - hors-ligne, envoi après kill, partage de fichier.
+- **Décisions humaines** : Q-MED-01/02 (enregistrer une photo produit) ; ne pas
+  ouvrir M3 tant que le juridique (Q-03) n’a pas tranché. Autorisation Android
+  distincte avant tout lot M*.
+- **Vocabulaire** : Publier / Envoyer = import vers Poro ; Enregistrer = galerie.
+  Jamais « Télécharger ».
+
+Validé le 21 octobre 2026. Aucune implémentation Android dans cette phase.
+
+## 9. Mode visiteur — conception VALIDÉE
+
+Pack : `docs/product/guest-mode/`. **Aucun** Kotlin, service, OpenAPI, commit, push.
+
+- **Promesse** : ouvrir Poro = fil public ; compte seulement à l’action.
+- **API déjà publiques** : vidéo `ready`, HLS, search, profil by-username,
+  comments/stats GET, boutique/produit GET, légal local.
+- **Bloqué fil** : les trois `GET /feed/*` exigent un JWT. Tendances n’utilisent
+  pas le `sub` mais le middleware si. **B-FEED** (trending Opt + quota IP + ADR).
+- **Bloqué Android** : `PhoneRoute` si SignedOut ; tout écran hors auth/légal
+  éjecte vers login. `goToSignIn` / `goHome` détruisent la pile (pas de `returnTo`).
+- **Cible UX** : 5 onglets conservés ; boutons like/comment/share/⋮ visibles ;
+  prompt non agressif ; replay like/follow seulement ; jamais checkout auto ;
+  cloche → login, pas de notif fictive ni FCM visiteur.
+- **Décision humaine** : accepter B-FEED ou garder l’auth-wall. Ne pas coder G1
+  avant trending 200 sans header.
+
+Validé le 21 octobre 2026. B-FEED n’est **pas** implémenté : décision backend encore requise avant G1.
+
+## 10. Mapping backend → UI — audit VALIDÉ
+
+Pack : `docs/product/backend-ui-mapping/` (12 fichiers). Inventaire de 107
+endpoints produit + capacités internes. **Aucun** Kotlin, service, OpenAPI,
+commit, push.
+
+- Membre : parcours principaux représentés (auth, fil, social, search, COD, report).
+- Trous UI (API prête) : followers, edit comment, devices, DELETE logo/cart, carnet.
+- Trous backend : visiteur fil, post image, FCM, catalogue, Wave, chat, favoris.
+- Staff : cases / admin shop **hors app**.
+- **Validé le 21 octobre 2026.**
 
 ## Interventions humaines requises (cumul)
 
@@ -325,8 +405,10 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
   GitHub `staging` (relecteurs, secrets SSH, variables) : `docs/runbooks/deploy.md`.
 - Astreinte : canal et webhook Alertmanager pour staging et production.
 - Juridique : durée de conservation des commandes d'un compte effacé (ADR-0018).
-- Équipe mobile : développer l'application selon `docs/api/ANDROID-INTEGRATION.md` ; décider si
-  le build Android réel doit bloquer la CI dès maintenant.
+- Équipe mobile : brancher FCM (Firebase et `google-services.json` absents) ; l'application
+  Compose `com.poro.app` existe déjà. Décider si le build Android réel doit bloquer la CI.
+- **Validé (21 oct. 2026)** : specs médias, visiteur, mapping backend→UI ; code lots 1–3.
+  Encore ouvert : QA appareil/gateway ; textes TOS (Q-03) ; décision B-FEED avant tout Kotlin guest.
 - Revue et fusion de `feat/socle-essentiel` dans `main` (aucune PR ouverte sans demande).
 - Après la première publication : rendre les paquets GHCR privés ou publics selon la politique
   du projet (GHCR crée les paquets privés par défaut).

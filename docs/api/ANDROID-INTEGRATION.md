@@ -9,10 +9,15 @@ référence : chaque route documentée est testée contre la gateway (`infra/gat
 
 ## État du projet Android constaté
 
-- Gabarit Android Studio vide : `com.example.myporo`, aucun code Kotlin applicatif, pas de
-  permission `INTERNET` dans le manifeste.
-- La CI assemble maintenant réellement l'APK debug (`mobile-build`, `gradlew assembleDebug`) au
-  lieu d'un `echo`.
+Mis à jour le 21 octobre 2026. L'ancien constat (gabarit vide `com.example.myporo`, sans Kotlin
+ni permission `INTERNET`) est périmé.
+
+- Application Compose : `applicationId` `com.poro.app`, activité `MainActivity`, permission
+  `INTERNET`, `networkSecurityConfig`.
+- Client Retrofit / OkHttp déjà branché (auth, fil, vidéo, profil, boutique, commandes).
+- Pas de Firebase ni de `google-services.json` : l'enregistrement FCM ci-dessous reste à faire
+  côté application.
+- La CI assemble l'APK debug (`mobile-build`, `gradlew assembleDebug`).
 
 ## Adresse de l'API
 
