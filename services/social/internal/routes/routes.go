@@ -41,6 +41,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	api.Put("/videos/:videoId/like", auth, general, like, h.LikeVideo)
 	api.Delete("/videos/:videoId/like", auth, general, like, h.UnlikeVideo)
 	api.Get("/videos/:videoId/likes", opt, general, h.ListVideoLikes)
+	api.Get("/videos/stats", opt, general, h.VideoStatsBatch)
 	api.Get("/videos/:videoId/stats", opt, general, h.VideoStats)
 	api.Post("/videos/:videoId/comments", auth, general, comment, h.CreateComment)
 	api.Get("/videos/:videoId/comments", opt, general, h.ListComments)

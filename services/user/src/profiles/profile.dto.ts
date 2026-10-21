@@ -29,6 +29,17 @@ export class UsernameQueryDto {
   username!: string;
 }
 
+/** Up to PROFILES_BATCH_MAX comma-separated user ids. */
+export class ProfilesBatchQueryDto {
+  @IsString()
+  @MaxLength(4000)
+  ids!: string;
+}
+
+export interface PublicProfileListView {
+  items: PublicProfileView[];
+}
+
 export class AvatarUploadDto {
   @IsIn(AVATAR_CONTENT_TYPES)
   content_type!: AvatarContentType;

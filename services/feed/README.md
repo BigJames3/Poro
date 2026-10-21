@@ -79,7 +79,8 @@ utilisent miniredis.
 
 - **Pas de watch time ni de vues** : aucun événement de visionnage n'existe ;
   le score de tendance ne repose que sur likes, commentaires et partages.
-- **`liked_by_me` absent du feed v1** : le client le lit dans les stats de social.
+- **`liked_by_me` absent du feed v1** : le client le lit pour toute la page en un
+  appel, `GET /api/v1/videos/stats?ids=…` (social).
 - **Pas de `/nearby`** : aucune donnée de localisation.
 - **Projections limitées à la rétention Kafka (7 jours)** : les vidéos, abonnements
   et profils antérieurs au premier démarrage du feed et absents des topics ne
@@ -89,5 +90,3 @@ utilisent miniredis.
 - **Pagination trending** : les scores évoluent entre deux pages ; une vidéo peut
   rarement monter ou descendre d'une page à l'autre. For You n'a pas ce problème
   (session figée).
-- Modération : toutes les vidéos sont `approved` tant que le service de modération
-  n'existe pas.

@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/poro/social/internal/model"
 )
 
 // VideoCounters are the public totals of a video.
@@ -104,4 +106,38 @@ func GetUserCounters(ctx context.Context, db DBTX, userID uuid.UUID) (UserCounte
 		return c, fmt.Errorf("get user counters: %w", err)
 	}
 	return c, nil
+}
+
+// ReadyVideoStats returns the counters of the ready videos among ids, and
+// whether viewer likes each one (always false when viewer is nil), in one query.
+func ReadyVideoStats(ctx context.Context, db DBTX, ids []uuid.UUID, viewer *uuid.UUID) (map[uuid.UUID]VideoStatsRow, error) {
+	rows, err := db.Query(ctx, `SELECT v.video_id,
+			COALESCE(c.likes_count, 0), COALESCE(c.comments_count, 0), COALESCE(c.shares_count, 0),
+			$3::uuid IS NOT NULL AND EXISTS (SELECT 1 FROM likes l WHERE l.user_id = $3 AND l.video_id = v.video_id)
+		FROM videos_projection v
+		LEFT JOIN video_counters c ON c.video_id = v.video_id
+		WHERE v.video_id = ANY($1) AND v.status = $2`, ids, model.VideoReady, viewer)
+	if err != nil {
+		return nil, fmt.Errorf("ready video stats: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[uuid.UUID]VideoStatsRow, len(ids))
+	for rows.Next() {
+		var id uuid.UUID
+		var r VideoStatsRow
+		if err := rows.Scan(&id, &r.Likes, &r.Comments, &r.Shares, &r.LikedByViewer); err != nil {
+			return nil, fmt.Errorf("scan video stats: %w", err)
+		}
+		out[id] = r
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ready video stats: %w", err)
+	}
+	return out, nil
+}
+
+// VideoStatsRow is one row of ReadyVideoStats.
+type VideoStatsRow struct {
+	VideoCounters
+	LikedByViewer bool
 }

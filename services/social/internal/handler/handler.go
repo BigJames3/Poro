@@ -2,6 +2,8 @@
 package handler
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
@@ -16,6 +18,7 @@ var (
 	errUnauthorized = httpx.NewAPIError(fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	errBadRequest   = httpx.NewAPIError(fiber.StatusBadRequest, "invalid_request", "invalid request")
 	errBadID        = httpx.NewAPIError(fiber.StatusBadRequest, "invalid_id", "id must be a UUID")
+	errBadIDs       = httpx.NewAPIError(fiber.StatusBadRequest, "invalid_request", "ids must be 1 to 50 comma-separated video ids")
 )
 
 // Social serves the /api/v1 social routes.
@@ -48,6 +51,30 @@ func (h *Social) VideoStats(c *fiber.Ctx) error {
 		return err
 	}
 	out, err := h.svc.VideoStats(c.UserContext(), id, viewer(c))
+	return reply(c, fiber.StatusOK, out, err)
+}
+
+// VideoStatsBatch serves GET /videos/stats?ids=a,b,c.
+func (h *Social) VideoStatsBatch(c *fiber.Ctx) error {
+	raw := strings.Split(c.Query("ids"), ",")
+	if len(raw) > service.VideoStatsBatchMax {
+		return errBadIDs
+	}
+	ids := make([]uuid.UUID, 0, len(raw))
+	for _, s := range raw {
+		if s = strings.TrimSpace(s); s == "" {
+			continue
+		}
+		id, err := uuid.Parse(s)
+		if err != nil {
+			return errBadIDs
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return errBadIDs
+	}
+	out, err := h.svc.VideoStatsBatch(c.UserContext(), ids, viewer(c))
 	return reply(c, fiber.StatusOK, out, err)
 }
 
