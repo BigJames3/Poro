@@ -69,7 +69,7 @@ class DefaultAuthRepository(
         apiCall { api.forgotPassword(PasswordForgot(email)) }
 
     override suspend fun resetPassword(email: String, code: String, newPassword: String): ApiResult<Unit> =
-        apiCall(ifEmpty = { Unit }) { api.resetPassword(PasswordReset(email, code, newPassword)) }
+        apiCall(ifEmpty = {}) { api.resetPassword(PasswordReset(email, code, newPassword)) }
 
     /** Enregistre la session d'une connexion réussie (OTP, inscription ou connexion email). */
     private suspend fun saveSession(result: ApiResult<SignedIn>): ApiResult<SignedIn> {
