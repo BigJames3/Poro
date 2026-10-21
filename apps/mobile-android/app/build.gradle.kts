@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     // AGP 9 compile Kotlin lui-même (« built-in Kotlin ») : pas de plugin kotlin-android.
     alias(libs.plugins.android.application)
@@ -6,7 +8,7 @@ plugins {
 }
 
 /** local.properties (ignoré par Git) : réglages propres au poste, comme l'URL de debug. */
-val localProperties = java.util.Properties().apply {
+val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.isFile }?.reader()?.use { load(it) }
 }
 
