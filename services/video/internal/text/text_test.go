@@ -70,3 +70,34 @@ func TestHashtagsCapped(t *testing.T) {
 	}
 	require.Len(t, Hashtags(b.String()), MaxHashtags)
 }
+
+func TestComposedEmojiAreAllowed(t *testing.T) {
+	for _, s := range []string{
+		"Famille \U0001F469\u200D\U0001F469\u200D\U0001F467", // family
+		"Coeur en feu ❤\uFE0F\u200D\U0001F525",               // heart on fire: selector before the joiner
+		"Dev \U0001F469\U0001F3FD\u200D\U0001F4BB",           // woman technologist: skin tone before the joiner
+		"Médecin \U0001F9D1\u200D⚕\uFE0F",                    // health worker
+		"Coureuse \U0001F3C3\U0001F3FE\u200D♀\uFE0F fin",     // woman running
+	} {
+		got, code := Title(s)
+		require.Empty(t, code, "%q", s)
+		require.Equal(t, s, got)
+		_, code = Description(s + "\nsuite")
+		require.Empty(t, code, "%q", s)
+	}
+}
+
+func TestJoinerOutsideEmojiIsRefused(t *testing.T) {
+	for _, s := range []string{
+		"a\u200Db",                         // between letters: hidden text
+		"\u200D\U0001F469",                 // leading
+		"\U0001F469\u200D",                 // trailing
+		"\U0001F469\u200D\u200D\U0001F467", // doubled
+		"\U0001F469\u200Db",                // emoji then letter
+		"\U0001F469\u200B\U0001F467",       // zero-width space stays refused
+		"\U0001F469\u200D\u202E\U0001F467", // bidi override
+	} {
+		_, code := Title(s)
+		require.Equal(t, "title_invalid", code, "%q", s)
+	}
+}

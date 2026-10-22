@@ -20,9 +20,9 @@ class MultilineTextTest {
     @Test
     fun `refuses the characters the server refuses`() {
         assertFalse(MultilineText.fits("a\tb", 300, 3))
-        assertFalse(MultilineText.fits("a​b", 300, 3))
-        assertFalse(MultilineText.fits("a‮b", 300, 3))
-        assertFalse(MultilineText.fits("a﻿b", 300, 3))
+        assertFalse(MultilineText.fits("a\u200Bb", 300, 3))
+        assertFalse(MultilineText.fits("a\u202Eb", 300, 3))
+        assertFalse(MultilineText.fits("a\uFEFFb", 300, 3))
     }
 
     @Test
