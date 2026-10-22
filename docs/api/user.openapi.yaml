@@ -46,7 +46,10 @@ paths:
       summary: Update username, display name or bio
       description: |
         Omitted fields are left unchanged. `null` clears `display_name` or `bio`.
-        Usernames are stored lowercase; 3–30 of `a-z`, `0-9`, `.` and `_`.
+        Usernames are stored lowercase; 3–30 of `a-z`, `0-9`, `.` and `_`; `null` is refused (400).
+        `display_name`: at most 50 code points once whitespace is collapsed.
+        `bio`: at most 160 code points and 5 lines. Longer values get 422
+        `display_name_invalid` / `bio_invalid`; `maxLength` below is the transport cap only.
       requestBody:
         required: true
         content:

@@ -129,6 +129,41 @@ func TestAbort(t *testing.T) {
 	require.Zero(t, n, "an aborted upload was never visible: no poro.video.deleted")
 }
 
+func TestSweepAbandonedUploads(t *testing.T) {
+	ctx := context.Background()
+	svc, mem := newSvc(t)
+	user := uuid.Must(uuid.NewV7())
+	abandoned, err := svc.InitUpload(ctx, user, dto.InitRequest{Title: "left", ContentType: "video/mp4", SizeBytes: 10})
+	require.NoError(t, err)
+	completed, err := svc.InitUpload(ctx, user, dto.InitRequest{
+		Title: "done", ContentType: "video/mp4", SizeBytes: int64(len(fakeMP4())),
+	})
+	require.NoError(t, err)
+	mem.PutPart(completed.UploadID, 1, fakeMP4())
+	_, err = svc.Complete(ctx, user, uuid.MustParse(completed.VideoID),
+		dto.CompleteRequest{Parts: []dto.CompletePart{{PartNumber: 1, ETag: "etag"}}})
+	require.NoError(t, err)
+
+	n, err := svc.SweepAbandonedUploads(ctx, time.Now().Add(-time.Hour), 100)
+	require.NoError(t, err)
+	require.Zero(t, n, "a recent upload is left alone")
+	require.True(t, mem.HasUpload(abandoned.UploadID))
+
+	n, err = svc.SweepAbandonedUploads(ctx, time.Now().Add(time.Minute), 100)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, n, 1)
+	require.False(t, mem.HasUpload(abandoned.UploadID), "the multipart upload is aborted")
+	_, err = svc.Get(ctx, uuid.MustParse(abandoned.VideoID), &user)
+	require.Error(t, err, "the abandoned upload is gone")
+	got, err := svc.Get(ctx, uuid.MustParse(completed.VideoID), &user)
+	require.NoError(t, err, "a completed upload is never swept")
+	require.Equal(t, model.StatusProcessing, got.Status)
+
+	n, err = svc.SweepAbandonedUploads(ctx, time.Now().Add(time.Minute), 100)
+	require.NoError(t, err)
+	require.Zero(t, n, "a second pass finds nothing")
+}
+
 func TestCompleteWrongPartCount(t *testing.T) {
 	ctx := context.Background()
 	svc, _ := newSvc(t)

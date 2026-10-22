@@ -1,13 +1,14 @@
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 
 import { Profile } from '../generated/prisma/client';
 
 export const AVATAR_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
 export type AvatarContentType = (typeof AVATAR_CONTENT_TYPES)[number];
 
-/** Undefined keeps a field; null clears display_name or bio. */
+/** Undefined keeps a field; null clears display_name or bio. A username cannot be cleared. */
 export class UpdateProfileDto {
-  @IsOptional()
+  // @IsOptional would also let null through, and the service would then crash on it.
+  @ValidateIf((dto: UpdateProfileDto) => dto.username !== undefined)
   @IsString()
   @MaxLength(64)
   username?: string;

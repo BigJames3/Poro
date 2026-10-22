@@ -328,7 +328,8 @@ paths:
       summary: Sign a device out
       description: |
         Revokes the refresh tokens of that session. Revoking the current session is a logout.
-        Access tokens already issued to the device stay valid until they expire (15 min at most).
+        The session also enters the shared revocation registry (ADR-0016): access tokens
+        already issued to the device are refused at once (401 `session_revoked`).
       security: [{ bearer: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }

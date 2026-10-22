@@ -23,6 +23,15 @@ const (
 	MaxDescriptionRunes = 500
 	DefaultListLimit    = 20
 	MaxListLimit        = 50
+
+	// AbandonedUploadAge is how long an upload may stay in `uploading` before
+	// the sweeper discards it. Part URLs expire after an hour, so a day leaves
+	// a slow client ample time to call complete.
+	AbandonedUploadAge = 24 * time.Hour
+	// UploadSweepInterval is how often the API looks for abandoned uploads.
+	UploadSweepInterval = time.Hour
+	// UploadSweepBatch caps the uploads discarded in one pass.
+	UploadSweepBatch = 100
 )
 
 // AllowedContentTypes maps accepted MIME types to a file extension.
