@@ -42,6 +42,9 @@ Deux niveaux, pour qu'aucun original non confirmé ne survive au délai, même s
   parties détruirait aussi les vidéos terminées.
 - La durée de vie du filer ne s'applique qu'aux objets écrits **après** `init.sh` ; les originaux plus
   anciens restent couverts par le nettoyage des services.
+- Chaque couple bucket × durée de vie a ses propres volumes SeaweedFS : `init.sh` les fait croître un
+  par un (`-volumeGrowthCount=1`), sinon un serveur aux volumes comptés refuse les écritures
+  (`No writable volumes and no free volumes left`).
 - Une règle de cycle de vie S3 (`PutBucketLifecycleConfiguration`) est acceptée par SeaweedFS 4.45 mais
   **n'est pas appliquée** sans le mode `s3.bucket.lifecycle.fastpath` (vérifié le 2026-10-22) :
   on n'en dépend pas.

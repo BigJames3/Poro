@@ -86,8 +86,10 @@ shell "fs.rm -r /buckets/poro-shop/uploads" >/dev/null
 # sweep them (UploadSweeper). The TTL applies to objects written from now on.
 # Never on poro-video-sources: completed sources are kept, and a completed
 # upload reuses the chunks of its parts (see janitor.sh for its multiparts).
+# Each bucket and TTL pair gets volumes of its own: grow them one at a time so
+# a small or full volume server still has room for them.
 for bucket in $upload_buckets; do
-  shell "fs.configure -locationPrefix=/buckets/$bucket/ -ttl=$upload_ttl -apply" >/dev/null
+  shell "fs.configure -locationPrefix=/buckets/$bucket/ -ttl=$upload_ttl -volumeGrowthCount=1 -apply" >/dev/null
   shell "fs.configure" | grep -q "\"/buckets/$bucket/\"" || fail "could not set the TTL of $bucket"
 done
 
