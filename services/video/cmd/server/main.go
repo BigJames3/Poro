@@ -28,6 +28,7 @@ import (
 	"github.com/poro/video/internal/erasure"
 	"github.com/poro/video/internal/handler"
 	"github.com/poro/video/internal/middleware"
+	"github.com/poro/video/internal/model"
 	"github.com/poro/video/internal/moderation"
 	"github.com/poro/video/internal/repository"
 	"github.com/poro/video/internal/routes"
@@ -148,7 +149,7 @@ func run() error {
 		}),
 		Metrics: m.Handler(),
 		JWT:     jwt,
-		Limiter: limiter,
+		Limiter: middleware.NewLimiter(limiter),
 	})
 
 	consumerDone := make(chan struct{})
@@ -162,6 +163,11 @@ func run() error {
 				_ = c.Run(ctx)
 			}()
 		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sweepAbandonedUploads(ctx, svc, log)
+		}()
 		wg.Wait()
 	}()
 
@@ -190,6 +196,36 @@ func run() error {
 	}
 	log.Info("video service stopped")
 	return listenErr
+}
+
+// sweepAbandonedUploads discards, every UploadSweepInterval, the uploads left
+// in `uploading` for longer than AbandonedUploadAge (PORO-008). Every replica
+// may run it: each discard is conditional on the row still uploading.
+func sweepAbandonedUploads(ctx context.Context, svc *service.Videos, log *zap.Logger) {
+	ticker := time.NewTicker(model.UploadSweepInterval)
+	defer ticker.Stop()
+	for {
+		cutoff := time.Now().Add(-model.AbandonedUploadAge)
+		// A full batch means more may be waiting: keep going until a short one.
+		for total := 0; ; {
+			n, err := svc.SweepAbandonedUploads(ctx, cutoff, model.UploadSweepBatch)
+			total += n
+			if err != nil && ctx.Err() == nil {
+				log.Error("sweep abandoned uploads", zap.Error(err))
+			}
+			if err != nil || n < model.UploadSweepBatch {
+				if total > 0 {
+					log.Info("abandoned uploads discarded", zap.Int("count", total))
+				}
+				break
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func proxyHeader(cfg *config.Config) string {

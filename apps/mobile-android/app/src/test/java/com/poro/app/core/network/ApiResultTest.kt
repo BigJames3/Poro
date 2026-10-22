@@ -10,6 +10,7 @@ import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -103,6 +104,15 @@ class ApiResultTest {
         val id = server.takeRequest().getHeader(RequestIdInterceptor.HEADER)
         assertNotNull(id)
         java.util.UUID.fromString(id) // lève une exception si ce n'est pas un UUID
+    }
+
+    @Test
+    fun `retry delay follows Retry-After, else backs off exponentially up to a minute`() {
+        fun failure(status: Int, retryAfter: Long?) = ApiResult.Failure(status, ApiErrorCodes.RATE_LIMITED, "", null, retryAfter)
+
+        assertEquals(42L, failure(429, 42).retryDelaySeconds(consecutive = 3))
+        assertEquals(listOf(5L, 10L, 20L, 40L, 60L, 60L), (1..6).map { failure(429, null).retryDelaySeconds(it) })
+        assertNull("pas d'attente imposée hors 429", failure(503, 30).retryDelaySeconds(1))
     }
 
     private fun json(code: Int, body: String) =

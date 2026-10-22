@@ -8,18 +8,18 @@ import kotlinx.coroutines.flow.asStateFlow
 class InMemoryTokenStore(initial: SessionTokens? = null) : TokenStore {
     @Volatile
     private var tokens: SessionTokens? = initial
-    private val signedIn = MutableStateFlow(initial != null)
-    override val isSignedIn: StateFlow<Boolean> = signedIn.asStateFlow()
+    private val state = MutableStateFlow(if (initial != null) SessionState.SignedIn else SessionState.SignedOut)
+    override val session: StateFlow<SessionState> = state.asStateFlow()
 
     override fun current(): SessionTokens? = tokens
 
     override fun save(tokens: SessionTokens) {
         this.tokens = tokens
-        signedIn.value = true
+        state.value = SessionState.SignedIn
     }
 
     override fun clear() {
         tokens = null
-        signedIn.value = false
+        state.value = SessionState.SignedOut
     }
 }

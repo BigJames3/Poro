@@ -25,6 +25,7 @@ import (
 	"github.com/poro/shared-go/health"
 	"github.com/poro/shared-go/httpx"
 	"github.com/poro/shared-go/jwtauth"
+	"github.com/poro/shared-go/ratelimit/ratelimittest"
 
 	"github.com/poro/feed/internal/dto"
 	"github.com/poro/feed/internal/handler"
@@ -66,6 +67,7 @@ func newAPI(t *testing.T) *api {
 	svc := service.New(testdb.Pool, session.NewStore(rdb, model.SessionTTL), session.NewCache(rdb, model.FirstPageTTL),
 		func(k string) string { return "http://localhost:9000/poro-videos/" + k }, zap.NewNop())
 
+	limiter, _ := ratelimittest.New(t)
 	app := fiber.New(fiber.Config{ErrorHandler: httpx.ErrorHandler(zap.NewNop())})
 	app.Use(httpx.RequestID())
 	routes.Register(app, routes.Dependencies{
@@ -73,6 +75,7 @@ func newAPI(t *testing.T) *api {
 		Health:  health.New("feed", "test", map[string]health.Check{"postgres": testdb.Pool.Ping}),
 		Metrics: func(c *fiber.Ctx) error { return c.SendString("metrics") },
 		JWT:     verifier,
+		Limiter: limiter,
 	})
 	return &api{t: t, app: app, key: key}
 }

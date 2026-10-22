@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Keystores de publication : jamais dans le dépôt (secrets CI).
+*.jks
+*.keystore

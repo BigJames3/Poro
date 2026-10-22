@@ -5,6 +5,7 @@ import (
 
 	"github.com/poro/shared-go/health"
 	"github.com/poro/shared-go/jwtauth"
+	"github.com/poro/shared-go/ratelimit"
 
 	"github.com/poro/video/internal/handler"
 	"github.com/poro/video/internal/middleware"
@@ -16,7 +17,7 @@ type Dependencies struct {
 	Health  *health.Handler
 	Metrics fiber.Handler
 	JWT     *jwtauth.Verifier
-	Limiter fiber.Storage
+	Limiter *ratelimit.Limiter
 }
 
 // Register mounts probes, metrics and /api/v1/videos.
@@ -28,11 +29,13 @@ func Register(app *fiber.App, deps Dependencies) {
 	opt := jwtauth.OptionalMiddleware(deps.JWT)
 	limit := middleware.GeneralLimit(deps.Limiter)
 
-	v := app.Group("/api/v1/videos", limit)
-	v.Get("/", auth, deps.Videos.List)
-	v.Post("/uploads", auth, middleware.InitLimit(deps.Limiter), deps.Videos.Init)
-	v.Post("/uploads/:id/complete", auth, middleware.CompleteLimit(deps.Limiter), deps.Videos.Complete)
-	v.Delete("/uploads/:id", auth, deps.Videos.Abort)
-	v.Get("/:id", opt, deps.Videos.Get)
-	v.Delete("/:id", auth, deps.Videos.Delete)
+	// The limit follows the JWT middleware so signed-in callers are counted per
+	// account, not per carrier NAT address.
+	v := app.Group("/api/v1/videos")
+	v.Get("/", auth, limit, deps.Videos.List)
+	v.Post("/uploads", auth, limit, middleware.InitLimit(deps.Limiter), deps.Videos.Init)
+	v.Post("/uploads/:id/complete", auth, limit, middleware.CompleteLimit(deps.Limiter), deps.Videos.Complete)
+	v.Delete("/uploads/:id", auth, limit, deps.Videos.Abort)
+	v.Get("/:id", opt, limit, deps.Videos.Get)
+	v.Delete("/:id", auth, limit, deps.Videos.Delete)
 }

@@ -105,6 +105,40 @@ func (r *Videos) MarkProcessing(ctx context.Context, tx pgx.Tx, id uuid.UUID, si
 	return nil
 }
 
+// ListStaleUploads returns live uploads created before cutoff, oldest first.
+func (r *Videos) ListStaleUploads(ctx context.Context, cutoff time.Time, limit int) ([]model.Video, error) {
+	rows, err := r.pool.Query(ctx, `SELECT `+videoColumns+` FROM videos
+		WHERE status = $1 AND deleted_at IS NULL AND created_at < $2
+		ORDER BY created_at, id LIMIT $3`, model.StatusUploading, cutoff, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list stale uploads: %w", err)
+	}
+	defer rows.Close()
+	var out []model.Video
+	for rows.Next() {
+		v, err := scanVideo(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *v)
+	}
+	return out, rows.Err()
+}
+
+// DiscardUpload soft-deletes a video only while it is still uploading. It
+// returns ErrNotFound when the upload was completed, aborted or deleted meanwhile.
+func (r *Videos) DiscardUpload(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE videos SET deleted_at = now(), updated_at = now()
+		WHERE id = $1 AND status = $2 AND deleted_at IS NULL`, id, model.StatusUploading)
+	if err != nil {
+		return fmt.Errorf("discard upload: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SoftDelete marks the row deleted. It is a no-op if already deleted.
 func (r *Videos) SoftDelete(ctx context.Context, tx pgx.Tx, id, userID uuid.UUID) (*model.Video, error) {
 	row := tx.QueryRow(ctx, `UPDATE videos SET deleted_at = now(), updated_at = now()

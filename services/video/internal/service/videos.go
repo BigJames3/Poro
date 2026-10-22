@@ -227,6 +227,35 @@ func (s *Videos) Abort(ctx context.Context, userID, videoID uuid.UUID) error {
 	return tx.Commit(ctx)
 }
 
+// SweepAbandonedUploads discards up to batch uploads still in `uploading`
+// that were created before cutoff, and returns how many it discarded. The S3
+// multipart upload is aborted first, so its parts never outlive the row; a
+// failed abort leaves the row for the next pass. The row is then deleted only
+// if it is still uploading, so an upload completed meanwhile is kept.
+func (s *Videos) SweepAbandonedUploads(ctx context.Context, cutoff time.Time, batch int) (int, error) {
+	rows, err := s.repo.ListStaleUploads(ctx, cutoff, batch)
+	if err != nil {
+		return 0, err
+	}
+	discarded := 0
+	for _, row := range rows {
+		if row.S3UploadID != nil {
+			if err := s.store.AbortMultipart(ctx, row.SourceKey, *row.S3UploadID); err != nil {
+				s.log.Warn("abort abandoned upload", zap.String("video_id", row.ID), zap.Error(err))
+				continue
+			}
+		}
+		switch err := s.repo.DiscardUpload(ctx, row.ID); {
+		case errors.Is(err, repository.ErrNotFound):
+			continue
+		case err != nil:
+			return discarded, err
+		}
+		discarded++
+	}
+	return discarded, nil
+}
+
 // Get returns a video. Non-ready videos are only visible to the owner.
 func (s *Videos) Get(ctx context.Context, id uuid.UUID, viewer *uuid.UUID) (*dto.VideoView, error) {
 	row, err := s.repo.Get(ctx, id)

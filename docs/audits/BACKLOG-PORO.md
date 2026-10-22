@@ -193,6 +193,7 @@ Les identifiants `PORO-xxx` sont stables : une tâche terminée garde le sien, e
   3. Plafond de taille par partie au moment de la présignature, si le stockage le permet.
 - **Critères d'acceptation** : après le délai, ni la ligne `uploading` ni le multipart ne subsistent.
 - **Tests** : repository et service avec SeaweedFS en testcontainer.
+- **État (2026-10-22, non commité)** : sous-tâche 1 faite pour la vidéo. Le service annule le multipart et supprime la ligne (suppression logique, pas de statut `abandoned` : la contrainte `videos_status_chk` l'interdirait sans migration). Restent les envois bruts d'avatar et de boutique, et les sous-tâches 2 et 3.
 - **Risques** : supprimer un upload lent mais légitime ; choisir un délai généreux.
 
 ### PORO-009 — Observabilité (plan P0-13 en attente de validation)

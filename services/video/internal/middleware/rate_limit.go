@@ -3,13 +3,11 @@ package middleware
 import (
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/limiter"
 	redisstore "github.com/gofiber/storage/redis/v3"
 
-	"github.com/poro/shared-go/jwtauth"
+	"github.com/poro/shared-go/ratelimit"
 
 	"github.com/poro/video/internal/config"
 )
@@ -21,7 +19,7 @@ const (
 )
 
 // NewRedisStorage opens the Redis backend used by the rate limiters.
-func NewRedisStorage(cfg *config.Config) (fiber.Storage, error) {
+func NewRedisStorage(cfg *config.Config) (*redisstore.Storage, error) {
 	port, err := strconv.Atoi(cfg.RedisPort)
 	if err != nil {
 		return nil, fmt.Errorf("parse redis port: %w", err)
@@ -35,31 +33,26 @@ func NewRedisStorage(cfg *config.Config) (fiber.Storage, error) {
 	}), nil
 }
 
-func InitLimit(store fiber.Storage) fiber.Handler {
-	return newLimit(initLimit, "video:rl:init:", store)
+// keyPrefix changed from video:rl: so old Fiber msgpack counters are never INCR'd.
+const keyPrefix = "video:rl:v2:"
+
+// NewLimiter returns the fail-closed limiter of the video API.
+func NewLimiter(store *redisstore.Storage) *ratelimit.Limiter {
+	return ratelimit.New(store.Conn(), keyPrefix)
 }
 
-func CompleteLimit(store fiber.Storage) fiber.Handler {
-	return newLimit(completeLimit, "video:rl:complete:", store)
+// InitLimit covers upload creation, per account.
+func InitLimit(l *ratelimit.Limiter) fiber.Handler {
+	return l.Handler("init", initLimit, ratelimit.ByUserOrIP)
 }
 
-func GeneralLimit(store fiber.Storage) fiber.Handler {
-	return newLimit(generalLimit, "video:rl:general:", store)
+// CompleteLimit covers upload completion, per account.
+func CompleteLimit(l *ratelimit.Limiter) fiber.Handler {
+	return l.Handler("complete", completeLimit, ratelimit.ByUserOrIP)
 }
 
-func newLimit(max int, prefix string, store fiber.Storage) fiber.Handler {
-	return limiter.New(limiter.Config{
-		Max:        max,
-		Expiration: time.Minute,
-		Storage:    store,
-		KeyGenerator: func(c *fiber.Ctx) string {
-			if claims, ok := jwtauth.ClaimsFrom(c); ok {
-				return prefix + claims.UserID.String()
-			}
-			return prefix + c.IP()
-		},
-		LimitReached: func(c *fiber.Ctx) error {
-			return fiber.NewError(fiber.StatusTooManyRequests, "too many requests")
-		},
-	})
+// GeneralLimit covers every video route, per account once a token was
+// verified, per IP otherwise. Mount it after the JWT middleware.
+func GeneralLimit(l *ratelimit.Limiter) fiber.Handler {
+	return l.Handler("general", generalLimit, ratelimit.ByUserOrIP)
 }
