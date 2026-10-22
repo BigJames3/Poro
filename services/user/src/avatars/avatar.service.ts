@@ -144,6 +144,33 @@ export class AvatarService {
     return removed;
   }
 
+  /**
+   * Deletes the originals uploaded before cutoff and never confirmed, of every
+   * account, and returns how many. The upload form expires after
+   * AVATAR_UPLOAD_TTL_SECONDS, so a cutoff hours back never races a confirmation.
+   */
+  async purgeAbandonedUploads(cutoff: Date): Promise<number> {
+    let purged = 0;
+    let token: string | undefined;
+    do {
+      const page = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.uploadBucket,
+          Prefix: `${UPLOAD_PREFIX}/`,
+          ContinuationToken: token,
+        }),
+      );
+      for (const { Key, LastModified } of page.Contents ?? []) {
+        if (Key !== undefined && LastModified !== undefined && LastModified < cutoff) {
+          await this.deleteStrict(this.uploadBucket, Key);
+          purged++;
+        }
+      }
+      token = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (token !== undefined);
+    return purged;
+  }
+
   private async deleteStrict(bucket: string, key: string): Promise<void> {
     try {
       await this.s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));

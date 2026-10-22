@@ -41,7 +41,8 @@ Aucun secret, aucune infrastructure ni donnée de production modifiés. Aucun co
 | P1 | Réglages push et commandes honnêtes | TERMINÉ (E-07) |
 | P1 | `username: null` → 500 | TERMINÉ (B-05) |
 | P1 | Limiteurs ouverts si Redis tombe ; CGNAT | TERMINÉ (B-06) |
-| P1 | Envois bruts d'avatar et de boutique orphelins, règle de cycle de vie S3 | À FAIRE (PORO-008, infrastructure) |
+| P1 | Envois bruts d'avatar et de boutique orphelins | TERMINÉ : `UploadSweeper` (user, shop), tests `upload-sweeper.spec.ts` |
+| P2 | Règle de cycle de vie S3 (filet de sécurité côté stockage) | À FAIRE (PORO-008, infrastructure) |
 | P1 | Vendeur suspendu toujours actif dans shop et order (B-07) | À FAIRE (PORO-021, contrôle inter-services) |
 | — | Mode invité (B-02) | **Décision** du propriétaire (B1) : aucune route privée rendue publique |
 | — | Émojis composés dans les titres vidéo (B-04) | **Décision** : autoriser U+200D seul ouvre la porte à du texte invisible |
