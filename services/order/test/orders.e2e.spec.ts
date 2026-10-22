@@ -371,6 +371,34 @@ describe('order service', () => {
     expect(again.body.data.status).toBe('completed');
   });
 
+  it('refuses seller actions while the shop is suspended, not buyer ones', async () => {
+    const listing = await listed();
+    const first = await pendingOrder(listing);
+    await saga.handle(reserved(listing, first.order.order_id, 15000));
+    const seller = await bearer(listing.sellerId);
+    const sellerAct = (orderId: string, action: 'ship' | 'cancel') =>
+      request(server)
+        .post(`/api/v1/seller/orders/${orderId}/${action}`)
+        .set('Authorization', seller);
+
+    await catalog.handle(shopUpdated(listing, { status: 'suspended' }));
+    for (const action of ['ship', 'cancel'] as const) {
+      const refused = await sellerAct(first.order.order_id, action);
+      expect(refused.status).toBe(403);
+      expect(refused.body.error.code).toBe('shop_suspended');
+    }
+    expect((await getOrder(first.auth, first.order.order_id)).status).toBe('confirmed');
+    const buyerCancel = await request(server)
+      .post(`/api/v1/orders/${first.order.order_id}/cancel`)
+      .set('Authorization', first.auth);
+    expect(buyerCancel.body.data.status).toBe('cancelled');
+
+    await catalog.handle(shopUpdated(listing, { status: 'active' }));
+    const second = await pendingOrder(listing);
+    await saga.handle(reserved(listing, second.order.order_id, 15000));
+    expect((await sellerAct(second.order.order_id, 'ship')).body.data.status).toBe('shipped');
+  });
+
   it('hides orders from other accounts', async () => {
     const listing = await listed();
     const { order } = await pendingOrder(listing);

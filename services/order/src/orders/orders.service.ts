@@ -139,9 +139,24 @@ export class OrdersService {
       if (!current || (side === 'buyer' ? current.buyerId : current.sellerId) !== userId) {
         throw new ApiError(404, 'order_not_found', 'order not found');
       }
+      if (side === 'seller') {
+        await checkShopNotSuspended(tx, current.shopId);
+      }
       return change(tx, current, new Date());
     });
     return toOrderView(order);
+  }
+}
+
+/**
+ * A suspended shop can no longer ship or cancel its orders (PORO-021). The
+ * buyer keeps every action. The status comes from the local copy of the shop
+ * catalogue, fed by poro.shop.shop.updated.
+ */
+async function checkShopNotSuspended(tx: Tx, shopId: string): Promise<void> {
+  const shop = await tx.catalogShop.findUnique({ where: { id: shopId }, select: { status: true } });
+  if (shop?.status === 'suspended') {
+    throw new ApiError(403, 'shop_suspended', 'this shop is suspended');
   }
 }
 

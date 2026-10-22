@@ -57,4 +57,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	protected.Post("/me/delete/cancel", deps.Account.CancelDeletion)
 	protected.Post("/email/verification/request", middleware.AccountLoginLimit(deps.Limiter), deps.Email.RequestVerification)
 	protected.Post("/email/verification/confirm", middleware.AccountLoginLimit(deps.Limiter), deps.Email.ConfirmVerification)
+	// ADMIN or MODERATOR, checked by the service: blocks or restores an account everywhere (ADR-0019).
+	protected.Post("/admin/users/:id/suspend", deps.Account.SuspendAccount)
+	protected.Post("/admin/users/:id/reinstate", deps.Account.ReinstateAccount)
 }
