@@ -82,6 +82,7 @@ fun ApiResult<*>.toErrorMessage(): ErrorMessage? = when (this) {
         ApiErrorCodes.ADDRESS_BOOK_FULL -> ErrorMessage(R.string.error_address_book_full)
         ApiErrorCodes.ADDRESS_LABEL_INVALID -> ErrorMessage(R.string.error_address_label_invalid)
         ApiErrorCodes.ADDRESS_NOT_FOUND -> ErrorMessage(R.string.error_address_not_found)
+        ApiErrorCodes.CANNOT_REPORT_SELF -> ErrorMessage(R.string.report_own_content)
         ApiErrorCodes.ORDER_NOT_FOUND -> ErrorMessage(R.string.error_order_not_found)
         ApiErrorCodes.TRACKING_INVALID -> ErrorMessage(R.string.error_tracking_invalid)
         else -> ErrorMessage(R.string.error_unexpected, requestId)

@@ -139,9 +139,12 @@ private fun PoroNavGraph(
                 nav,
                 onOpenAuthor = { userId, username -> nav.controller.navigate(PublicProfileRoute(userId, username)) },
                 feedActions = { item ->
-                    SocialVideoActions(nav, item.videoId, item.title, VideoStatsDto(item.videoId, item.stats.likes, item.stats.comments, item.stats.shares))
+                    SocialVideoActions(
+                        nav, item.videoId, item.title, VideoStatsDto(item.videoId, item.stats.likes, item.stats.comments, item.stats.shares),
+                        ownerId = item.author.id.ifEmpty { null },
+                    )
                 },
-                videoActions = { video -> SocialVideoActions(nav, video.id, video.title, VideoStatsDto(video.id)) },
+                videoActions = { video -> SocialVideoActions(nav, video.id, video.title, VideoStatsDto(video.id), ownerId = video.userId.ifEmpty { null }) },
                 feedTopEnd = { FeedNotificationBell(nav) },
             )
             searchGraph(nav)

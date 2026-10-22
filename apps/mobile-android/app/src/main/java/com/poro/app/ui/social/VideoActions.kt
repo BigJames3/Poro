@@ -2,6 +2,14 @@ package com.poro.app.ui.social
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
@@ -32,6 +40,8 @@ fun VideoActions(
     onComments: () -> Unit,
     onShare: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Null : pas de signalement possible (sa propre vidéo). */
+    onReport: (() -> Unit)? = null,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         ActionButton(
@@ -53,6 +63,23 @@ fun VideoActions(
             description = stringResource(R.string.action_share, Formats.count(stats.shares)),
             onClick = onShare,
         )
+        if (onReport != null) {
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menu = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more), tint = Color.White, modifier = Modifier.size(32.dp))
+                }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.report_video)) },
+                        onClick = {
+                            menu = false
+                            onReport()
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 

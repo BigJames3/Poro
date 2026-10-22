@@ -113,6 +113,7 @@ object ApiErrorCodes {
     const val ADDRESS_BOOK_FULL = "address_book_full"
     const val ADDRESS_LABEL_INVALID = "address_label_invalid"
     const val ADDRESS_NOT_FOUND = "address_not_found"
+    const val CANNOT_REPORT_SELF = "cannot_report_self"
     const val PAYMENT_METHOD_UNAVAILABLE = "payment_method_unavailable"
     const val ORDER_STATUS_CONFLICT = "order_status_conflict"
     const val ORDER_NOT_FOUND = "order_not_found"

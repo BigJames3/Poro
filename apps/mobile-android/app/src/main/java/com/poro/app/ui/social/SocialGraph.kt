@@ -15,9 +15,13 @@ import androidx.navigation.toRoute
 import com.poro.app.BuildConfig
 import com.poro.app.data.social.ShareChannel
 import com.poro.app.data.social.VideoStatsDto
+import com.poro.app.data.moderation.ReportTargetType
 import com.poro.app.ui.AppNav
 import com.poro.app.ui.CollectEvents
 import com.poro.app.ui.PublicProfileRoute
+import com.poro.app.ui.moderation.ReportHost
+import com.poro.app.ui.moderation.ReportTarget
+import com.poro.app.ui.moderation.rememberMyUserId
 import com.poro.app.ui.poroViewModel
 
 /** Profil public d'un autre compte (depuis le fil, la recherche ou une notification). */
@@ -28,7 +32,9 @@ fun NavGraphBuilder.socialGraph(nav: AppNav) {
             PublicProfileViewModel(route.userId, route.username, nav.container.profileRepository, nav.container.socialRepository)
         }
         val state by vm.state.collectAsStateWithLifecycle()
-        PublicProfileScreen(state = state, onBack = nav::back, onToggleFollow = vm::toggleFollow)
+        var showReport by rememberSaveable { mutableStateOf(false) }
+        PublicProfileScreen(state = state, onBack = nav::back, onToggleFollow = vm::toggleFollow, onReport = { showReport = true })
+        if (showReport) ReportHost(nav, ReportTarget(ReportTargetType.User, route.userId), onDismiss = { showReport = false })
     }
 }
 
@@ -37,7 +43,15 @@ fun NavGraphBuilder.socialGraph(nav: AppNav) {
  * [fallback] : compteurs connus avant la lecture des statistiques (ceux du fil).
  */
 @Composable
-fun SocialVideoActions(nav: AppNav, videoId: String, title: String, fallback: VideoStatsDto, modifier: Modifier = Modifier) {
+fun SocialVideoActions(
+    nav: AppNav,
+    videoId: String,
+    title: String,
+    fallback: VideoStatsDto,
+    /** Auteur de la vidéo : on ne signale pas sa propre vidéo. */
+    ownerId: String?,
+    modifier: Modifier = Modifier,
+) {
     val container = nav.container
     // Un seul ViewModel par écran, partagé par toutes les vidéos du fil.
     val vm = poroViewModel { VideoInteractionsViewModel(container.socialRepository) }
@@ -45,6 +59,8 @@ fun SocialVideoActions(nav: AppNav, videoId: String, title: String, fallback: Vi
     val context = LocalContext.current
     var showComments by rememberSaveable(videoId) { mutableStateOf(false) }
     var showShare by rememberSaveable(videoId) { mutableStateOf(false) }
+    var showReport by rememberSaveable(videoId) { mutableStateOf(false) }
+    val myUserId = rememberMyUserId(nav)
     val stats = state.stats[videoId] ?: fallback.copy(videoId = videoId)
 
     LaunchedEffect(videoId) { vm.onShown(videoId) }
@@ -61,7 +77,9 @@ fun SocialVideoActions(nav: AppNav, videoId: String, title: String, fallback: Vi
         onComments = { showComments = true },
         onShare = { showShare = true },
         modifier = modifier,
+        onReport = if (ownerId != null && ownerId == myUserId) null else ({ showReport = true }),
     )
+    if (showReport) ReportHost(nav, ReportTarget(ReportTargetType.Video, videoId), onDismiss = { showReport = false })
     if (showComments) {
         CommentsHost(nav, videoId, onCountChanged = { delta -> vm.onCommentsChanged(videoId, delta, stats) }, onDismiss = { showComments = false })
     }
@@ -90,6 +108,7 @@ private fun CommentsHost(nav: AppNav, videoId: String, onCountChanged: (Int) -> 
         CommentsViewModel(videoId, container.socialRepository, container.profileRepository)
     }
     val state by vm.state.collectAsStateWithLifecycle()
+    var reportedComment by rememberSaveable { mutableStateOf<String?>(null) }
     CollectEvents(vm.events) { event ->
         when (event) {
             is CommentsEvent.CountChanged -> onCountChanged(event.delta)
@@ -106,9 +125,11 @@ private fun CommentsHost(nav: AppNav, videoId: String, onCountChanged: (Int) -> 
             onPost = vm::post,
             onLike = vm::toggleLike,
             onDelete = vm::delete,
+            onReport = { reportedComment = it.id },
         ),
         onDismiss = onDismiss,
     )
+    reportedComment?.let { id -> ReportHost(nav, ReportTarget(ReportTargetType.Comment, id), onDismiss = { reportedComment = null }) }
 }
 
 /** Abonnés et abonnements de son propre compte, sur l'onglet Profil. */

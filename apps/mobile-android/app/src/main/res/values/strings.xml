@@ -418,4 +418,30 @@
     <string name="order_status_completed">Livrée</string>
     <string name="order_status_cancelled">Annulée</string>
     <string name="order_status_unknown">Statut inconnu</string>
+    <!-- Signalement -->
+    <string name="action_more">Plus d\'options</string>
+    <string name="report_action">Signaler</string>
+    <string name="report_video">Signaler cette vidéo</string>
+    <string name="report_user">Signaler ce compte</string>
+    <string name="report_title_video">Signaler cette vidéo</string>
+    <string name="report_title_comment">Signaler ce commentaire</string>
+    <string name="report_title_user">Signaler ce compte</string>
+    <string name="report_intro">Pourquoi signalez-vous ce contenu ? Le signalement ne retire rien tout de suite : notre équipe l\'examine.</string>
+    <string name="report_reason_spam">Spam ou publicité trompeuse</string>
+    <string name="report_reason_nudity">Nudité ou contenu sexuel</string>
+    <string name="report_reason_violence">Violence</string>
+    <string name="report_reason_harassment">Harcèlement</string>
+    <string name="report_reason_hate">Discours haineux</string>
+    <string name="report_reason_fraud">Arnaque ou fraude</string>
+    <string name="report_reason_other">Autre</string>
+    <string name="report_detail_label">Précisez (facultatif)</string>
+    <string name="report_detail_count">%1$d / %2$d</string>
+    <string name="report_send">Envoyer</string>
+    <string name="report_sent">Merci, notre équipe va l\'examiner.</string>
+    <string name="report_already_sent">Vous avez déjà signalé ce contenu.</string>
+    <string name="report_own_content">Vous ne pouvez pas signaler votre propre contenu.</string>
+    <plurals name="report_retry_in_minutes">
+        <item quantity="one">Trop de signalements. Réessayez dans %d minute.</item>
+        <item quantity="other">Trop de signalements. Réessayez dans %d minutes.</item>
+    </plurals>
 </resources>

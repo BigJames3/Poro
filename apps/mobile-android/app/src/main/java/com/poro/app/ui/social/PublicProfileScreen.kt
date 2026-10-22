@@ -10,13 +10,23 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -33,10 +43,27 @@ import com.poro.app.ui.common.BackTopBar
 import com.poro.app.ui.common.displayNameOf
 
 @Composable
-fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggleFollow: () -> Unit) {
+fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggleFollow: () -> Unit, onReport: () -> Unit) {
     val profile = state.profile
     val name = displayNameOf(profile?.displayName, profile?.username)
-    Scaffold(topBar = { BackTopBar(name, onBack) }) { padding ->
+    var menu by remember { mutableStateOf(false) }
+    val actions: @Composable () -> Unit = {
+        if (!state.loading && !state.isMe) {
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.action_more)) }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.report_user)) },
+                        onClick = {
+                            menu = false
+                            onReport()
+                        },
+                    )
+                }
+            }
+        }
+    }
+    Scaffold(topBar = { BackTopBar(name, onBack, actions) }) { padding ->
         if (state.loading) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             return@Scaffold

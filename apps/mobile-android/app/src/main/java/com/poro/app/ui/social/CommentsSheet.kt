@@ -47,6 +47,7 @@ class CommentsActions(
     val onPost: () -> Unit,
     val onLike: (CommentDto) -> Unit,
     val onDelete: (CommentDto) -> Unit,
+    val onReport: (CommentDto) -> Unit,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -141,7 +142,12 @@ private fun CommentRow(comment: CommentDto, myUserId: String?, actions: Comments
                 Text(comment.content.orEmpty())
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { actions.onReplyTo(comment) }) { Text(stringResource(R.string.comments_reply)) }
-                    if (mine) TextButton(onClick = { actions.onDelete(comment) }) { Text(stringResource(R.string.action_delete)) }
+                    if (mine) {
+                        TextButton(onClick = { actions.onDelete(comment) }) { Text(stringResource(R.string.action_delete)) }
+                    } else if (myUserId != null) {
+                        // Avant de connaître son compte, on ne sait pas si le commentaire est le sien.
+                        TextButton(onClick = { actions.onReport(comment) }) { Text(stringResource(R.string.report_action)) }
+                    }
                 }
             }
         }

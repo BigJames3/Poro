@@ -65,7 +65,10 @@ exactement celles du contrat.
 | Confidentialité | Aucune information sur le signaleur affichée à quiconque ; pas de journalisation du détail |
 | Accessibilité | Boutons radio avec `Role.RadioButton`, groupe `selectableGroup`, titre de la feuille en `heading`, cibles ≥ 48 dp, message de résultat annoncé (`liveRegion`) |
 
-## 5. Implémentation prévue (Lot 2, non réalisée)
+## 5. Implémentation (Lot 2, réalisée le 2026-10-22)
+
+Libellés des motifs validés (décision R1). Écart volontaire : la phrase « votre signalement est
+anonyme » n'est pas affichée, car les modérateurs voient l'auteur d'un signalement.
 
 | Couche | Élément |
 |---|---|

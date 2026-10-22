@@ -15,6 +15,8 @@ import com.poro.app.data.auth.DefaultAccountRepository
 import com.poro.app.data.auth.DefaultAuthRepository
 import com.poro.app.data.feed.DefaultFeedRepository
 import com.poro.app.data.feed.FeedRepository
+import com.poro.app.data.moderation.DefaultModerationRepository
+import com.poro.app.data.moderation.ModerationRepository
 import com.poro.app.data.notification.DefaultNotificationRepository
 import com.poro.app.data.notification.NotificationRepository
 import com.poro.app.data.order.DefaultOrderRepository
@@ -83,6 +85,8 @@ class AppContainer(context: Context) {
     val searchRepository: SearchRepository = DefaultSearchRepository(network.api())
 
     val notificationRepository: NotificationRepository = DefaultNotificationRepository(network.api())
+
+    val moderationRepository: ModerationRepository = DefaultModerationRepository(network.api())
 
     val shopRepository: ShopRepository = DefaultShopRepository(network.api(), uploader)
 
