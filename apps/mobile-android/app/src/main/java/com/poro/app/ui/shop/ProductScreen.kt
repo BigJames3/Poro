@@ -79,30 +79,36 @@ fun ProductScreen(
                         }
                     }
                     if (selected != null && !selected.inStock) Text(stringResource(R.string.product_out_of_stock), color = MaterialTheme.colorScheme.error)
-                    QuantityStepper(state.quantity, onQuantityChange)
+                    if (state.selectedInCart > 0) Text(stringResource(R.string.product_in_cart, state.selectedInCart))
+                    if (!state.ownProduct && !state.atMaximum) QuantityStepper(state.quantity, onQuantityChange, max = ProductUiState.MAX_QUANTITY - state.selectedInCart)
                     product.description?.let { Text(it) }
                     state.error?.let { ErrorMessageText(it) }
-                    SubmitButton(
-                        text = stringResource(R.string.product_add_to_cart),
-                        enabled = state.canAdd && selected?.inStock != false,
-                        loading = state.adding,
-                        onClick = onAddToCart,
-                    )
+                    when {
+                        // Le serveur refuserait l'achat (`own_shop`) : on l'explique au lieu d'un bouton.
+                        state.ownProduct -> Text(stringResource(R.string.product_own), style = MaterialTheme.typography.bodyMedium)
+                        state.atMaximum -> Text(stringResource(R.string.product_max_reached), style = MaterialTheme.typography.bodyMedium)
+                        else -> SubmitButton(
+                            text = stringResource(R.string.product_add_to_cart),
+                            enabled = state.canAdd && selected?.inStock != false,
+                            loading = state.adding,
+                            onClick = onAddToCart,
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-/** − quantité + , de 1 à 99 ; TalkBack lit « Quantité : 2 ». */
+/** − quantité + , de 1 à [max] ; TalkBack lit « Quantité : 2 ». */
 @Composable
-fun QuantityStepper(quantity: Int, onChange: (Int) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+fun QuantityStepper(quantity: Int, onChange: (Int) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, max: Int = 99) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedButton(onClick = { onChange(quantity - 1) }, enabled = enabled && quantity > 1) {
             Text("−", modifier = Modifier.padding(horizontal = 4.dp))
         }
         Text(stringResource(R.string.quantity, quantity), modifier = Modifier.padding(horizontal = 8.dp))
-        OutlinedButton(onClick = { onChange(quantity + 1) }, enabled = enabled && quantity < 99) {
+        OutlinedButton(onClick = { onChange(quantity + 1) }, enabled = enabled && quantity < max) {
             Text("+", modifier = Modifier.padding(horizontal = 4.dp))
         }
     }

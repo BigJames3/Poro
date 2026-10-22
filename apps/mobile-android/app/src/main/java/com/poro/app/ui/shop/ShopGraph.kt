@@ -66,7 +66,8 @@ fun NavGraphBuilder.shopGraph(nav: AppNav) {
         val state by vm.state.collectAsStateWithLifecycle()
         CollectEvents(vm.events) { event ->
             when (event) {
-                ProductEvent.AddedToCart -> nav.showMessage(R.string.product_added)
+                is ProductEvent.AddedToCart ->
+                    nav.showMessageWithAction(R.string.product_added, R.string.product_view_cart, { nav.controller.navigate(CartRoute) }, event.quantityInCart)
             }
         }
         ProductScreen(

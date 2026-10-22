@@ -55,20 +55,44 @@ fun orderStatusLabel(status: String): Int = when (status) {
 /** Montant à afficher : le total définitif, sinon le sous-total vu au moment de commander. */
 fun OrderDto.displayTotal(): String = Formats.money(total ?: subtotalSeen, currency)
 
+/** Total encore inconnu : le stock n'est pas réservé, le montant affiché n'est qu'une estimation. */
+val OrderDto.totalIsEstimate: Boolean get() = total == null && status != OrderDto.CANCELLED
+
+/** Libellé du total, « estimé » tant que le serveur ne l'a pas fixé. */
+@Composable
+fun OrderDto.totalLabel(): String =
+    stringResource(if (totalIsEstimate) R.string.order_total_estimated else R.string.checkout_total, displayTotal())
+
+@StringRes
+fun cancelReasonLabel(reason: String): Int = when (reason) {
+    "stock_rejected" -> R.string.order_cancel_reason_stock
+    "payment_timeout" -> R.string.order_cancel_reason_payment_timeout
+    "buyer_cancelled" -> R.string.order_cancel_reason_buyer
+    "seller_cancelled" -> R.string.order_cancel_reason_seller
+    else -> R.string.order_cancel_reason_other
+}
+
 @Composable
 fun OrdersScreen(asSeller: Boolean, state: OrdersUiState, onBack: () -> Unit, onLoadMore: () -> Unit, onOpen: (OrderDto) -> Unit) {
     val title = stringResource(if (asSeller) R.string.seller_orders_title else R.string.orders_title)
     Scaffold(topBar = { BackTopBar(title, onBack) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
             items(state.orders, key = { it.orderId }) { order ->
+                // Vendeur : le destinataire (sa propre boutique serait la même sur chaque ligne).
+                val headline = if (asSeller) {
+                    order.delivery?.let { d -> listOf(d.fullName, d.city).filter { it.isNotBlank() }.joinToString(", ") }
+                        ?.ifBlank { null } ?: stringResource(R.string.order_customer)
+                } else {
+                    order.shop.name.ifBlank { stringResource(R.string.order_title) }
+                }
                 ListItem(
-                    headlineContent = { Text(order.shop.name.ifBlank { stringResource(R.string.order_title) }) },
+                    headlineContent = { Text(headline) },
                     supportingContent = {
                         Text(
                             listOfNotNull(
                                 stringResource(orderStatusLabel(order.status)),
                                 (order.placedAt ?: order.createdAt)?.let { Formats.date(it) },
-                                order.displayTotal(),
+                                if (order.totalIsEstimate) stringResource(R.string.order_amount_estimated, order.displayTotal()) else order.displayTotal(),
                             ).joinToString(" · "),
                         )
                     },
@@ -104,15 +128,22 @@ fun OrderScreen(
             ) {
                 Text(order.shop.name, style = MaterialTheme.typography.titleLarge)
                 Text(stringResource(orderStatusLabel(order.status)), style = MaterialTheme.typography.titleMedium)
-                order.cancelReason?.let { Text(stringResource(R.string.order_cancel_reason, it)) }
+                order.cancelReason?.let { Text(stringResource(R.string.order_cancel_reason, stringResource(cancelReasonLabel(it)))) }
                 order.items.forEach { item ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(stringResource(R.string.order_line, item.quantity, item.title), Modifier.weight(1f))
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.order_line, item.quantity, item.title))
+                            // Prix réservé différent de celui du panier : l'acheteur doit le voir.
+                            if (item.unitPrice > 0 && item.unitPriceSeen > 0 && item.unitPrice != item.unitPriceSeen) {
+                                Text(stringResource(R.string.order_price_updated), style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
                         Text(Formats.money((if (item.unitPrice > 0) item.unitPrice else item.unitPriceSeen) * item.quantity, order.currency))
                     }
                 }
                 HorizontalDivider()
-                Text(stringResource(R.string.checkout_total, order.displayTotal()), style = MaterialTheme.typography.titleMedium)
+                Text(order.totalLabel(), style = MaterialTheme.typography.titleMedium)
+                if (order.totalIsEstimate) Text(stringResource(R.string.order_total_pending_notice), style = MaterialTheme.typography.bodySmall)
                 if (order.paymentMethodLabel.isNotBlank()) Text(order.paymentMethodLabel)
                 order.delivery?.let { d ->
                     Text(stringResource(R.string.checkout_delivery_to), style = MaterialTheme.typography.titleSmall)

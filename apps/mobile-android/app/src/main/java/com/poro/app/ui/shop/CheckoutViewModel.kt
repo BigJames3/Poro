@@ -30,10 +30,19 @@ data class DeliveryForm(
     val address: String = "",
     val landmark: String = "",
 ) {
-    /** Nom, téléphone international (+…) et ville requis, plus une adresse (pas de position GPS ici). */
+    /** Adresse trop courte (3 caractères au moins côté serveur), signalée dès qu'elle est saisie. */
+    val addressTooShort: Boolean get() = address.isNotBlank() && address.trim().length < MIN_TEXT
+
+    /** Point de repère facultatif, mais de 3 caractères au moins s'il est rempli. */
+    val landmarkTooShort: Boolean get() = landmark.isNotBlank() && landmark.trim().length < MIN_TEXT
+
+    /**
+     * Nom, téléphone international (+…) et ville requis, plus une adresse (pas de position GPS
+     * ici) ; mêmes bornes que le service order (`services/order/src/delivery/delivery.ts`).
+     */
     val isValid: Boolean
         get() = fullName.trim().length in 1..80 && PHONE.matches(phone.trim()) && city.trim().length in 1..80 &&
-            address.trim().isNotEmpty() && address.length <= 300
+            address.trim().length in MIN_TEXT..MAX_TEXT && (landmark.isBlank() || landmark.trim().length in MIN_TEXT..MAX_TEXT)
 
     fun toDelivery() = Delivery(
         fullName = fullName.trim(),
@@ -45,6 +54,8 @@ data class DeliveryForm(
 
     private companion object {
         val PHONE = Regex("^\\+[1-9]\\d{7,14}$")
+        const val MIN_TEXT = 3
+        const val MAX_TEXT = 300
     }
 }
 

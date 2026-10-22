@@ -44,6 +44,17 @@ class CheckoutViewModelTest {
     }
 
     @Test
+    fun `address and landmark need three characters like the server`() {
+        val form = DeliveryForm("Awa", "+2250701020304", "Abidjan", "Cocody")
+        assertTrue(form.copy(landmark = "").isValid)
+        assertFalse(form.copy(address = "ab").isValid)
+        assertTrue(form.copy(address = "ab").addressTooShort)
+        assertFalse(form.copy(landmark = "ok").isValid)
+        assertTrue(form.copy(landmark = "ok").landmarkTooShort)
+        assertTrue(form.copy(landmark = "Pharmacie").isValid)
+    }
+
+    @Test
     fun `a national phone number is refused`() {
         assertFalse(DeliveryForm("Awa", "0701020304", "Abidjan", "Cocody").isValid)
         assertTrue(DeliveryForm("Awa", "+2250701020304", "Abidjan", "Cocody").isValid)

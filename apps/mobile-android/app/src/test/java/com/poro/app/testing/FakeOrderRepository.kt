@@ -23,6 +23,9 @@ class FakeOrderRepository : OrderRepository {
     var orders: ApiResult<PageDto<OrderDto>> = ApiResult.Success(PageDto(emptyList(), null))
     var lastPreview: PreviewRequest? = null
 
+    /** Résultat des actions sur une commande (annuler, recevoir, expédier) ; sinon [order]. */
+    var action: ApiResult<OrderDto>? = null
+
     override suspend fun cart() = cart.also { calls += "cart" }
 
     override suspend fun setQuantity(variantId: String, quantity: Int) = cart.also { calls += "setQuantity:$variantId:$quantity" }
@@ -47,15 +50,15 @@ class FakeOrderRepository : OrderRepository {
 
     override suspend fun order(orderId: String) = order.also { calls += "order:$orderId" }
 
-    override suspend fun cancel(orderId: String) = order.also { calls += "cancel:$orderId" }
+    override suspend fun cancel(orderId: String) = (action ?: order).also { calls += "cancel:$orderId" }
 
-    override suspend fun confirmReceipt(orderId: String) = order.also { calls += "confirmReceipt:$orderId" }
+    override suspend fun confirmReceipt(orderId: String) = (action ?: order).also { calls += "confirmReceipt:$orderId" }
 
     override suspend fun sellerOrders(cursor: String?) = orders.also { calls += "sellerOrders:$cursor" }
 
     override suspend fun sellerOrder(orderId: String) = order.also { calls += "sellerOrder:$orderId" }
 
-    override suspend fun ship(orderId: String, tracking: String?) = order.also { calls += "ship:$orderId:$tracking" }
+    override suspend fun ship(orderId: String, tracking: String?) = (action ?: order).also { calls += "ship:$orderId:$tracking" }
 
-    override suspend fun sellerCancel(orderId: String) = order.also { calls += "sellerCancel:$orderId" }
+    override suspend fun sellerCancel(orderId: String) = (action ?: order).also { calls += "sellerCancel:$orderId" }
 }

@@ -8,6 +8,7 @@ import com.poro.app.data.order.CartLine
 import com.poro.app.data.order.CartShop
 import com.poro.app.data.order.OrderDto
 import com.poro.app.data.shop.ProductDto
+import com.poro.app.data.shop.ShopRef
 import com.poro.app.data.shop.VariantDto
 import com.poro.app.testing.FakeMediaReader
 import com.poro.app.testing.FakeOrderRepository
@@ -57,8 +58,69 @@ class ShopViewModelsTest {
         vm.setQuantity(150)
         vm.addToCart()
 
-        assertEquals(ProductEvent.AddedToCart, vm.events.first())
+        assertEquals(ProductEvent.AddedToCart(99), vm.events.first())
         assertTrue("setQuantity:v2:99" in orders.calls)
+    }
+
+    @Test
+    fun `adding to the cart adds to the quantity already there`() = runTest {
+        shops.product = ApiResult.Success(ProductDto("p1", variants = listOf(VariantDto("v1", "M", 5000))))
+        orders.cart = ApiResult.Success(CartDto(shops = listOf(CartShop(items = listOf(CartLine("v1", quantity = 2))))))
+        val vm = ProductViewModel("p1", shops, orders)
+        runCurrent()
+        assertEquals(2, vm.state.value.selectedInCart)
+
+        vm.addToCart()
+        runCurrent()
+
+        assertTrue("setQuantity:v1:3" in orders.calls)
+    }
+
+    @Test
+    fun `a full cart line and an own product cannot be added`() = runTest {
+        shops.product = ApiResult.Success(
+            ProductDto("p1", shop = ShopRef(shopId = "s1"), variants = listOf(VariantDto("v1", "M", 5000))),
+        )
+        val own = ProductViewModel("p1", shops, orders)
+        runCurrent()
+        assertTrue(own.state.value.ownProduct)
+        assertFalse(own.state.value.canAdd)
+
+        shops.product = ApiResult.Success(ProductDto("p2", variants = listOf(VariantDto("v2", "M", 5000))))
+        orders.cart = ApiResult.Success(CartDto(shops = listOf(CartShop(items = listOf(CartLine("v2", quantity = 99))))))
+        val full = ProductViewModel("p2", shops, orders)
+        runCurrent()
+        full.addToCart()
+        runCurrent()
+
+        assertTrue(full.state.value.atMaximum)
+        assertFalse(orders.calls.any { it.startsWith("setQuantity") })
+    }
+
+    @Test
+    fun `a status conflict reloads the order`() = runTest {
+        orders.order = ApiResult.Success(OrderDto("o1", status = OrderDto.CONFIRMED))
+        val vm = OrderViewModel("o1", orders, asSeller = false)
+        runCurrent()
+        // La boutique a expédié entre-temps : l'annulation est refusée, la commande relue.
+        orders.action = ApiResult.Failure(409, ApiErrorCodes.ORDER_STATUS_CONFLICT, "shipped meanwhile", null, null)
+        orders.order = ApiResult.Success(OrderDto("o1", status = OrderDto.SHIPPED))
+
+        vm.cancel()
+        runCurrent()
+
+        assertEquals(R.string.error_order_status_conflict, vm.state.value.error?.text)
+        assertEquals(OrderDto.SHIPPED, vm.state.value.order.valueOrNull?.status)
+        assertEquals(listOf("order:o1", "cancel:o1", "order:o1"), orders.calls)
+    }
+
+    @Test
+    fun `cancel reasons are translated and an unreserved total is an estimate`() {
+        assertEquals(R.string.order_cancel_reason_stock, cancelReasonLabel("stock_rejected"))
+        assertEquals(R.string.order_cancel_reason_other, cancelReasonLabel("nouveau_motif"))
+        assertTrue(OrderDto("o1", status = OrderDto.PENDING, total = null).totalIsEstimate)
+        assertFalse(OrderDto("o1", status = OrderDto.CONFIRMED, total = 5000).totalIsEstimate)
+        assertFalse(OrderDto("o1", status = OrderDto.CANCELLED, total = null).totalIsEstimate)
     }
 
     @Test

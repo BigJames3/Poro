@@ -134,6 +134,9 @@ Notification de commande ──► OrderRoute(id, asSeller)
 
 ## 4. Synthèse des corrections du Lot 1
 
+État au 2026-10-22 : M1, M2, M3, M5 à M11 **réalisés** (décisions M1 « additionner » et M2
+« message avec Voir le panier » validées) ; **M4 en attente** du journal `PoroMedia` ; M12 non arbitré.
+
 | ID | Gravité | Correction | Fichiers probables |
 |---|---|---|---|
 | M1 | P0 | Ajout au panier additif (lecture + somme plafonnée) | `ProductViewModel.kt`, test associé |

@@ -3,6 +3,7 @@ package com.poro.app.ui
 import android.content.res.Resources
 import androidx.annotation.StringRes
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +39,15 @@ class AppNav(
     /** Session ouverte : accueil, en retirant les écrans de connexion de la pile (« retour » ferme l'app). */
     fun goHome() {
         controller.navigate(HomeRoute) { popUpTo(controller.graph.id) { inclusive = true } }
+    }
+
+    /** Message avec une action (« Voir le panier ») ; [onAction] s'exécute si l'utilisateur l'appuie. */
+    fun showMessageWithAction(@StringRes text: Int, @StringRes action: Int, onAction: () -> Unit, vararg args: Any) {
+        val message = resources.getString(text, *args)
+        val label = resources.getString(action)
+        scope.launch {
+            if (snackbar.showSnackbar(message, actionLabel = label) == SnackbarResult.ActionPerformed) onAction()
+        }
     }
 
     /** Retour à la connexion, pile vidée (déconnexion, session expirée ou supprimée). */

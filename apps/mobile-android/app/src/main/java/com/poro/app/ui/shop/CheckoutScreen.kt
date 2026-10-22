@@ -100,11 +100,17 @@ private fun DeliveryFields(
         onFormChange(form.copy(phone = it.filter { c -> c.isDigit() || c == '+' }.take(16)))
     }
     DeliveryField(form.city, R.string.delivery_city, KeyboardType.Text, KeyboardCapitalization.Words) { onFormChange(form.copy(city = it.take(80))) }
-    DeliveryField(form.address, R.string.delivery_address, KeyboardType.Text, KeyboardCapitalization.Sentences, singleLine = false) {
+    DeliveryField(
+        form.address, R.string.delivery_address, KeyboardType.Text, KeyboardCapitalization.Sentences, singleLine = false,
+        supporting = if (form.addressTooShort) R.string.delivery_too_short else null, isError = form.addressTooShort,
+    ) {
         onFormChange(form.copy(address = it.take(300)))
     }
-    DeliveryField(form.landmark, R.string.delivery_landmark, KeyboardType.Text, KeyboardCapitalization.Sentences, supporting = R.string.optional) {
-        onFormChange(form.copy(landmark = it.take(200)))
+    DeliveryField(
+        form.landmark, R.string.delivery_landmark, KeyboardType.Text, KeyboardCapitalization.Sentences,
+        supporting = if (form.landmarkTooShort) R.string.delivery_too_short else R.string.optional, isError = form.landmarkTooShort,
+    ) {
+        onFormChange(form.copy(landmark = it.take(300)))
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Checkbox(checked = state.saveAddress, onCheckedChange = onSaveAddressChange)
@@ -120,6 +126,7 @@ private fun DeliveryField(
     capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
     supporting: Int? = null,
     singleLine: Boolean = true,
+    isError: Boolean = false,
     onChange: (String) -> Unit,
 ) {
     OutlinedTextField(
@@ -128,6 +135,7 @@ private fun DeliveryField(
         label = { Text(stringResource(label)) },
         supportingText = supporting?.let { { Text(stringResource(it)) } },
         singleLine = singleLine,
+        isError = isError,
         keyboardOptions = KeyboardOptions(capitalization = capitalization, keyboardType = keyboardType, imeAction = ImeAction.Next),
         modifier = Modifier.fillMaxWidth(),
     )

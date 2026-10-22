@@ -2,6 +2,7 @@ package com.poro.app.ui.shop
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.poro.app.core.network.ApiErrorCodes
 import com.poro.app.core.network.ApiResult
 import com.poro.app.data.order.OrderDto
 import com.poro.app.data.order.OrderRepository
@@ -89,6 +90,12 @@ class OrderViewModel(
         }
     }
 
+    /** Relit la commande sans masquer l'écran ni le message d'erreur. */
+    private suspend fun reload() {
+        val result = if (asSeller) orders.sellerOrder(orderId) else orders.order(orderId)
+        if (result is ApiResult.Success) _state.update { it.copy(order = Loadable.Loaded(result.data)) }
+    }
+
     fun onTrackingChange(value: String) = _state.update { it.copy(tracking = value.take(TRACKING_MAX)) }
 
     fun cancel() = act { if (asSeller) orders.sellerCancel(orderId) else orders.cancel(orderId) }
@@ -109,6 +116,8 @@ class OrderViewModel(
                     error = result.toErrorMessage(),
                 )
             }
+            // Statut changé entre-temps (l'autre partie a agi) : afficher le statut réel.
+            if (result is ApiResult.Failure && result.code == ApiErrorCodes.ORDER_STATUS_CONFLICT) reload()
         }
     }
 
