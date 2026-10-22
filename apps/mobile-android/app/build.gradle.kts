@@ -104,6 +104,17 @@ android {
     }
 }
 
+// Garde-fou de publication : sans URL d'API réelle, la release pointerait sur api.poro.invalid.
+// Seules les tâches qui produisent un APK/AAB de release échouent ; debug et tests ne changent pas.
+val releaseApiUrlProvided = buildValue("poro.apiBaseUrl", "PORO_API_BASE_URL") != null
+tasks.configureEach {
+    if (!releaseApiUrlProvided && Regex("^(assemble|bundle|package)Release$").matches(name)) {
+        doFirst {
+            throw GradleException("Release sans URL d'API : fournir poro.apiBaseUrl ou PORO_API_BASE_URL (voir README).")
+        }
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

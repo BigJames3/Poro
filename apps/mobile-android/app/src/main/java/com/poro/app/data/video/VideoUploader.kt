@@ -26,6 +26,20 @@ fun interface VideoUploadClient {
     ): ApiResult<VideoDto>
 }
 
+/** Envoi en cours, mémorisé sur l'appareil : il survit à un arrêt du processus. */
+data class UploadSession(val videoId: String, val fingerprint: String)
+
+/**
+ * Mémoire de l'envoi en cours (une seule publication à la fois). Le serveur n'offre aucune
+ * reprise (ni relecture de session, ni nouvelles URL présignées) : cette trace sert seulement à
+ * ne pas publier deux fois, et à annuler un envoi laissé en suspens par un processus arrêté.
+ */
+interface UploadSessionStore {
+    fun load(): UploadSession?
+    fun save(session: UploadSession)
+    fun clear()
+}
+
 /**
  * Envoi d'une vidéo directement vers le stockage (docs/api/ANDROID-INTEGRATION.md, « Envoi de
  * vidéos ») : initialisation, une URL présignée par partie de 8 Mio, assemblage. Une partie qui
@@ -36,6 +50,7 @@ class VideoUploader(
     private val uploader: PresignedUploader,
     private val media: LocalMediaReader,
     private val retryDelaysMs: List<Long> = listOf(2_000, 5_000, 10_000),
+    private val sessions: UploadSessionStore? = null,
 ) : VideoUploadClient {
     override suspend fun upload(
         file: LocalMedia,
@@ -43,6 +58,21 @@ class VideoUploader(
         description: String?,
         onProgress: (sentBytes: Long, totalBytes: Long) -> Unit,
     ): ApiResult<VideoDto> {
+        val fingerprint = uploadFingerprint(file, title, description)
+        // Un processus arrêté a pu laisser un envoi en suspens : on le règle avant d'en créer un autre.
+        sessions?.load()?.let { previous ->
+            when (val settled = settle(previous, sameUpload = previous.fingerprint == fingerprint)) {
+                null -> sessions.clear()
+                is ApiResult.Success -> {
+                    // « complete » avait déjà réussi pour ce même envoi : ne pas publier une seconde fois.
+                    sessions.clear()
+                    onProgress(file.sizeBytes, file.sizeBytes)
+                    return settled
+                }
+                is ApiResult.Failure -> return settled
+                is ApiResult.NetworkError -> return settled
+            }
+        }
         val init = apiCall {
             api.initUpload(InitUploadRequest(title.trim(), description?.trim()?.ifEmpty { null }, null, file.mimeType, file.sizeBytes))
         }
@@ -51,6 +81,7 @@ class VideoUploader(
             is ApiResult.Failure -> return init
             is ApiResult.NetworkError -> return init
         }
+        sessions?.save(UploadSession(session.videoId, fingerprint))
         var completed = false
         try {
             val etags = ArrayList<CompletedPart>(session.parts.size)
@@ -78,8 +109,9 @@ class VideoUploader(
             return done
         } finally {
             // Échec, annulation ou refus : les parties déjà envoyées ne doivent pas rester en suspens.
-            if (!completed) {
-                withContext(NonCancellable) { apiCall(ifEmpty = {}) { api.abortUpload(session.videoId) } }
+            withContext(NonCancellable) {
+                if (!completed) apiCall(ifEmpty = {}) { api.abortUpload(session.videoId) }
+                sessions?.clear()
             }
         }
     }
@@ -95,6 +127,29 @@ class VideoUploader(
         return result
     }
 
+    /**
+     * Règle un envoi laissé par un processus arrêté. Résultat : la vidéo déjà publiée (même envoi,
+     * « complete » réussi), un échec réseau (on réessaiera), ou null (rien à reprendre, on recommence).
+     * L'annulation ne touche qu'un envoi encore `uploading` : le serveur la refuse (409) sinon.
+     */
+    private suspend fun settle(previous: UploadSession, sameUpload: Boolean): ApiResult<VideoDto>? {
+        when (val current = apiCall { api.video(previous.videoId) }) {
+            is ApiResult.NetworkError -> return current
+            is ApiResult.Failure -> return null
+            is ApiResult.Success -> if (current.data.status != VideoDto.STATUS_UPLOADING) {
+                return if (sameUpload) current else null
+            }
+        }
+        return when (val aborted = apiCall(ifEmpty = {}) { api.abortUpload(previous.videoId) }) {
+            is ApiResult.NetworkError -> aborted
+            else -> null
+        }
+    }
+
     private fun uploadFailed(httpStatus: Int = 0): ApiResult.Failure =
         ApiResult.Failure(httpStatus, ApiErrorCodes.UPLOAD_REJECTED, "storage refused a part", null, null)
 }
+
+/** Identifie « le même envoi » : même fichier, même taille, même titre et même description. */
+internal fun uploadFingerprint(file: LocalMedia, title: String, description: String?): String =
+    listOf(file.uri, file.sizeBytes.toString(), title.trim(), description?.trim().orEmpty()).joinToString("\u0000")

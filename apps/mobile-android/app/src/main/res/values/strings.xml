@@ -133,7 +133,6 @@
     <string name="upload_pick_other">Choisir une autre vidéo</string>
     <string name="upload_video_title">Titre</string>
     <string name="upload_video_description">Description</string>
-    <string name="upload_hashtags_hint">Ajoutez des #hashtags pour être trouvé dans la recherche.</string>
     <string name="upload_publish">Publier</string>
     <string name="upload_sending">Envoi de « %1$s » : %2$d %%</string>
     <string name="upload_keep_open">Gardez l’application ouverte jusqu’à la fin de l’envoi.</string>
@@ -292,6 +291,7 @@
     <string name="error_reference">Référence : %1$s</string>
     <!-- Boutique et commandes -->
     <string name="optional">Facultatif</string>
+    <string name="text_limit">%1$d caractères et %2$d lignes au plus, sans caractère invisible.</string>
     <string name="action_keep">Garder</string>
     <string name="action_load_more">Afficher plus</string>
     <string name="quantity">Quantité : %1$d</string>
@@ -397,6 +397,7 @@
     <string name="order_cancel_reason_seller">annulée par la boutique</string>
     <string name="order_cancel_reason_other">autre</string>
     <string name="delivery_too_short">3 caractères au moins.</string>
+    <string name="delivery_text_limit">300 caractères et 3 lignes au plus, sans caractère invisible.</string>
     <string name="error_confirmation_required">Confirmez la commande pour continuer.</string>
     <string name="error_address_book_full">Carnet d\'adresses plein : supprimez une adresse pour en enregistrer une autre.</string>
     <string name="error_address_label_invalid">Nom d\'adresse invalide.</string>
@@ -459,4 +460,8 @@
     <string name="legal_mention">En continuant, vous acceptez les Conditions d\'utilisation et la Politique de confidentialité.</string>
     <string name="upload_channel_name">Envoi de vidéos</string>
     <string name="upload_notification_title">Envoi de la vidéo</string>
+    <string name="upload_description_count">Hashtags avec # · %1$d / %2$d</string>
+    <string name="upload_forbidden_chars">Caractère invisible non accepté (par exemple un émoji composé) : retirez-le.</string>
+    <string name="bio_too_many_lines">%1$d lignes au plus.</string>
+    <string name="prefs_push_unavailable">Les notifications sur le téléphone (push) ne sont pas encore disponibles : vos notifications restent dans l\'application.</string>
 </resources>

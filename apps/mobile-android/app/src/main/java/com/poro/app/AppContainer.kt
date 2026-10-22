@@ -32,6 +32,7 @@ import com.poro.app.data.social.SocialRepository
 import com.poro.app.data.user.DefaultProfileRepository
 import com.poro.app.data.user.ProfileRepository
 import com.poro.app.data.video.DefaultVideoRepository
+import com.poro.app.data.video.PrefsUploadSessionStore
 import com.poro.app.data.video.UploadManager
 import com.poro.app.data.video.VideoUploadClient
 import com.poro.app.data.video.VideoUploader
@@ -100,7 +101,8 @@ class AppContainer(context: Context) {
     val orderRepository: OrderRepository = DefaultOrderRepository(network.api())
 
     /** Envoi d'une vidéo, exécuté par le worker WorkManager. */
-    val videoUploadClient: VideoUploadClient = VideoUploader(network.api(), uploader, mediaReader)
+    val videoUploadClient: VideoUploadClient =
+        VideoUploader(network.api(), uploader, mediaReader, sessions = PrefsUploadSessionStore(context))
 
     val uploadManager = UploadManager(
         scheduler = WorkManagerUploadScheduler(context),

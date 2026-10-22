@@ -55,6 +55,15 @@ class CheckoutViewModelTest {
     }
 
     @Test
+    fun `address and landmark follow the server line limits`() {
+        val form = DeliveryForm("Awa", "+2250701020304", "Abidjan", "Cocody\nRue 12\nPrès du marché")
+        assertTrue(form.isValid)
+        assertFalse(form.copy(address = "Cocody\nRue 12\nPrès du marché\nPorte bleue").isValid)
+        assertFalse(form.copy(landmark = "Porte\tbleue").isValid)
+        assertFalse(form.copy(address = "é".repeat(301)).isValid)
+    }
+
+    @Test
     fun `a national phone number is refused`() {
         assertFalse(DeliveryForm("Awa", "0701020304", "Abidjan", "Cocody").isValid)
         assertTrue(DeliveryForm("Awa", "+2250701020304", "Abidjan", "Cocody").isValid)

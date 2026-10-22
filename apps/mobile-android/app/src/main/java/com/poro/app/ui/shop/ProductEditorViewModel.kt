@@ -6,6 +6,7 @@ import com.poro.app.R
 import com.poro.app.core.format.Formats
 import com.poro.app.core.media.LocalMediaReader
 import com.poro.app.core.network.ApiResult
+import com.poro.app.core.text.MultilineText
 import com.poro.app.data.shop.ProductDto
 import com.poro.app.data.shop.ProductImage
 import com.poro.app.data.shop.ShopRepository
@@ -48,9 +49,17 @@ data class ProductEditorUiState(
     val working: Boolean = false,
     val error: ErrorMessage? = null,
 ) {
+    val descriptionFits: Boolean get() = MultilineText.fits(description, DESCRIPTION_MAX, DESCRIPTION_MAX_LINES)
+
     fun canSave(currency: String): Boolean =
-        !working && title.trim().length in 1..120 && description.length <= 2000 &&
+        !working && title.trim().length in 1..120 && descriptionFits &&
             variants.isNotEmpty() && variants.size <= 50 && variants.all { it.isValid(currency) }
+
+    companion object {
+        /** Bornes de `services/shop/src/products/products.service.ts`. */
+        const val DESCRIPTION_MAX = 2000
+        const val DESCRIPTION_MAX_LINES = 50
+    }
 }
 
 sealed interface ProductEditorEvent {
@@ -80,7 +89,7 @@ class ProductEditorViewModel(
 
     fun onTitleChange(value: String) = _state.update { it.copy(title = value.take(120), error = null) }
 
-    fun onDescriptionChange(value: String) = _state.update { it.copy(description = value.take(2000), error = null) }
+    fun onDescriptionChange(value: String) = _state.update { it.copy(description = value.take(2 * ProductEditorUiState.DESCRIPTION_MAX), error = null) }
 
     fun onVariantChange(index: Int, variant: VariantDraft) =
         _state.update { it.copy(variants = it.variants.toMutableList().also { list -> list[index] = variant }, error = null) }

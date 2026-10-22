@@ -1,5 +1,7 @@
 package com.poro.app.core.account
 
+import com.poro.app.core.text.Runes
+
 /**
  * Règles de saisie du compte email, alignées sur le contrat Auth (docs/api/auth.openapi.yaml) :
  * le serveur reste juge, ces contrôles évitent seulement un aller-retour voué à l'échec.
@@ -10,8 +12,10 @@ object AccountRules {
     const val PASSWORD_MAX = 128
     const val FULL_NAME_MIN = 2
     const val FULL_NAME_MAX = 100
-    const val DISPLAY_NAME_MAX = 200
-    const val BIO_MAX = 1000
+    /** services/user profiles.service.ts : 50 et 160 points de code (le contrat ne donne que le plafond de transport). */
+    const val DISPLAY_NAME_MAX = 50
+    const val BIO_MAX = 160
+    const val BIO_MAX_LINES = 5
     const val USERNAME_MAX = 30
 
     private val EMAIL = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")
@@ -35,4 +39,13 @@ object AccountRules {
 
     /** 3 à 30 caractères parmi a-z, 0-9, « . » et « _ » (le serveur juge aussi les pseudos réservés). */
     fun isValidUsername(input: String): Boolean = USERNAME.matches(normalizeUsername(input))
+
+    /** Nom affiché : espaces regroupés comme côté serveur, puis compté en points de code. */
+    fun displayNameLength(input: String): Int = Runes.count(input.trim().replace(Regex("\\s+"), " "))
+
+    fun bioLength(input: String): Int = Runes.count(input.trim())
+
+    fun bioLines(input: String): Int = if (input.isBlank()) 0 else input.trim().lines().size
+
+    fun isValidBio(input: String): Boolean = bioLength(input) <= BIO_MAX && bioLines(input) <= BIO_MAX_LINES
 }

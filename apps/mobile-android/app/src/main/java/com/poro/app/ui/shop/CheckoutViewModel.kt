@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.poro.app.R
 import com.poro.app.core.network.ApiErrorCodes
 import com.poro.app.core.network.ApiResult
+import com.poro.app.core.text.MultilineText
 import com.poro.app.data.order.AddressDto
 import com.poro.app.data.order.Delivery
 import com.poro.app.data.order.OrderDto
@@ -33,6 +34,9 @@ data class DeliveryForm(
     /** Adresse trop courte (3 caractères au moins côté serveur), signalée dès qu'elle est saisie. */
     val addressTooShort: Boolean get() = address.isNotBlank() && address.trim().length < MIN_TEXT
 
+    val addressFits: Boolean get() = MultilineText.fits(address, MAX_TEXT, MAX_LINES)
+    val landmarkFits: Boolean get() = MultilineText.fits(landmark, MAX_TEXT, MAX_LINES)
+
     /** Point de repère facultatif, mais de 3 caractères au moins s'il est rempli. */
     val landmarkTooShort: Boolean get() = landmark.isNotBlank() && landmark.trim().length < MIN_TEXT
 
@@ -42,7 +46,7 @@ data class DeliveryForm(
      */
     val isValid: Boolean
         get() = fullName.trim().length in 1..80 && PHONE.matches(phone.trim()) && city.trim().length in 1..80 &&
-            address.trim().length in MIN_TEXT..MAX_TEXT && (landmark.isBlank() || landmark.trim().length in MIN_TEXT..MAX_TEXT)
+            address.trim().length >= MIN_TEXT && addressFits && (landmark.isBlank() || landmark.trim().length >= MIN_TEXT) && landmarkFits
 
     fun toDelivery() = Delivery(
         fullName = fullName.trim(),
@@ -56,6 +60,7 @@ data class DeliveryForm(
         val PHONE = Regex("^\\+[1-9]\\d{7,14}$")
         const val MIN_TEXT = 3
         const val MAX_TEXT = 300
+        const val MAX_LINES = 3
     }
 }
 

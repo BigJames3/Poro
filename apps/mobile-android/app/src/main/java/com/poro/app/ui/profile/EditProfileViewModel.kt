@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.poro.app.R
 import com.poro.app.core.account.AccountRules
+import com.poro.app.core.text.Runes
 import com.poro.app.core.media.LocalMediaReader
 import com.poro.app.core.network.ApiErrorCodes
 import com.poro.app.core.network.ApiResult
@@ -55,7 +56,7 @@ data class EditProfileUiState(
 ) {
     val canSave: Boolean
         get() = !loading && !saving && !uploadingAvatar && usernameStatus.allowsSaving &&
-            displayName.length <= AccountRules.DISPLAY_NAME_MAX && bio.length <= AccountRules.BIO_MAX
+            AccountRules.displayNameLength(displayName) <= AccountRules.DISPLAY_NAME_MAX && AccountRules.isValidBio(bio)
 }
 
 sealed interface EditProfileEvent {
@@ -134,13 +135,14 @@ class EditProfileViewModel(
     }
 
     fun onDisplayNameChange(value: String) {
-        val name = value.take(AccountRules.DISPLAY_NAME_MAX)
+        // Marge pour les espaces regroupés par le serveur ; canSave vérifie la longueur réelle.
+        val name = Runes.take(value, AccountRules.DISPLAY_NAME_MAX * 2)
         savedState[KEY_DISPLAY_NAME] = name
         _state.update { it.copy(displayName = name, error = null) }
     }
 
     fun onBioChange(value: String) {
-        val bio = value.take(AccountRules.BIO_MAX)
+        val bio = Runes.take(value, AccountRules.BIO_MAX * 2)
         savedState[KEY_BIO] = bio
         _state.update { it.copy(bio = bio, error = null) }
     }

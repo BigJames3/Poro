@@ -45,7 +45,7 @@ PORO_KEY_ALIAS=poro PORO_KEY_PASSWORD=… \
 ./gradlew bundleRelease
 ```
 
-Sans keystore, le build de release n'est pas signé. R8 est activé (règles propres à
+Sans `PORO_API_BASE_URL`, les tâches `assembleRelease`, `bundleRelease` et `packageRelease` échouent volontairement : aucune release ne peut partir vers `api.poro.invalid`. Sans keystore, le build de release n'est pas signé. R8 est activé (règles propres à
 l'application dans `app/src/main/keepRules`) ; conserver `app/build/outputs/mapping/release/mapping.txt`
 pour lire les traces de plantage.
 

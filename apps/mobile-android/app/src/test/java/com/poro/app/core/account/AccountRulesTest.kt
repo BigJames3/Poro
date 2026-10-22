@@ -37,4 +37,14 @@ class AccountRulesTest {
         assertTrue(AccountRules.isValidFullName("Awa Koné"))
         assertFalse(AccountRules.isValidFullName("x".repeat(101)))
     }
+
+    @Test
+    fun `profile limits follow the user service, in code points`() {
+        assertEquals(50, AccountRules.displayNameLength("  " + "é".repeat(50) + "  "))
+        assertEquals("espaces regroupés : « Awa Koné »", 8, AccountRules.displayNameLength("Awa   Koné"))
+        assertTrue(AccountRules.isValidBio("😀".repeat(160)))
+        assertFalse(AccountRules.isValidBio("😀".repeat(161)))
+        assertTrue(AccountRules.isValidBio("1\n2\n3\n4\n5"))
+        assertFalse(AccountRules.isValidBio("1\n2\n3\n4\n5\n6"))
+    }
 }

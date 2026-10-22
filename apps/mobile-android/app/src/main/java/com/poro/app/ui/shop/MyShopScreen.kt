@@ -47,6 +47,7 @@ import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.auth.phone.label
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.common.TextLimitHint
 
 class MyShopActions(
     val onOpenFormChange: (OpenShopForm) -> Unit,
@@ -113,9 +114,10 @@ private fun OpenShopFields(state: MyShopUiState, actions: MyShopActions) {
     Text(stringResource(R.string.shop_country_hint), style = MaterialTheme.typography.bodySmall)
     OutlinedTextField(
         value = form.description,
-        onValueChange = { actions.onOpenFormChange(form.copy(description = it.take(500))) },
+        onValueChange = { actions.onOpenFormChange(form.copy(description = it.take(2 * OpenShopForm.DESCRIPTION_MAX))) },
         label = { Text(stringResource(R.string.shop_description_label)) },
-        supportingText = { Text(stringResource(R.string.optional)) },
+        supportingText = { TextLimitHint(form.descriptionFits, OpenShopForm.DESCRIPTION_MAX, OpenShopForm.DESCRIPTION_MAX_LINES) },
+        isError = !form.descriptionFits,
         modifier = Modifier.fillMaxWidth(),
     )
     state.error?.let { ErrorMessageText(it) }
@@ -149,10 +151,12 @@ private fun Dashboard(shop: ShopDto, state: MyShopUiState, actions: MyShopAction
         value = state.editDescription,
         onValueChange = actions.onEditDescription,
         label = { Text(stringResource(R.string.shop_description_label)) },
+        supportingText = { TextLimitHint(state.editDescriptionFits, OpenShopForm.DESCRIPTION_MAX, OpenShopForm.DESCRIPTION_MAX_LINES) },
+        isError = !state.editDescriptionFits,
         modifier = Modifier.fillMaxWidth(),
     )
     state.error?.let { ErrorMessageText(it) }
-    SubmitButton(stringResource(R.string.action_save), enabled = state.editName.isNotBlank(), loading = state.working, onClick = actions.onSaveDetails)
+    SubmitButton(stringResource(R.string.action_save), enabled = state.canSaveDetails, loading = state.working, onClick = actions.onSaveDetails)
     when (shop.status) {
         ShopDto.ACTIVE -> OutlinedButton(onClick = { actions.onSetOpen(false) }, enabled = !state.working, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.shop_close))

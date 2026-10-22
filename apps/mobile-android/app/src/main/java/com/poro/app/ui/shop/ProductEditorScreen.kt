@@ -43,6 +43,7 @@ import com.poro.app.data.shop.ProductDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.common.TextLimitHint
 
 class ProductEditorActions(
     val onTitleChange: (String) -> Unit,
@@ -85,7 +86,10 @@ fun ProductEditorScreen(state: ProductEditorUiState, currency: String, onBack: (
                 value = state.description,
                 onValueChange = actions.onDescriptionChange,
                 label = { Text(stringResource(R.string.product_description_label)) },
-                supportingText = { Text(stringResource(R.string.optional)) },
+                supportingText = {
+                    TextLimitHint(state.descriptionFits, ProductEditorUiState.DESCRIPTION_MAX, ProductEditorUiState.DESCRIPTION_MAX_LINES)
+                },
+                isError = !state.descriptionFits,
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(stringResource(R.string.product_variants), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
@@ -115,7 +119,7 @@ fun ProductEditorScreen(state: ProductEditorUiState, currency: String, onBack: (
             }
             OutlinedButton(
                 onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                enabled = !state.working && state.images.size < 8,
+                enabled = !state.working && state.images.size < MAX_IMAGES,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.product_add_photo)) }
             when (state.status) {
@@ -182,3 +186,6 @@ private fun VariantFields(index: Int, variant: VariantDraft, currency: String, c
         if (canRemove) TextButton(onClick = { actions.onRemoveVariant(index) }) { Text(stringResource(R.string.variant_remove)) }
     }
 }
+
+/** services/shop product.dto.ts : 10 photos par produit au plus. */
+private const val MAX_IMAGES = 10

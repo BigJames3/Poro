@@ -88,7 +88,10 @@ fun UploadScreen(
             value = form.title,
             onValueChange = onTitleChange,
             label = { Text(stringResource(R.string.upload_video_title)) },
-            supportingText = { Text("${form.title.length} / ${UploadFormState.TITLE_MAX}") },
+            supportingText = {
+                Text(if (form.titleHasForbidden) stringResource(R.string.upload_forbidden_chars) else "${form.titleLength} / ${UploadFormState.TITLE_MAX}")
+            },
+            isError = form.titleHasForbidden,
             singleLine = true,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             modifier = Modifier.fillMaxWidth(),
@@ -97,7 +100,16 @@ fun UploadScreen(
             value = form.description,
             onValueChange = onDescriptionChange,
             label = { Text(stringResource(R.string.upload_video_description)) },
-            supportingText = { Text(stringResource(R.string.upload_hashtags_hint)) },
+            supportingText = {
+                Text(
+                    if (form.descriptionHasForbidden) {
+                        stringResource(R.string.upload_forbidden_chars)
+                    } else {
+                        stringResource(R.string.upload_description_count, form.descriptionLength, UploadFormState.DESCRIPTION_MAX)
+                    },
+                )
+            },
+            isError = form.descriptionHasForbidden,
             minLines = 3,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             modifier = Modifier.fillMaxWidth(),

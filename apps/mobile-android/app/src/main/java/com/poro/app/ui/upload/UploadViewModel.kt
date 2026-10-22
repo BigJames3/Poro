@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.poro.app.R
 import com.poro.app.core.media.LocalMedia
 import com.poro.app.core.media.LocalMediaReader
+import com.poro.app.core.text.Runes
 import com.poro.app.data.video.UploadManager
 import com.poro.app.data.video.UploadState
 import com.poro.app.ui.auth.ErrorMessage
@@ -23,12 +24,22 @@ data class UploadFormState(
     /** Vidéo refusée avant tout envoi (format, taille, durée). */
     val fileError: ErrorMessage? = null,
 ) {
+    /** Longueurs comptées comme le service video : en points de code, espaces de bord retirés. */
+    val titleLength: Int get() = Runes.count(title.trim())
+    val descriptionLength: Int get() = Runes.count(description.trim())
+
+    /** Caractère invisible refusé par le serveur (`title_invalid` / `description_invalid`). */
+    val titleHasForbidden: Boolean get() = Runes.hasForbidden(title, allowNewlines = false)
+    val descriptionHasForbidden: Boolean get() = Runes.hasForbidden(description, allowNewlines = true)
+
     val canPublish: Boolean
-        get() = file != null && title.trim().length in 1..TITLE_MAX && description.length <= DESCRIPTION_MAX
+        get() = file != null && titleLength in 1..TITLE_MAX && descriptionLength <= DESCRIPTION_MAX &&
+            !titleHasForbidden && !descriptionHasForbidden
 
     companion object {
+        /** services/video/internal/model : MaxTitleRunes = 100, MaxDescriptionRunes = 500. */
         const val TITLE_MAX = 100
-        const val DESCRIPTION_MAX = 1000
+        const val DESCRIPTION_MAX = 500
     }
 }
 
@@ -71,13 +82,13 @@ class UploadViewModel(
     }
 
     fun onTitleChange(value: String) {
-        val title = value.take(UploadFormState.TITLE_MAX)
+        val title = Runes.take(value, UploadFormState.TITLE_MAX)
         savedState[KEY_TITLE] = title
         _form.update { it.copy(title = title) }
     }
 
     fun onDescriptionChange(value: String) {
-        val description = value.take(UploadFormState.DESCRIPTION_MAX)
+        val description = Runes.take(value, UploadFormState.DESCRIPTION_MAX)
         savedState[KEY_DESCRIPTION] = description
         _form.update { it.copy(description = description) }
     }

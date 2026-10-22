@@ -103,6 +103,29 @@ class WorkManagerUploadScheduler(private val context: Context) : UploadScheduler
     }
 }
 
+/** Envoi en cours mémorisé dans les préférences privées de l'app : il survit à l'arrêt du processus. */
+class PrefsUploadSessionStore(context: Context) : UploadSessionStore {
+    private val prefs = context.getSharedPreferences("video_upload_session", Context.MODE_PRIVATE)
+
+    override fun load(): UploadSession? {
+        val videoId = prefs.getString(KEY_VIDEO_ID, null) ?: return null
+        return UploadSession(videoId, prefs.getString(KEY_FINGERPRINT, null).orEmpty())
+    }
+
+    override fun save(session: UploadSession) {
+        prefs.edit().putString(KEY_VIDEO_ID, session.videoId).putString(KEY_FINGERPRINT, session.fingerprint).commit()
+    }
+
+    override fun clear() {
+        prefs.edit().clear().commit()
+    }
+
+    private companion object {
+        const val KEY_VIDEO_ID = "video_id"
+        const val KEY_FINGERPRINT = "fingerprint"
+    }
+}
+
 /** Échec relu depuis la sortie du worker ; un plantage du worker n'en laisse aucune. */
 private fun Data.toFailure(): ApiResult<Nothing> {
     val code = getString(WorkManagerUploadScheduler.KEY_CODE)

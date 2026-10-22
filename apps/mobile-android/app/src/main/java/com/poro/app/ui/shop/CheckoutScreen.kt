@@ -102,13 +102,23 @@ private fun DeliveryFields(
     DeliveryField(form.city, R.string.delivery_city, KeyboardType.Text, KeyboardCapitalization.Words) { onFormChange(form.copy(city = it.take(80))) }
     DeliveryField(
         form.address, R.string.delivery_address, KeyboardType.Text, KeyboardCapitalization.Sentences, singleLine = false,
-        supporting = if (form.addressTooShort) R.string.delivery_too_short else null, isError = form.addressTooShort,
+        supporting = when {
+            form.addressTooShort -> R.string.delivery_too_short
+            !form.addressFits -> R.string.delivery_text_limit
+            else -> null
+        },
+        isError = form.addressTooShort || !form.addressFits,
     ) {
         onFormChange(form.copy(address = it.take(300)))
     }
     DeliveryField(
         form.landmark, R.string.delivery_landmark, KeyboardType.Text, KeyboardCapitalization.Sentences,
-        supporting = if (form.landmarkTooShort) R.string.delivery_too_short else R.string.optional, isError = form.landmarkTooShort,
+        supporting = when {
+            form.landmarkTooShort -> R.string.delivery_too_short
+            !form.landmarkFits -> R.string.delivery_text_limit
+            else -> R.string.optional
+        },
+        isError = form.landmarkTooShort || !form.landmarkFits,
     ) {
         onFormChange(form.copy(landmark = it.take(300)))
     }

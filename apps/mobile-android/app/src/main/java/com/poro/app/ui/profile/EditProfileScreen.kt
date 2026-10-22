@@ -88,6 +88,8 @@ fun EditProfileScreen(
                 value = state.displayName,
                 onValueChange = onDisplayNameChange,
                 label = { Text(stringResource(R.string.display_name_label)) },
+                supportingText = { Text("${AccountRules.displayNameLength(state.displayName)} / ${AccountRules.DISPLAY_NAME_MAX}") },
+                isError = AccountRules.displayNameLength(state.displayName) > AccountRules.DISPLAY_NAME_MAX,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth(),
@@ -96,7 +98,17 @@ fun EditProfileScreen(
                 value = state.bio,
                 onValueChange = onBioChange,
                 label = { Text(stringResource(R.string.bio_label)) },
-                supportingText = { Text("${state.bio.length} / ${AccountRules.BIO_MAX}") },
+                supportingText = {
+                    val lines = AccountRules.bioLines(state.bio)
+                    Text(
+                        if (lines > AccountRules.BIO_MAX_LINES) {
+                            stringResource(R.string.bio_too_many_lines, AccountRules.BIO_MAX_LINES)
+                        } else {
+                            "${AccountRules.bioLength(state.bio)} / ${AccountRules.BIO_MAX}"
+                        },
+                    )
+                },
+                isError = !AccountRules.isValidBio(state.bio),
                 minLines = 3,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.fillMaxWidth(),

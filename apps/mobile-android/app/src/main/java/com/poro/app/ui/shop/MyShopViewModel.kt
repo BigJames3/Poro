@@ -6,6 +6,7 @@ import com.poro.app.R
 import com.poro.app.core.media.LocalMediaReader
 import com.poro.app.core.network.ApiResult
 import com.poro.app.core.phone.LaunchCountry
+import com.poro.app.core.text.MultilineText
 import com.poro.app.data.shop.ProductDto
 import com.poro.app.data.shop.ShopDto
 import com.poro.app.data.shop.ShopRepository
@@ -29,10 +30,15 @@ data class OpenShopForm(
     val description: String = "",
 ) {
     val isValid: Boolean
-        get() = name.trim().length in 1..60 && HANDLE.matches(handle.trim().removePrefix("@")) && description.length <= 500
+        get() = name.trim().length in 1..60 && HANDLE.matches(handle.trim().removePrefix("@")) && descriptionFits
 
-    private companion object {
-        val HANDLE = Regex("^[A-Za-z0-9._]{3,30}$")
+    val descriptionFits: Boolean get() = MultilineText.fits(description, DESCRIPTION_MAX, DESCRIPTION_MAX_LINES)
+
+    companion object {
+        /** Bornes de `services/shop/src/shops/shops.service.ts`. */
+        const val DESCRIPTION_MAX = 500
+        const val DESCRIPTION_MAX_LINES = 10
+        private val HANDLE = Regex("^[A-Za-z0-9._]{3,30}$")
     }
 }
 
@@ -47,7 +53,11 @@ data class MyShopUiState(
     val productsCursor: String? = null,
     val working: Boolean = false,
     val error: ErrorMessage? = null,
-)
+) {
+    val editDescriptionFits: Boolean
+        get() = MultilineText.fits(editDescription, OpenShopForm.DESCRIPTION_MAX, OpenShopForm.DESCRIPTION_MAX_LINES)
+    val canSaveDetails: Boolean get() = editName.isNotBlank() && editDescriptionFits
+}
 
 sealed interface MyShopEvent {
     /** Nom et description enregistrés. */
@@ -104,11 +114,11 @@ class MyShopViewModel(
 
     fun onEditName(value: String) = _state.update { it.copy(editName = value.take(60), error = null) }
 
-    fun onEditDescription(value: String) = _state.update { it.copy(editDescription = value.take(500), error = null) }
+    fun onEditDescription(value: String) = _state.update { it.copy(editDescription = value.take(2 * OpenShopForm.DESCRIPTION_MAX), error = null) }
 
     fun saveDetails() {
         val current = _state.value
-        if (current.editName.isBlank()) return
+        if (!current.canSaveDetails) return
         act(onSuccess = { _events.send(MyShopEvent.Saved) }) { shops.updateMyShop(current.editName, current.editDescription) }
     }
 
