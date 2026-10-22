@@ -1,5 +1,10 @@
 # Axe C2 — Spécification des écrans légaux
 
+> **Lot 3 réalisé le 2026-10-22** : option A (textes locaux `res/raw/legal_*.md`, tous en
+> `status: draft`), mention simple sans case à cocher (décision L1 validée). La liste des quatre
+> documents reste à confirmer par le juridique (décision L2). Un test vérifie qu'aucun texte
+> embarqué n'est marqué `validated` ni daté.
+
 ## 1. État réel
 
 | Élément | Constat |

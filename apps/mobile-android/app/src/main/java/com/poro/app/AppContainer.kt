@@ -1,6 +1,8 @@
 package com.poro.app
 
 import android.content.Context
+import com.poro.app.core.legal.LegalTextSource
+import com.poro.app.core.legal.RawLegalTextSource
 import com.poro.app.core.media.ContentResolverMediaReader
 import com.poro.app.core.media.LocalMediaReader
 import com.poro.app.core.network.NetworkModule
@@ -85,6 +87,9 @@ class AppContainer(context: Context) {
     val searchRepository: SearchRepository = DefaultSearchRepository(network.api())
 
     val notificationRepository: NotificationRepository = DefaultNotificationRepository(network.api())
+
+    /** Documents légaux embarqués (textes provisoires « À valider » tant que non validés). */
+    val legalTexts: LegalTextSource = RawLegalTextSource(context)
 
     val moderationRepository: ModerationRepository = DefaultModerationRepository(network.api())
 

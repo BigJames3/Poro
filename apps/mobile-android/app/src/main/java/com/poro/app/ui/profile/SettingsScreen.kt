@@ -38,6 +38,7 @@ fun SettingsScreen(
     onRevoke: (String) -> Unit,
     onRevokeOthers: () -> Unit,
     onNotifications: () -> Unit,
+    onLegal: () -> Unit,
     onDeleteAccount: () -> Unit,
     onLogout: () -> Unit,
 ) {
@@ -73,6 +74,7 @@ fun SettingsScreen(
             item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
             item { SectionTitle(stringResource(R.string.settings_account)) }
             item { SettingsAction(stringResource(R.string.settings_notifications), onNotifications) }
+            item { SettingsAction(stringResource(R.string.legal_title), onLegal) }
             item { SettingsAction(stringResource(R.string.action_logout), onLogout, enabled = !state.signingOut) }
             item {
                 SettingsAction(

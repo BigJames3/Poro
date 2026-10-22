@@ -10,6 +10,7 @@ import com.poro.app.R
 import com.poro.app.ui.AppNav
 import com.poro.app.ui.CollectEvents
 import com.poro.app.ui.EmailLoginRoute
+import com.poro.app.ui.LegalDocumentRoute
 import com.poro.app.ui.EmailRegisterRoute
 import com.poro.app.ui.EmailVerifyRoute
 import com.poro.app.ui.ForgotPasswordRoute
@@ -58,6 +59,7 @@ fun NavGraphBuilder.authGraph(nav: AppNav) {
             onInputChange = vm::onInputChange,
             onSubmit = vm::submit,
             onUseEmail = { nav.controller.navigate(EmailLoginRoute) },
+            onOpenLegal = { nav.controller.navigate(LegalDocumentRoute(it.slug)) },
         )
     }
     composable<OtpRoute> { entry ->
@@ -126,6 +128,7 @@ fun NavGraphBuilder.authGraph(nav: AppNav) {
             onHaveAccount = {
                 if (!nav.controller.popBackStack<EmailLoginRoute>(inclusive = false)) nav.controller.navigate(EmailLoginRoute)
             },
+            onOpenLegal = { nav.controller.navigate(LegalDocumentRoute(it.slug)) },
         )
     }
     composable<EmailVerifyRoute> { entry ->

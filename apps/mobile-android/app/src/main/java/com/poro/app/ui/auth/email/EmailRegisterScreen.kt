@@ -15,7 +15,9 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import com.poro.app.R
 import com.poro.app.ui.auth.AuthForm
+import com.poro.app.core.legal.LegalDocumentId
 import com.poro.app.ui.auth.AuthLink
+import com.poro.app.ui.legal.LegalMention
 import com.poro.app.ui.auth.EmailField
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.PasswordField
@@ -31,6 +33,7 @@ fun EmailRegisterScreen(
     onSubmit: () -> Unit,
     onHaveAccount: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenLegal: (LegalDocumentId) -> Unit = {},
 ) {
     val editable = !state.registering
     // Les indications n'apparaissent qu'une fois le champ commencé, pas sur un formulaire vide.
@@ -72,6 +75,7 @@ fun EmailRegisterScreen(
             onClick = onSubmit,
         )
         AuthLink(stringResource(R.string.email_have_account), onHaveAccount, enabled = editable)
+        LegalMention(onOpenLegal)
     }
 }
 

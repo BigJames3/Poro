@@ -444,4 +444,17 @@
         <item quantity="one">Trop de signalements. Réessayez dans %d minute.</item>
         <item quantity="other">Trop de signalements. Réessayez dans %d minutes.</item>
     </plurals>
+    <!-- Informations légales -->
+    <string name="legal_title">Informations légales</string>
+    <string name="legal_terms">Conditions d\'utilisation</string>
+    <string name="legal_privacy">Politique de confidentialité</string>
+    <string name="legal_community">Règles de la communauté</string>
+    <string name="legal_marketplace">Conditions de vente</string>
+    <string name="legal_status_draft">Texte provisoire, à valider</string>
+    <string name="legal_status_unavailable">Bientôt disponible</string>
+    <string name="legal_unavailable">Ce document sera bientôt disponible.</string>
+    <string name="legal_draft_banner">Texte provisoire — À valider. Il n\'a aucune valeur juridique tant qu\'il n\'a pas été validé.</string>
+    <string name="legal_version">Version %1$s · entrée en vigueur : %2$s</string>
+    <string name="legal_effective_unknown">date non définie</string>
+    <string name="legal_mention">En continuant, vous acceptez les Conditions d\'utilisation et la Politique de confidentialité.</string>
 </resources>

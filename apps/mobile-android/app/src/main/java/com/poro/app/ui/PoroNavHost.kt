@@ -43,6 +43,7 @@ import com.poro.app.core.security.SessionState
 import com.poro.app.ui.auth.authGraph
 import com.poro.app.data.social.VideoStatsDto
 import com.poro.app.ui.feed.feedGraph
+import com.poro.app.ui.legal.legalGraph
 import com.poro.app.ui.notification.FeedNotificationBell
 import com.poro.app.ui.notification.notificationGraph
 import com.poro.app.ui.profile.profileGraph
@@ -150,6 +151,7 @@ private fun PoroNavGraph(
             searchGraph(nav)
             notificationGraph(nav, onOpenOrder = { orderId, asSeller -> nav.controller.navigate(OrderRoute(orderId, asSeller)) })
             shopGraph(nav)
+            legalGraph(nav)
             socialGraph(nav)
             uploadGraph(nav)
             profileGraph(nav) { me ->

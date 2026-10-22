@@ -102,3 +102,11 @@ data object MyShopRoute
 /** Création ([productId] null) ou modification d'un produit ; [currency] : celle de la boutique. */
 @Serializable
 data class ProductEditorRoute(val productId: String? = null, val currency: String)
+
+/** Liste des documents légaux (Paramètres). */
+@Serializable
+data object LegalIndexRoute
+
+/** Un document légal, par son identifiant (`terms`, `privacy`…). */
+@Serializable
+data class LegalDocumentRoute(val slug: String)

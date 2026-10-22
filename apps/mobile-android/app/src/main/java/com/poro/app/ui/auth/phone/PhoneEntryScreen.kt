@@ -41,7 +41,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.core.phone.LaunchCountry
+import com.poro.app.core.legal.LegalDocumentId
 import com.poro.app.ui.auth.AuthLink
+import com.poro.app.ui.legal.LegalMention
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.quantityString
 import com.poro.app.ui.theme.PoroTheme
@@ -54,6 +56,7 @@ fun PhoneEntryScreen(
     onSubmit: () -> Unit,
     onUseEmail: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenLegal: (LegalDocumentId) -> Unit = {},
 ) {
     // L'indication n'apparaît qu'une fois assez de chiffres saisis, pas pendant la frappe.
     val showHint = !state.isValid && state.input.count { it in '0'..'9' } >= state.country.nationalLength
@@ -111,6 +114,7 @@ fun PhoneEntryScreen(
         }
         // Autre méthode, aussi le recours quand l'envoi de SMS est indisponible (sms_unavailable).
         AuthLink(stringResource(R.string.phone_use_email), onUseEmail, enabled = !state.sending)
+        LegalMention(onOpenLegal)
     }
 }
 
