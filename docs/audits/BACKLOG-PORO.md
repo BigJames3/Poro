@@ -350,6 +350,10 @@ Les identifiants `PORO-xxx` sont stables : une tâche terminée garde le sien, e
 - **Domaine** : Commandes. **Priorité** : P1. **Estimation** : 0,5 j.
 - **Constat** : `OrdersService.act` ne vérifie pas le statut de la boutique.
 - **Critères d'acceptation** : une boutique suspendue reçoit 403 sur l'expédition et l'annulation vendeur, avec un test E2E. La règle sur les commandes en cours est à décider avec l'utilisateur.
+- **État (2026-10-22)** : **terminé** (sous réserve de la CI), voir [ADR-0019](../architecture/adr/0019-suspension-des-comptes-et-des-boutiques.md).
+  - Order : 403 `shop_suspended` sur l'expédition et l'annulation vendeur ; l'acheteur garde ses actions. Test E2E `refuses seller actions while the shop is suspended`.
+  - Étendu aux comptes : `POST /api/v1/auth/admin/users/{id}/suspend` et `/reinstate` (ADMIN, ou MODERATOR sur un compte qui n'est pas du personnel). La suspension révoque toutes les sessions dans le registre partagé : tous les services refusent le compte immédiatement.
+  - Annulation automatique des commandes non expédiées d'une boutique suspendue : décidée, livrée dans une PR séparée.
 
 ### PORO-022 — Redemander l'accord de l'acheteur si le prix a changé
 

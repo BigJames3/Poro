@@ -187,6 +187,10 @@ func mapAuthError(err error) error {
 		return httpx.NewAPIError(fiber.StatusTooManyRequests, "login_throttled", "too many failed sign-ins, try again later")
 	case errors.Is(err, service.ErrEmailTaken):
 		return httpx.NewAPIError(fiber.StatusConflict, "email_taken", "email already registered")
+	case errors.Is(err, service.ErrSuspensionForbidden):
+		return httpx.NewAPIError(fiber.StatusForbidden, "forbidden", "forbidden")
+	case errors.Is(err, service.ErrSelfSuspension):
+		return httpx.NewAPIError(fiber.StatusUnprocessableEntity, "self_suspension", "an administrator cannot suspend their own account")
 	case errors.Is(err, service.ErrAccountBlocked):
 		return httpx.NewAPIError(fiber.StatusForbidden, "account_blocked", "account blocked")
 	case errors.Is(err, service.ErrAccountNotFound):
