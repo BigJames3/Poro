@@ -1,8 +1,4 @@
-import {
-  DeleteObjectCommand,
-  ListObjectsV2Command,
-  S3Client,
-} from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 
 import { type AppConfigType } from '../config/app.config';
 import { MediaService } from './media.service';
@@ -55,7 +51,9 @@ describe('abandoned image uploads', () => {
       'uploads/d/5': old,
     });
     const avatars = new MediaService(config, s3, s3);
-    const count = await avatars.purgeAbandonedUploads(new Date(now.getTime() - ABANDONED_UPLOAD_AGE_MS));
+    const count = await avatars.purgeAbandonedUploads(
+      new Date(now.getTime() - ABANDONED_UPLOAD_AGE_MS),
+    );
     expect(count).toBe(3);
     expect(deleted).toEqual(['uploads/a/1', 'uploads/b/3', 'uploads/d/5']);
   });
@@ -63,7 +61,9 @@ describe('abandoned image uploads', () => {
   it('keeps every original when none is old enough', async () => {
     const { s3, deleted } = fakeS3({ 'uploads/a/1': recent });
     const media = new MediaService(config, s3, s3);
-    await expect(media.purgeAbandonedUploads(new Date(now.getTime() - ABANDONED_UPLOAD_AGE_MS))).resolves.toBe(0);
+    await expect(
+      media.purgeAbandonedUploads(new Date(now.getTime() - ABANDONED_UPLOAD_AGE_MS)),
+    ).resolves.toBe(0);
     expect(deleted).toEqual([]);
   });
 

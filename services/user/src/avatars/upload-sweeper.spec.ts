@@ -1,9 +1,4 @@
-import {
-  DeleteObjectCommand,
-  ListObjectsV2Command,
-  NoSuchKey,
-  S3Client,
-} from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, ListObjectsV2Command, NoSuchKey, S3Client } from '@aws-sdk/client-s3';
 
 import { type AppConfigType } from '../config/app.config';
 import { AvatarService } from './avatar.service';
@@ -20,7 +15,10 @@ function fakeS3(objects: Record<string, Date>) {
   const s3 = {
     send: jest.fn((command: unknown) => {
       if (command instanceof ListObjectsV2Command) {
-        expect(command.input).toMatchObject({ Bucket: 'poro-avatar-uploads', Prefix: 'avatars/uploads/' });
+        expect(command.input).toMatchObject({
+          Bucket: 'poro-avatar-uploads',
+          Prefix: 'avatars/uploads/',
+        });
         const keys = Object.keys(objects).sort();
         const start = Number(command.input.ContinuationToken ?? 0);
         const page = keys.slice(start, start + 2);
@@ -59,7 +57,9 @@ describe('abandoned avatar uploads', () => {
       'avatars/uploads/d/5': old,
     });
     const avatars = new AvatarService(config, s3, s3);
-    const count = await avatars.purgeAbandonedUploads(new Date(now.getTime() - ABANDONED_UPLOAD_AGE_MS));
+    const count = await avatars.purgeAbandonedUploads(
+      new Date(now.getTime() - ABANDONED_UPLOAD_AGE_MS),
+    );
     expect(count).toBe(3);
     expect(deleted).toEqual(['avatars/uploads/a/1', 'avatars/uploads/b/3', 'avatars/uploads/d/5']);
   });

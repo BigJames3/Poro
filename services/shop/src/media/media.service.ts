@@ -167,12 +167,16 @@ export class MediaService {
         }),
       );
       const keys = (page.Contents ?? []).flatMap((object) =>
-        object.Key !== undefined && object.LastModified !== undefined && object.LastModified < cutoff
+        object.Key !== undefined &&
+        object.LastModified !== undefined &&
+        object.LastModified < cutoff
           ? [object.Key]
           : [],
       );
       await Promise.all(
-        keys.map((key) => this.s3.send(new DeleteObjectCommand({ Bucket: this.uploadBucket, Key: key }))),
+        keys.map((key) =>
+          this.s3.send(new DeleteObjectCommand({ Bucket: this.uploadBucket, Key: key })),
+        ),
       );
       purged += keys.length;
       token = page.IsTruncated === true ? page.NextContinuationToken : undefined;
