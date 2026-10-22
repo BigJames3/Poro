@@ -314,6 +314,12 @@ describe('order notifications', () => {
       'Commande annulée',
       'Ta commande chez Chez Fatou est annulée faute de paiement dans le délai.',
     ],
+    [
+      'shop_suspended',
+      true,
+      'Commande annulée',
+      'Ta commande chez Chez Fatou est annulée : la boutique a été suspendue. Ton remboursement est en cours.',
+    ],
   ])('tells only the buyer of a %s order (paid: %p)', async (reason, paid, title, body) => {
     const order = newOrder();
     await knownParties(order);
@@ -422,7 +428,7 @@ describe('order notifications', () => {
     [
       'poro.order.order.cancelled',
       { ...newOrder(), reason: 'lost', paid: false },
-      'reason must be stock_rejected, payment_timeout, buyer_cancelled, seller_cancelled or account_deleted',
+      'reason must be stock_rejected, payment_timeout, buyer_cancelled, seller_cancelled, account_deleted or shop_suspended',
     ],
     [
       'poro.order.order.shipped',

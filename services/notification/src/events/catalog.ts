@@ -114,7 +114,12 @@ export interface ModerationContentRemovedV1 {
 export type Currency = 'XOF' | 'XAF' | 'NGN';
 export type PaymentMethod = 'cash_on_delivery' | 'wave' | 'simulated';
 export type CancelReason =
-  'stock_rejected' | 'payment_timeout' | 'buyer_cancelled' | 'seller_cancelled' | 'account_deleted';
+  | 'stock_rejected'
+  | 'payment_timeout'
+  | 'buyer_cancelled'
+  | 'seller_cancelled'
+  | 'account_deleted'
+  | 'shop_suspended';
 
 /** A full snapshot of the public fields of a shop: the newest updated_at wins. */
 export interface ShopUpdatedV1 {

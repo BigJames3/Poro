@@ -180,6 +180,7 @@ const BUYER_CANCEL_MESSAGES: Partial<Record<string, (shop: string, refund: boole
   stock_rejected: (shop, refund) => messages.orderRejected(shop, refund),
   seller_cancelled: (shop, refund) => messages.orderCancelledBySeller(shop, refund),
   payment_timeout: (shop, refund) => messages.orderPaymentTimeout(shop, refund),
+  shop_suspended: (shop, refund) => messages.orderCancelledShopSuspended(shop, refund),
 };
 
 /**
@@ -454,7 +455,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
     const render = typeof reason === 'string' ? BUYER_CANCEL_MESSAGES[reason] : undefined;
     if (render === undefined) {
       throw new PermanentError(
-        'reason must be stock_rejected, payment_timeout, buyer_cancelled, seller_cancelled or account_deleted',
+        'reason must be stock_rejected, payment_timeout, buyer_cancelled, seller_cancelled, account_deleted or shop_suspended',
       );
     }
     const shop = await this.shopName(tx, order.shopId);

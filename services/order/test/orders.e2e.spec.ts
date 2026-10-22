@@ -371,6 +371,42 @@ describe('order service', () => {
     expect(again.body.data.status).toBe('completed');
   });
 
+  it('cancels the unshipped orders of a suspended shop, not the shipped ones', async () => {
+    const listing = await listed();
+    const pending = await pendingOrder(listing);
+    const confirmed = await pendingOrder(listing);
+    await saga.handle(reserved(listing, confirmed.order.order_id, 15000));
+    const shipped = await pendingOrder(listing);
+    await saga.handle(reserved(listing, shipped.order.order_id, 15000));
+    const seller = await bearer(listing.sellerId);
+    await request(server)
+      .post(`/api/v1/seller/orders/${shipped.order.order_id}/ship`)
+      .set('Authorization', seller)
+      .send({});
+
+    const suspension = shopUpdated(listing, { status: 'suspended' });
+    await catalog.handle(suspension);
+    await catalog.handle(suspension);
+
+    for (const { auth, order } of [pending, confirmed]) {
+      expect(await getOrder(auth, order.order_id)).toMatchObject({
+        status: 'cancelled',
+        cancel_reason: 'shop_suspended',
+      });
+      expect(await outboxEvents(pg, 'poro.order.order.cancelled', order.order_id)).toEqual([
+        expect.objectContaining({ reason: 'shop_suspended', paid: false }),
+      ]);
+    }
+    expect((await getOrder(shipped.auth, shipped.order.order_id)).status).toBe('shipped');
+    const done = await request(server)
+      .post(`/api/v1/orders/${shipped.order.order_id}/confirm-receipt`)
+      .set('Authorization', shipped.auth);
+    expect(done.body.data.status).toBe('completed');
+
+    await catalog.handle(shopUpdated(listing, { status: 'active' }));
+    expect((await getOrder(pending.auth, pending.order.order_id)).status).toBe('cancelled');
+  });
+
   it('refuses seller actions while the shop is suspended, not buyer ones', async () => {
     const listing = await listed();
     const first = await pendingOrder(listing);
@@ -387,7 +423,11 @@ describe('order service', () => {
       expect(refused.status).toBe(403);
       expect(refused.body.error.code).toBe('shop_suspended');
     }
-    expect((await getOrder(first.auth, first.order.order_id)).status).toBe('confirmed');
+    // The suspension already cancelled the unshipped order; the buyer's cancel changes nothing.
+    expect(await getOrder(first.auth, first.order.order_id)).toMatchObject({
+      status: 'cancelled',
+      cancel_reason: 'shop_suspended',
+    });
     const buyerCancel = await request(server)
       .post(`/api/v1/orders/${first.order.order_id}/cancel`)
       .set('Authorization', first.auth);

@@ -50,9 +50,15 @@ Alternatives écartées :
 
 ## Commandes en cours d'une boutique suspendue
 
-Décision du propriétaire : les commandes pas encore expédiées sont annulées automatiquement
-(motif `shop_suspended`), avec remboursement une fois Wave en service ; les commandes expédiées
-restent à l'acheteur. Livré dans une PR séparée.
+6. Décision du propriétaire : quand order reçoit le passage d'une boutique à `suspended` (instantané
+   plus récent que le sien), il annule dans la même transaction toutes ses commandes `pending`,
+   `awaiting_payment`, `confirmed` et `paid`, avec le motif `shop_suspended`.
+   - Une commande payée est signalée pour remboursement par l'événement (`paid: true`) ; le
+     remboursement lui-même arrive avec le service de paiement (PORO-015).
+   - Les commandes `shipped` restent à l'acheteur, qui confirme la réception.
+   - Une réactivation ne rouvre rien ; un événement rejoué est ignoré.
+   - Notification prévient l'acheteur. **Déployer notification avant order** : un notification plus
+     ancien enverrait le nouveau motif en file d'erreurs.
 
 ## Conséquences
 
