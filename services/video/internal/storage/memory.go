@@ -39,8 +39,8 @@ func (m *Memory) CreateMultipart(_ context.Context, key, _ string) (string, erro
 	return id, nil
 }
 
-func (m *Memory) PresignPart(_ context.Context, _, uploadID string, part int32) (string, error) {
-	return fmt.Sprintf("memory://%s/%d", uploadID, part), nil
+func (m *Memory) PresignPart(_ context.Context, _, uploadID string, part int32, size int64) (string, error) {
+	return fmt.Sprintf("memory://%s/%d?size=%d", uploadID, part, size), nil
 }
 
 // PutPart stores bytes for a presigned part (tests simulate the client PUT).

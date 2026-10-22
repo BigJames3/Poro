@@ -193,7 +193,11 @@ Les identifiants `PORO-xxx` sont stables : une tâche terminée garde le sien, e
   3. Plafond de taille par partie au moment de la présignature, si le stockage le permet.
 - **Critères d'acceptation** : après le délai, ni la ligne `uploading` ni le multipart ne subsistent.
 - **Tests** : repository et service avec SeaweedFS en testcontainer.
-- **État (2026-10-22, non commité)** : sous-tâche 1 faite pour la vidéo. Le service annule le multipart et supprime la ligne (suppression logique, pas de statut `abandoned` : la contrainte `videos_status_chk` l'interdirait sans migration). Avatar et boutique faits ensuite : les originaux jamais confirmés sont supprimés après 24 h par une tâche horaire (`UploadSweeper` dans user et shop). Restent les sous-tâches 2 (cycle de vie S3, filet de sécurité côté stockage) et 3.
+- **État (2026-10-22)** : **terminé** (sous réserve de la CI).
+  - Sous-tâche 1 : nettoyage applicatif horaire des envois vidéo, avatar et boutique de plus de 24 h (PR #58 et #60). Suppression logique de la ligne vidéo plutôt qu'un statut `abandoned`, que la contrainte `videos_status_chk` refuserait sans migration.
+  - Sous-tâche 2 : durée de vie d'un jour posée par le filer sur `poro-avatar-uploads` et `poro-shop-uploads` (`init.sh`), et service `seaweedfs-janitor` qui annule les multiparts inachevés de plus de 24 h. Testé par `infra/storage/tests/run.sh`. La règle de cycle de vie S3 n'est pas appliquée par SeaweedFS 4.45 sans mode `fastpath` : non utilisée.
+  - Sous-tâche 3 : longueur exacte de chaque partie vidéo signée dans l'URL présignée ; SeaweedFS refuse toute autre taille (403).
+  - Production (Backblaze B2) : règles documentées dans `docs/runbooks/storage.md`, à appliquer à la mise en place.
 - **Risques** : supprimer un upload lent mais légitime ; choisir un délai généreux.
 
 ### PORO-009 — Observabilité (plan P0-13 en attente de validation)

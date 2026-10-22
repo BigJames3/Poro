@@ -4,7 +4,8 @@
 #
 # 1. Creates the buckets. Public buckets hold only re-encoded media; originals
 #    and quarantined media live in private buckets.
-# 2. Deletes raw uploads left in public buckets by earlier versions.
+# 2. Deletes raw uploads left in public buckets by earlier versions, and gives
+#    every new object of the image upload buckets a one-day TTL (PORO-008).
 # 3. Replaces the whole S3 IAM configuration: one identity per service, each
 #    limited to its own buckets, and anonymous read on the public buckets only.
 #    Anonymous clients can neither list, write nor create buckets.
@@ -18,11 +19,15 @@
 #   S3_USER_ACCESS_KEY_ID  / S3_USER_SECRET_ACCESS_KEY
 #   S3_VIDEO_ACCESS_KEY_ID / S3_VIDEO_SECRET_ACCESS_KEY
 #   S3_SHOP_ACCESS_KEY_ID  / S3_SHOP_SECRET_ACCESS_KEY
+#   UPLOAD_TTL                        TTL of image originals (default 1d; tests
+#                                     use 1m)
 set -eu
 
 master="${WEED_MASTER:-seaweedfs:9333}"
 public_buckets="poro-videos poro-avatars poro-shop"
 private_buckets="poro-video-sources poro-quarantine poro-avatar-uploads poro-shop-uploads"
+upload_buckets="poro-avatar-uploads poro-shop-uploads"
+upload_ttl="${UPLOAD_TTL:-1d}"
 
 shell() {
   echo "$1" | weed shell -master="$master" 2>&1
@@ -56,6 +61,11 @@ if [ "$S3_USER_ACCESS_KEY_ID" = "$S3_VIDEO_ACCESS_KEY_ID" ] ||
   fail "each service needs its own S3 access key id"
 fi
 
+case "$upload_ttl" in
+  [1-9]m | [1-9][0-9]m | [1-9]h | [1-9][0-9]h | [1-9]d | [1-9][0-9]d) ;;
+  *) fail "UPLOAD_TTL must be minutes, hours or days, such as 1d" ;;
+esac
+
 until shell "cluster.check" >/dev/null; do sleep 2; done
 
 existing=$(shell "s3.bucket.list" | awk '{print $1}')
@@ -70,6 +80,16 @@ done
 # Earlier versions stored the originals next to the public media.
 shell "fs.rm -r /buckets/poro-avatars/avatars/uploads" >/dev/null
 shell "fs.rm -r /buckets/poro-shop/uploads" >/dev/null
+
+# Image originals wait in these buckets only until the service re-encodes them.
+# The filer expires them after a day even if no service runs; the services also
+# sweep them (UploadSweeper). The TTL applies to objects written from now on.
+# Never on poro-video-sources: completed sources are kept, and a completed
+# upload reuses the chunks of its parts (see janitor.sh for its multiparts).
+for bucket in $upload_buckets; do
+  shell "fs.configure -locationPrefix=/buckets/$bucket/ -ttl=$upload_ttl -apply" >/dev/null
+  shell "fs.configure" | grep -q "\"/buckets/$bucket/\"" || fail "could not set the TTL of $bucket"
+done
 
 # actions BUCKET... prints the JSON list of Read, Write and List on each bucket.
 actions() {

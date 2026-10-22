@@ -78,6 +78,13 @@ type Video struct {
 	ModeratedAt      *time.Time
 }
 
+// PartLength is the exact length of part (1-based) of an upload of size
+// bytes: PartSize for every part but the last, which holds the rest.
+func PartLength(size int64, part int) int64 {
+	start := int64(part-1) * PartSize
+	return min(PartSize, size-start)
+}
+
 // PartCount is how many multipart parts a client must upload for size bytes.
 func PartCount(size int64) int {
 	if size <= 0 {

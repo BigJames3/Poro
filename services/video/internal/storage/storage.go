@@ -24,7 +24,9 @@ type Storage interface {
 	// Multipart operations upload a source object. AbortMultipart and
 	// DeleteSource succeed when the upload or the object is already gone.
 	CreateMultipart(ctx context.Context, key, contentType string) (uploadID string, err error)
-	PresignPart(ctx context.Context, key, uploadID string, part int32) (url string, err error)
+	// PresignPart signs the part's exact length: storage refuses a body of
+	// any other size, so a client cannot store more than it declared.
+	PresignPart(ctx context.Context, key, uploadID string, part int32, size int64) (url string, err error)
 	CompleteMultipart(ctx context.Context, key, uploadID string, parts []CompletedPart) error
 	AbortMultipart(ctx context.Context, key, uploadID string) error
 	HeadSource(ctx context.Context, key string) (Object, error)
