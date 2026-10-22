@@ -24,6 +24,8 @@ fun NavGraphBuilder.feedGraph(
     feedActions: @Composable (FeedItem) -> Unit = {},
     videoActions: @Composable (VideoDto) -> Unit = {},
     feedTopEnd: @Composable () -> Unit = {},
+    /** Vidéos du fil affiché, à chaque nouvelle page (préchargement des compteurs). */
+    onFeedItems: @Composable (List<FeedItem>) -> Unit = {},
 ) {
     val container = nav.container
 
@@ -31,6 +33,7 @@ fun NavGraphBuilder.feedGraph(
         val vm = poroViewModel { FeedViewModel(container.feedRepository) }
         val state by vm.state.collectAsStateWithLifecycle()
         val player = rememberVideoPlayer(container.network.mediaClient)
+        onFeedItems(state.current.items)
         FeedScreen(
             state = state,
             player = player,

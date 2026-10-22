@@ -32,7 +32,22 @@ class VideoInteractionsViewModel(private val social: SocialRepository) : ViewMod
     private val requested = HashSet<String>()
     private val liking = HashSet<String>()
 
-    /** Vidéo affichée : on lit ses compteurs une fois. */
+    /**
+     * Page du fil chargée : compteurs de toutes ses vidéos en une requête (au lieu d'une par vidéo
+     * affichée). En cas d'échec, chaque vidéo retombe sur la lecture unitaire de [onShown].
+     */
+    fun prefetch(videoIds: List<String>) {
+        val missing = videoIds.filter { requested.add(it) }
+        if (missing.isEmpty()) return
+        viewModelScope.launch {
+            when (val result = social.videosStats(missing)) {
+                is ApiResult.Success -> result.data.forEach { put(it) }
+                else -> requested.removeAll(missing.toSet())
+            }
+        }
+    }
+
+    /** Vidéo affichée : on lit ses compteurs une fois, si une page ne les a pas déjà fournis. */
     fun onShown(videoId: String) {
         if (!requested.add(videoId)) return
         viewModelScope.launch {

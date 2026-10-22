@@ -1,6 +1,7 @@
 package com.poro.app.data.user
 
 import com.poro.app.core.network.ApiEnvelope
+import com.poro.app.core.network.PageDto
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -25,6 +26,10 @@ interface UserApi {
 
     @GET("api/v1/users/username-availability")
     suspend fun usernameAvailability(@Query("username") username: String): Response<ApiEnvelope<UsernameAvailability>>
+
+    /** Profils publics de 1 à 100 comptes ; comptes inconnus ou supprimés omis. */
+    @GET("api/v1/users")
+    suspend fun profiles(@Query("ids") ids: String): Response<ApiEnvelope<PageDto<ProfileDto>>>
 
     @GET("api/v1/users/by-username/{username}")
     suspend fun byUsername(@Path("username") username: String): Response<ApiEnvelope<ProfileDto>>

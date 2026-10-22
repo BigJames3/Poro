@@ -3,6 +3,7 @@ package com.poro.app.ui.social
 import com.poro.app.core.network.ApiResult
 import com.poro.app.core.network.PageDto
 import com.poro.app.data.social.CommentDto
+import com.poro.app.data.user.ProfileDto
 import com.poro.app.testing.FakeProfileRepository
 import com.poro.app.testing.FakeSocialRepository
 import com.poro.app.testing.MainDispatcherRule
@@ -28,6 +29,21 @@ class CommentsViewModelTest {
         CommentDto(id = id, videoId = "v1", userId = user, parentId = parent, content = "texte $id", repliesCount = replies)
 
     private fun page(vararg comments: CommentDto, next: String? = null) = ApiResult.Success(PageDto(comments.toList(), next))
+
+    @Test
+    fun `authors are read in one request and only once`() = runTest(main.dispatcher) {
+        profiles.publicProfiles["u2"] = ProfileDto(userId = "u2", username = "kofi", displayName = "Kofi")
+        social.commentPages += page(comment("c1"), comment("c2"), comment("c3", user = "u3"), next = "n2")
+        social.commentPages += page(comment("c4"))
+        val vm = CommentsViewModel("v1", social, profiles)
+        runCurrent()
+        vm.loadMore()
+        runCurrent()
+
+        assertEquals("Kofi", vm.state.value.authors.getValue("u2").displayName)
+        // u3 inconnu (compte supprimé) : omis, affiché « Membre Poro » ; u2 n'est pas relu.
+        assertEquals(listOf("profiles:u2,u3"), profiles.calls)
+    }
 
     @Test
     fun `comments are paged and my own are recognised`() = runTest(main.dispatcher) {

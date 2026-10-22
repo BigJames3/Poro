@@ -25,6 +25,10 @@ interface SocialApi {
     @DELETE("api/v1/videos/{videoId}/like")
     suspend fun unlike(@Path("videoId") videoId: String): Response<ApiEnvelope<VideoStatsDto>>
 
+    /** Compteurs de 1 à 50 vidéos en une requête ; les vidéos non prêtes sont omises. */
+    @GET("api/v1/videos/stats")
+    suspend fun videosStats(@Query("ids") ids: String): Response<ApiEnvelope<PageDto<VideoStatsDto>>>
+
     @GET("api/v1/videos/{videoId}/stats")
     suspend fun videoStats(@Path("videoId") videoId: String): Response<ApiEnvelope<VideoStatsDto>>
 

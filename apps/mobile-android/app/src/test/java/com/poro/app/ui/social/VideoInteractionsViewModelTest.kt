@@ -39,6 +39,34 @@ class VideoInteractionsViewModelTest {
     }
 
     @Test
+    fun `a feed page reads its counters in one request`() = runTest(main.dispatcher) {
+        social.batchStats = listOf(fallback.copy(videoId = "v1", likedByMe = true), fallback.copy(videoId = "v2"))
+        val vm = VideoInteractionsViewModel(social)
+
+        vm.prefetch(listOf("v1", "v2"))
+        runCurrent()
+        vm.onShown("v1")
+        vm.onShown("v2")
+        runCurrent()
+
+        assertEquals(listOf("batch:v1,v2"), social.calls)
+        assertTrue(vm.state.value.stats.getValue("v1").likedByMe)
+    }
+
+    @Test
+    fun `a failed batch falls back to one request per shown video`() = runTest(main.dispatcher) {
+        social.batchStats = null
+        val vm = VideoInteractionsViewModel(social)
+
+        vm.prefetch(listOf("v1", "v2"))
+        runCurrent()
+        vm.onShown("v1")
+        runCurrent()
+
+        assertEquals(listOf("batch:v1,v2", "stats:v1"), social.calls)
+    }
+
+    @Test
     fun `a like shows at once and the server answer wins`() = runTest(main.dispatcher) {
         social.likeResults += ApiResult.Success(fallback.copy(likes = 15, likedByMe = true))
         val vm = VideoInteractionsViewModel(social)

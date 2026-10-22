@@ -34,8 +34,10 @@ import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.core.format.Formats
 import com.poro.app.data.social.CommentDto
+import com.poro.app.data.user.ProfileDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
+import com.poro.app.ui.common.displayNameOf
 
 /** Actions de la feuille des commentaires, transmises par l'écran qui l'ouvre. */
 class CommentsActions(
@@ -65,7 +67,7 @@ fun CommentsSheet(state: CommentsUiState, actions: CommentsActions, onDismiss: (
                     item { Text(stringResource(R.string.comments_empty), modifier = Modifier.padding(16.dp)) }
                 }
                 items(state.comments, key = { it.id }) { comment ->
-                    CommentRow(comment, state.myUserId, actions)
+                    CommentRow(comment, state.myUserId, state.authors, actions)
                     val replies = state.replies[comment.id]
                     if (comment.repliesCount > 0) {
                         TextButton(
@@ -82,7 +84,7 @@ fun CommentsSheet(state: CommentsUiState, actions: CommentsActions, onDismiss: (
                         }
                     }
                     if (replies?.expanded == true) {
-                        replies.items.forEach { reply -> CommentRow(reply, state.myUserId, actions, Modifier.padding(start = 40.dp)) }
+                        replies.items.forEach { reply -> CommentRow(reply, state.myUserId, state.authors, actions, Modifier.padding(start = 40.dp)) }
                         if (replies.loading) CircularProgressIndicator(Modifier.padding(start = 56.dp))
                         if (replies.nextCursor != null && !replies.loading) {
                             TextButton(onClick = { actions.onLoadMoreReplies(comment.id) }, modifier = Modifier.padding(start = 56.dp)) {
@@ -123,12 +125,23 @@ fun CommentsSheet(state: CommentsUiState, actions: CommentsActions, onDismiss: (
 }
 
 @Composable
-private fun CommentRow(comment: CommentDto, myUserId: String?, actions: CommentsActions, modifier: Modifier = Modifier) {
+private fun CommentRow(
+    comment: CommentDto,
+    myUserId: String?,
+    authors: Map<String, ProfileDto>,
+    actions: CommentsActions,
+    modifier: Modifier = Modifier,
+) {
     val mine = comment.userId != null && comment.userId == myUserId
-    // Le service social ne renvoie que l'identifiant de l'auteur : pas de nom à afficher sauf pour soi.
-    val author = stringResource(if (mine) R.string.comments_you else R.string.member_fallback)
+    // Profil lu par lot ; avant sa réponse, ou pour un compte supprimé : « Membre Poro ».
+    val profile = comment.userId?.let { authors[it] }
+    val author = when {
+        mine -> stringResource(R.string.comments_you)
+        profile != null && (profile.displayName != null || profile.username != null) -> displayNameOf(profile.displayName, profile.username)
+        else -> stringResource(R.string.member_fallback)
+    }
     Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Avatar(url = null, name = author, size = 32.dp)
+        Avatar(url = profile?.avatarUrl, name = author, size = 32.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 "$author · ${Formats.relative(comment.createdAt, System.currentTimeMillis())}" +

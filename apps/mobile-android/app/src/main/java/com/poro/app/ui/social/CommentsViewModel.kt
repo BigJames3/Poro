@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.poro.app.core.network.ApiResult
 import com.poro.app.data.social.CommentDto
 import com.poro.app.data.social.SocialRepository
+import com.poro.app.data.user.ProfileDto
 import com.poro.app.data.user.ProfileRepository
 import com.poro.app.ui.auth.ErrorMessage
 import com.poro.app.ui.auth.toErrorMessage
@@ -37,6 +38,8 @@ data class CommentsUiState(
     val posting: Boolean = false,
     /** Identifiant du compte connecté : ses commentaires peuvent être supprimés. */
     val myUserId: String? = null,
+    /** Profils publics des auteurs, lus par lot ; un auteur absent s'affiche « Membre Poro ». */
+    val authors: Map<String, ProfileDto> = emptyMap(),
     val error: ErrorMessage? = null,
 ) {
     val canPost: Boolean get() = draft.isNotBlank() && draft.trim().length <= MAX_LENGTH && !posting
@@ -77,13 +80,16 @@ class CommentsViewModel(
         _state.update { it.copy(loading = true, started = true, error = null) }
         viewModelScope.launch {
             when (val result = social.comments(videoId, current.nextCursor)) {
-                is ApiResult.Success -> _state.update { state ->
-                    val known = state.comments.mapTo(HashSet()) { it.id }
-                    state.copy(
-                        comments = state.comments + result.data.items.filter { it.id !in known },
-                        nextCursor = result.data.nextCursor,
-                        loading = false,
-                    )
+                is ApiResult.Success -> {
+                    _state.update { state ->
+                        val known = state.comments.mapTo(HashSet()) { it.id }
+                        state.copy(
+                            comments = state.comments + result.data.items.filter { it.id !in known },
+                            nextCursor = result.data.nextCursor,
+                            loading = false,
+                        )
+                    }
+                    resolveAuthors(result.data.items)
                 }
                 else -> _state.update { it.copy(loading = false, error = result.toErrorMessage()) }
             }
@@ -117,7 +123,22 @@ class CommentsViewModel(
                     current.copy(loading = false)
                 },
             )
-            if (result !is ApiResult.Success) _state.update { it.copy(error = result.toErrorMessage()) }
+            if (result is ApiResult.Success) resolveAuthors(result.data.items) else _state.update { it.copy(error = result.toErrorMessage()) }
+        }
+    }
+
+    private val requestedAuthors = HashSet<String>()
+
+    /**
+     * Lit en une requête les profils des auteurs encore inconnus. Un échec n'est pas affiché :
+     * les commentaires restent lisibles avec « Membre Poro », et une page suivante réessaiera.
+     */
+    private suspend fun resolveAuthors(comments: List<CommentDto>) {
+        val missing = comments.mapNotNull { it.userId }.filter { requestedAuthors.add(it) }
+        if (missing.isEmpty()) return
+        when (val result = profiles.profiles(missing)) {
+            is ApiResult.Success -> _state.update { state -> state.copy(authors = state.authors + result.data.associateBy { it.userId }) }
+            else -> requestedAuthors.removeAll(missing.toSet())
         }
     }
 

@@ -9,6 +9,9 @@ enum class ShareChannel(val wire: String) { WhatsApp("whatsapp"), CopyLink("copy
 interface SocialRepository {
     suspend fun videoStats(videoId: String): ApiResult<VideoStatsDto>
 
+    /** Compteurs de plusieurs vidéos (50 au plus par requête, découpées ici). */
+    suspend fun videosStats(videoIds: List<String>): ApiResult<List<VideoStatsDto>>
+
     /** Pose ou retire le j'aime ; renvoie les compteurs à jour. */
     suspend fun setLiked(videoId: String, liked: Boolean): ApiResult<VideoStatsDto>
 
@@ -34,6 +37,18 @@ interface SocialRepository {
 
 class DefaultSocialRepository(private val api: SocialApi) : SocialRepository {
     override suspend fun videoStats(videoId: String) = apiCall { api.videoStats(videoId) }
+
+    override suspend fun videosStats(videoIds: List<String>): ApiResult<List<VideoStatsDto>> {
+        val all = ArrayList<VideoStatsDto>(videoIds.size)
+        for (chunk in videoIds.distinct().chunked(STATS_BATCH)) {
+            when (val result = apiCall { api.videosStats(chunk.joinToString(",")) }) {
+                is ApiResult.Success -> all += result.data.items
+                is ApiResult.Failure -> return result
+                is ApiResult.NetworkError -> return result
+            }
+        }
+        return ApiResult.Success(all)
+    }
 
     override suspend fun setLiked(videoId: String, liked: Boolean) =
         apiCall { if (liked) api.like(videoId) else api.unlike(videoId) }
@@ -62,5 +77,6 @@ class DefaultSocialRepository(private val api: SocialApi) : SocialRepository {
 
     private companion object {
         const val PAGE_SIZE = 20
+        const val STATS_BATCH = 50
     }
 }

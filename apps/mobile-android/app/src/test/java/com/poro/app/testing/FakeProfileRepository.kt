@@ -15,6 +15,14 @@ class FakeProfileRepository : ProfileRepository {
 
     override suspend fun me(): ApiResult<ProfileDto> = ApiResult.Success(profile)
 
+    /** Profils publics connus, par identifiant ; les autres sont omis comme par le serveur. */
+    val publicProfiles = mutableMapOf<String, ProfileDto>()
+
+    override suspend fun profiles(userIds: List<String>): ApiResult<List<ProfileDto>> {
+        calls += "profiles:" + userIds.joinToString(",")
+        return ApiResult.Success(userIds.mapNotNull { publicProfiles[it] })
+    }
+
     override suspend fun update(username: String?, displayName: String, bio: String): ApiResult<ProfileDto> {
         calls += "update:$username:$displayName:$bio"
         return updateResults.removeFirst()

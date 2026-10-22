@@ -20,6 +20,9 @@ interface ProfileRepository {
 
     suspend fun byUsername(username: String): ApiResult<ProfileDto>
 
+    /** Profils publics de plusieurs comptes (auteurs des commentaires), 100 par requête. */
+    suspend fun profiles(userIds: List<String>): ApiResult<List<ProfileDto>>
+
     /** Envoie l'image au stockage puis la fait valider (recadrée en 512×512, sans métadonnées). */
     suspend fun uploadAvatar(bytes: ByteArray, contentType: String): ApiResult<ProfileDto>
 
@@ -48,6 +51,18 @@ class DefaultProfileRepository(
         apiCall { api.usernameAvailability(username) }
 
     override suspend fun byUsername(username: String): ApiResult<ProfileDto> = apiCall { api.byUsername(username) }
+
+    override suspend fun profiles(userIds: List<String>): ApiResult<List<ProfileDto>> {
+        val all = ArrayList<ProfileDto>(userIds.size)
+        for (chunk in userIds.distinct().chunked(100)) {
+            when (val result = apiCall { api.profiles(chunk.joinToString(",")) }) {
+                is ApiResult.Success -> all += result.data.items
+                is ApiResult.Failure -> return result
+                is ApiResult.NetworkError -> return result
+            }
+        }
+        return ApiResult.Success(all)
+    }
 
     override suspend fun uploadAvatar(bytes: ByteArray, contentType: String): ApiResult<ProfileDto> {
         val form = when (val result = apiCall { api.avatarUploadUrl(ImageUploadRequest(contentType)) }) {

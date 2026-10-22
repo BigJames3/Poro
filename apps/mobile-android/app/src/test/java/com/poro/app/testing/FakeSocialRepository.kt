@@ -26,6 +26,14 @@ class FakeSocialRepository : SocialRepository {
         return ApiResult.Success(stats)
     }
 
+    /** null : échec réseau de la lecture groupée. */
+    var batchStats: List<VideoStatsDto>? = emptyList()
+
+    override suspend fun videosStats(videoIds: List<String>): ApiResult<List<VideoStatsDto>> {
+        calls += "batch:" + videoIds.joinToString(",")
+        return batchStats?.let { ApiResult.Success(it) } ?: ApiResult.NetworkError(java.io.IOException("offline"))
+    }
+
     override suspend fun setLiked(videoId: String, liked: Boolean): ApiResult<VideoStatsDto> {
         calls += "like:$videoId:$liked"
         return likeResults.removeFirst()

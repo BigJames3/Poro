@@ -50,6 +50,7 @@ import com.poro.app.ui.profile.profileGraph
 import com.poro.app.ui.search.searchGraph
 import com.poro.app.ui.shop.shopGraph
 import com.poro.app.ui.social.MyFollowCounts
+import com.poro.app.ui.social.PrefetchVideoStats
 import com.poro.app.ui.social.SocialVideoActions
 import com.poro.app.ui.social.socialGraph
 import com.poro.app.ui.upload.MyVideos
@@ -147,6 +148,7 @@ private fun PoroNavGraph(
                 },
                 videoActions = { video -> SocialVideoActions(nav, video.id, video.title, VideoStatsDto(video.id), ownerId = video.userId.ifEmpty { null }) },
                 feedTopEnd = { FeedNotificationBell(nav) },
+                onFeedItems = { items -> PrefetchVideoStats(nav, items.map { it.videoId }) },
             )
             searchGraph(nav)
             notificationGraph(nav, onOpenOrder = { orderId, asSeller -> nav.controller.navigate(OrderRoute(orderId, asSeller)) })

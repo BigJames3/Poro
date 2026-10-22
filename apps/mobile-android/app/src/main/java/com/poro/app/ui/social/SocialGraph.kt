@@ -132,6 +132,13 @@ private fun CommentsHost(nav: AppNav, videoId: String, onCountChanged: (Int) -> 
     reportedComment?.let { id -> ReportHost(nav, ReportTarget(ReportTargetType.Comment, id), onDismiss = { reportedComment = null }) }
 }
 
+/** Précharge en une requête les compteurs des vidéos d'une page du fil (même ViewModel que les actions). */
+@Composable
+fun PrefetchVideoStats(nav: AppNav, videoIds: List<String>) {
+    val vm = poroViewModel { VideoInteractionsViewModel(nav.container.socialRepository) }
+    LaunchedEffect(videoIds) { vm.prefetch(videoIds) }
+}
+
 /** Abonnés et abonnements de son propre compte, sur l'onglet Profil. */
 @Composable
 fun MyFollowCounts(nav: AppNav, userId: String) {
