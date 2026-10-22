@@ -134,11 +134,17 @@ private fun VideoPager(
     // La liste s'allonge pendant le défilement : l'effet doit lire la version courante.
     val currentItems by rememberUpdatedState(items)
     val currentOnItemShown by rememberUpdatedState(onItemShown)
-    // La page posée (pas celle en cours de glissement) décide de la vidéo lue.
+    // La page posée (pas celle en cours de glissement) décide de la vidéo lue ; la suivante est
+    // préparée ensuite, dans le même flux, pour ne jamais écraser celle qui va être lue.
     LaunchedEffect(pager) {
-        snapshotFlow { pager.settledPage }.collect { page ->
-            currentOnItemShown(page)
-            currentItems.getOrNull(page)?.hlsUrl?.let(player::play)
+        var shownPage = -1
+        snapshotFlow { pager.settledPage to currentItems.getOrNull(pager.settledPage + 1)?.hlsUrl }.collect { (page, nextUrl) ->
+            if (page != shownPage) {
+                shownPage = page
+                currentOnItemShown(page)
+                currentItems.getOrNull(page)?.hlsUrl?.let(player::play)
+            }
+            player.preload(nextUrl)
         }
     }
     VerticalPager(state = pager, key = { items[it].videoId }, modifier = Modifier.fillMaxSize()) { page ->

@@ -65,7 +65,7 @@ Ordre proposé : **L0 → L1 → L2 → L3**, en parallèle des décisions backe
 
 État au 2026-10-22 (thème exclu à la demande du propriétaire, en attente de DS1) : noms d'auteur
 des commentaires, compteurs du fil par lot et envoi vidéo par WorkManager **réalisés** ;
-préchargement de la lecture vidéo non commencé ; push FCM bloqué (aucun projet Firebase).
+préchargement de la vidéo suivante **réalisé** (second lecteur, tampon plafonné à 15 s) ; push FCM bloqué (aucun projet Firebase).
 Limite connue de l'envoi : sur Android 13+, la notification de progression n'est visible que si
 l'utilisateur a accordé la permission de notifications, qui n'est pas encore demandée.
 
