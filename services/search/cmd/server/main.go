@@ -145,7 +145,7 @@ func run() error {
 		}),
 		Metrics: m.Handler(),
 		JWT:     jwt,
-		Limiter: redis,
+		Limiter: middleware.NewLimiter(redis),
 	})
 
 	var consumers sync.WaitGroup

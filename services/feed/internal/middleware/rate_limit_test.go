@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/poro/feed/internal/config"
+
+	"github.com/poro/shared-go/ratelimit/ratelimittest"
 )
 
 func TestNewRedisStorageRejectsBadPort(t *testing.T) {
@@ -16,8 +18,9 @@ func TestNewRedisStorageRejectsBadPort(t *testing.T) {
 }
 
 func TestGeneralLimit(t *testing.T) {
+	limiter, _ := ratelimittest.New(t)
 	app := fiber.New()
-	app.Get("/", GeneralLimit(nil), func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
+	app.Get("/", GeneralLimit(limiter), func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
 	for range generalLimit {
 		res, err := app.Test(httptest.NewRequest("GET", "/", nil))
 		require.NoError(t, err)

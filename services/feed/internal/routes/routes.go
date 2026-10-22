@@ -6,6 +6,7 @@ import (
 
 	"github.com/poro/shared-go/health"
 	"github.com/poro/shared-go/jwtauth"
+	"github.com/poro/shared-go/ratelimit"
 
 	"github.com/poro/feed/internal/handler"
 	"github.com/poro/feed/internal/middleware"
@@ -17,7 +18,7 @@ type Dependencies struct {
 	Health  *health.Handler
 	Metrics fiber.Handler
 	JWT     *jwtauth.Verifier
-	Limiter fiber.Storage
+	Limiter *ratelimit.Limiter
 }
 
 // Register mounts the probes (at the root and under /api/v1), the metrics and

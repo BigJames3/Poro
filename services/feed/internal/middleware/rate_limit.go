@@ -4,13 +4,11 @@ package middleware
 import (
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/limiter"
 	redisstore "github.com/gofiber/storage/redis/v3"
 
-	"github.com/poro/shared-go/jwtauth"
+	"github.com/poro/shared-go/ratelimit"
 
 	"github.com/poro/feed/internal/config"
 )
@@ -34,21 +32,17 @@ func NewRedisStorage(cfg *config.Config) (*redisstore.Storage, error) {
 	}), nil
 }
 
+// keyPrefix changed from feed:rl: so old Fiber msgpack counters are never INCR'd.
+const keyPrefix = "feed:rl:v2:"
+
+// NewLimiter returns the fail-closed limiter of the feed API.
+func NewLimiter(store *redisstore.Storage) *ratelimit.Limiter {
+	return ratelimit.New(store.Conn(), keyPrefix)
+}
+
 // GeneralLimit counts per user when a token was verified, per IP otherwise.
-// A rejected request gets 429 rate_limited and a Retry-After header.
-func GeneralLimit(store fiber.Storage) fiber.Handler {
-	return limiter.New(limiter.Config{
-		Max:        generalLimit,
-		Expiration: time.Minute,
-		Storage:    store,
-		KeyGenerator: func(c *fiber.Ctx) string {
-			if claims, ok := jwtauth.ClaimsFrom(c); ok {
-				return "feed:rl:" + claims.UserID.String()
-			}
-			return "feed:rl:" + c.IP()
-		},
-		LimitReached: func(*fiber.Ctx) error {
-			return fiber.NewError(fiber.StatusTooManyRequests, "too many requests")
-		},
-	})
+// A rejected request gets 429 rate_limited and a Retry-After header; a Redis
+// failure gets 503.
+func GeneralLimit(l *ratelimit.Limiter) fiber.Handler {
+	return l.Handler("general", generalLimit, ratelimit.ByUserOrIP)
 }

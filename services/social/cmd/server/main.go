@@ -143,7 +143,7 @@ func run() error {
 		}),
 		Metrics: m.Handler(),
 		JWT:     jwt,
-		Limiter: limiter,
+		Limiter: middleware.NewLimiter(limiter),
 	})
 
 	consumerDone := make(chan struct{})
