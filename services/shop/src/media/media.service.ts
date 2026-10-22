@@ -150,6 +150,40 @@ export class MediaService {
     await this.removePrefix(this.uploadBucket, `${UPLOAD_PREFIX}/${ownerId}/`);
   }
 
+  /**
+   * Deletes the originals uploaded before cutoff and never confirmed, of every
+   * owner, and returns how many. The upload form expires after
+   * IMAGE_UPLOAD_TTL_SECONDS, so a cutoff hours back never races a confirmation.
+   */
+  async purgeAbandonedUploads(cutoff: Date): Promise<number> {
+    let purged = 0;
+    let token: string | undefined;
+    do {
+      const page = await this.s3.send(
+        new ListObjectsV2Command({
+          Bucket: this.uploadBucket,
+          Prefix: `${UPLOAD_PREFIX}/`,
+          ContinuationToken: token,
+        }),
+      );
+      const keys = (page.Contents ?? []).flatMap((object) =>
+        object.Key !== undefined &&
+        object.LastModified !== undefined &&
+        object.LastModified < cutoff
+          ? [object.Key]
+          : [],
+      );
+      await Promise.all(
+        keys.map((key) =>
+          this.s3.send(new DeleteObjectCommand({ Bucket: this.uploadBucket, Key: key })),
+        ),
+      );
+      purged += keys.length;
+      token = page.IsTruncated === true ? page.NextContinuationToken : undefined;
+    } while (token !== undefined);
+    return purged;
+  }
+
   /** Lists then deletes page by page; deleting what is listed keeps later pages valid. */
   private async removePrefix(bucket: string, prefix: string): Promise<void> {
     let token: string | undefined;

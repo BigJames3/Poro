@@ -10,6 +10,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { AuthGuard } from './auth/auth.guard';
 import { TokenVerifier } from './auth/token-verifier';
 import { AvatarService, S3_CLIENT, S3_PRESIGN_CLIENT, s3ClientFor } from './avatars/avatar.service';
+import { UploadSweeper } from './avatars/upload-sweeper';
 import { EnvelopeInterceptor } from './common/envelope.interceptor';
 import { HttpExceptionFilter } from './common/http-exception.filter';
 import { PoroRequest, requestIdOf } from './common/request';
@@ -97,6 +98,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
     MetricsService,
     TokenVerifier,
     AvatarService,
+    UploadSweeper,
     ProfilesService,
     UserCreatedConsumer,
     AccountErasureConsumer,

@@ -17,6 +17,7 @@ import { PoroRequest, requestIdOf } from './common/request';
 import { appConfig, type AppConfigType } from './config/app.config';
 import { HealthController } from './health/health.controller';
 import { MediaService, S3_CLIENT, S3_PRESIGN_CLIENT, s3ClientFor } from './media/media.service';
+import { UploadSweeper } from './media/upload-sweeper';
 import { MetricsController, MetricsService } from './metrics/metrics';
 import { PrismaService } from './prisma/prisma.service';
 import { ProductsController } from './products/products.controller';
@@ -107,6 +108,7 @@ class AccountThrottlerGuard extends ThrottlerGuard {
     MetricsService,
     TokenVerifier,
     MediaService,
+    UploadSweeper,
     ShopsService,
     ProductsService,
     StockService,
