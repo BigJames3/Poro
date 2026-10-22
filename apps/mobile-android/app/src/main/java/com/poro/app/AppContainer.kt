@@ -33,7 +33,9 @@ import com.poro.app.data.user.DefaultProfileRepository
 import com.poro.app.data.user.ProfileRepository
 import com.poro.app.data.video.DefaultVideoRepository
 import com.poro.app.data.video.UploadManager
+import com.poro.app.data.video.VideoUploadClient
 import com.poro.app.data.video.VideoUploader
+import com.poro.app.data.video.WorkManagerUploadScheduler
 import com.poro.app.data.video.VideoRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -97,8 +99,11 @@ class AppContainer(context: Context) {
 
     val orderRepository: OrderRepository = DefaultOrderRepository(network.api())
 
+    /** Envoi d'une vidéo, exécuté par le worker WorkManager. */
+    val videoUploadClient: VideoUploadClient = VideoUploader(network.api(), uploader, mediaReader)
+
     val uploadManager = UploadManager(
-        client = VideoUploader(network.api(), uploader, mediaReader),
+        scheduler = WorkManagerUploadScheduler(context),
         videos = videoRepository,
         scope = applicationScope,
     )

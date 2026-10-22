@@ -29,11 +29,12 @@ sealed interface UploadState {
 }
 
 /**
- * Publication de vidéos, à l'échelle de l'application : on peut quitter l'écran pendant l'envoi.
- * Limite connue : l'envoi ne survit pas à l'arrêt du processus (pas encore de WorkManager).
+ * Publication de vidéos, à l'échelle de l'application : on peut quitter l'écran, et avec
+ * WorkManager fermer l'app, pendant l'envoi. L'état est déduit du [scheduler], relu au redémarrage ;
+ * le suivi du transcodage, lui, reprend à l'ouverture de l'app.
  */
 class UploadManager(
-    private val client: VideoUploadClient,
+    private val scheduler: UploadScheduler,
     private val videos: VideoRepository,
     private val scope: CoroutineScope,
     private val pollDelaysMs: List<Long> = listOf(5_000L, 10_000L, 20_000L, 30_000L) + List(26) { 60_000L },
@@ -41,45 +42,81 @@ class UploadManager(
     private val _state = MutableStateFlow<UploadState>(UploadState.Idle)
     val state: StateFlow<UploadState> = _state.asStateFlow()
 
-    private var job: Job? = null
+    private var processing: Job? = null
+    private var followedVideoId: String? = null
+
+    /** Résultat affiché en dernier, et celui que l'utilisateur a fermé (à ne pas réafficher). */
+    private var shownUploadId: String? = null
+    private var dismissedUploadId: String? = null
 
     val isBusy: Boolean get() = _state.value is UploadState.Uploading
+
+    init {
+        scope.launch { scheduler.upload.collect(::onScheduled) }
+    }
 
     /** Démarre l'envoi ; refusé (false) si un autre envoi est en cours. */
     fun start(file: LocalMedia, title: String, description: String?): Boolean {
         if (isBusy) return false
-        job?.cancel()
+        stopFollowing()
         _state.value = UploadState.Uploading(title, 0, file.sizeBytes)
-        job = scope.launch {
-            val result = client.upload(file, title, description) { sent, total ->
-                _state.value = UploadState.Uploading(title, sent, total)
-            }
-            when (result) {
-                is ApiResult.Success -> followProcessing(result.data)
-                is ApiResult.Failure -> _state.value = UploadState.Failed(result)
-                is ApiResult.NetworkError -> _state.value = UploadState.Failed(result)
-            }
-        }
+        scheduler.enqueue(file, title, description)
         return true
     }
 
     /** Abandonne l'envoi en cours (les parties envoyées sont annulées côté serveur). */
     fun cancel() {
-        job?.cancel()
+        stopFollowing()
+        scheduler.cancel()
         _state.value = UploadState.Idle
     }
 
     /** L'utilisateur a pris connaissance du résultat : retour à l'état initial. */
     fun dismiss() {
-        if (!isBusy) {
-            job?.cancel()
-            _state.value = UploadState.Idle
+        if (isBusy) return
+        stopFollowing()
+        // WorkManager peut réémettre l'envoi terminé avant de l'oublier : on l'ignorera.
+        dismissedUploadId = shownUploadId
+        scheduler.clear()
+        _state.value = UploadState.Idle
+    }
+
+    private fun onScheduled(upload: ScheduledUpload) {
+        val uploadId = when (upload) {
+            is ScheduledUpload.Succeeded -> upload.uploadId
+            is ScheduledUpload.Failed -> upload.uploadId
+            else -> null
         }
+        if (uploadId != null && uploadId == dismissedUploadId) return
+        shownUploadId = uploadId
+        when (upload) {
+            // Rien de planifié : on garde un résultat affiché (Processing, Finished) jusqu'à sa fermeture.
+            ScheduledUpload.None -> if (_state.value is UploadState.Uploading) _state.value = UploadState.Idle
+            is ScheduledUpload.Running -> {
+                stopFollowing()
+                _state.value = UploadState.Uploading(upload.title, upload.sentBytes, upload.totalBytes)
+            }
+            is ScheduledUpload.Failed -> {
+                stopFollowing()
+                _state.value = UploadState.Failed(upload.failure)
+            }
+            is ScheduledUpload.Succeeded -> if (followedVideoId != upload.videoId) {
+                followedVideoId = upload.videoId
+                val video = VideoDto(id = upload.videoId, title = upload.title, status = VideoDto.STATUS_PROCESSING)
+                _state.value = UploadState.Processing(video)
+                processing = scope.launch { followProcessing(video) }
+            }
+        }
+    }
+
+    private fun stopFollowing() {
+        processing?.cancel()
+        processing = null
+        followedVideoId = null
     }
 
     /** Interroge la vidéo avec un intervalle croissant jusqu'à `ready` ou `failed` (environ 30 min). */
     private suspend fun followProcessing(video: VideoDto) {
-        _state.value = UploadState.Processing(video)
         for (wait in pollDelaysMs) {
             delay(wait)
             val current = (videos.video(video.id) as? ApiResult.Success)?.data ?: continue

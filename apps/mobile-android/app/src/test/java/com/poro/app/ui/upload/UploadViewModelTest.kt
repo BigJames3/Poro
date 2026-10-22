@@ -6,6 +6,7 @@ import com.poro.app.core.media.LocalMedia
 import com.poro.app.core.media.LocalMediaReader
 import com.poro.app.core.network.ApiResult
 import com.poro.app.core.network.PageDto
+import com.poro.app.data.video.InProcessUploadScheduler
 import com.poro.app.data.video.UploadManager
 import com.poro.app.data.video.UploadState
 import com.poro.app.data.video.VideoDto
@@ -51,7 +52,7 @@ class UploadViewModelTest {
             started += "${file.uri}:$title:$description"
             ApiResult.Success(VideoDto(id = "v1", status = VideoDto.STATUS_PROCESSING))
         }
-        return UploadViewModel(UploadManager(client, videos, backgroundScope, pollDelaysMs = emptyList()), reader, SavedStateHandle())
+        return UploadViewModel(UploadManager(InProcessUploadScheduler(client, backgroundScope), videos, backgroundScope, pollDelaysMs = emptyList()), reader, SavedStateHandle())
     }
 
     @Test
