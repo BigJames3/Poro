@@ -5,8 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.poro.app.core.network.ApiResult
 import com.poro.app.data.search.HashtagHit
+import com.poro.app.data.search.ProductHit
 import com.poro.app.data.search.SearchPage
 import com.poro.app.data.search.SearchRepository
+import com.poro.app.data.search.ShopHit
 import com.poro.app.data.search.Suggestions
 import com.poro.app.data.search.UserHit
 import com.poro.app.data.search.VideoHit
@@ -20,7 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class SearchTab { Videos, Users, Hashtags }
+enum class SearchTab { Videos, Users, Hashtags, Products, Shops }
 
 /** Résultats d'un onglet pour la requête soumise. */
 data class Results<T>(
@@ -43,6 +45,8 @@ data class SearchUiState(
     val videos: Results<VideoHit> = Results(),
     val users: Results<UserHit> = Results(),
     val hashtags: Results<HashtagHit> = Results(),
+    val products: Results<ProductHit> = Results(),
+    val shops: Results<ShopHit> = Results(),
 )
 
 /**
@@ -54,7 +58,13 @@ class SearchViewModel(
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(SearchUiState(query = savedState[KEY_QUERY] ?: ""))
+    private val _state = MutableStateFlow(
+        SearchUiState(
+            query = savedState[KEY_QUERY] ?: "",
+            // Ouvert depuis l'onglet Boutique : la recherche commence sur les produits.
+            tab = savedState.get<String>(KEY_TAB)?.let { name -> SearchTab.entries.firstOrNull { it.name == name } } ?: SearchTab.Videos,
+        ),
+    )
     val state: StateFlow<SearchUiState> = _state.asStateFlow()
 
     private var suggestJob: Job? = null
@@ -80,7 +90,7 @@ class SearchViewModel(
         }
     }
 
-    /** Lance la recherche ; une requête « @pseudo » ouvre l'onglet Comptes. */
+    /** Lance la recherche ; « @… » ouvre l'onglet Comptes, ou Boutiques depuis le catalogue. */
     fun submit(query: String = _state.value.query) {
         val q = query.trim()
         if (q.isEmpty()) return
@@ -94,7 +104,14 @@ class SearchViewModel(
                 videos = Results(),
                 users = Results(),
                 hashtags = Results(),
-                tab = if (q.startsWith("@")) SearchTab.Users else it.tab,
+                products = Results(),
+                shops = Results(),
+                tab = when {
+                    !q.startsWith("@") -> it.tab
+                    // Dans le catalogue, « @… » est l'identifiant d'une boutique.
+                    it.tab == SearchTab.Products || it.tab == SearchTab.Shops -> SearchTab.Shops
+                    else -> SearchTab.Users
+                },
             )
         }
         loadMore(_state.value.tab)
@@ -106,6 +123,8 @@ class SearchViewModel(
             SearchTab.Videos -> _state.value.videos.started
             SearchTab.Users -> _state.value.users.started
             SearchTab.Hashtags -> _state.value.hashtags.started
+            SearchTab.Products -> _state.value.products.started
+            SearchTab.Shops -> _state.value.shops.started
         }
         if (!started) loadMore(tab)
     }
@@ -116,6 +135,8 @@ class SearchViewModel(
             SearchTab.Videos -> page(q, _state.value.videos, { search.videos(q, it) }) { s, r -> s.copy(videos = r) }
             SearchTab.Users -> page(q, _state.value.users, { search.users(q, it) }) { s, r -> s.copy(users = r) }
             SearchTab.Hashtags -> page(q, _state.value.hashtags, { search.hashtags(q, it) }) { s, r -> s.copy(hashtags = r) }
+            SearchTab.Products -> page(q, _state.value.products, { search.products(q, it) }) { s, r -> s.copy(products = r) }
+            SearchTab.Shops -> page(q, _state.value.shops, { search.shops(q, it) }) { s, r -> s.copy(shops = r) }
         }
     }
 
@@ -147,6 +168,8 @@ class SearchViewModel(
     private companion object {
         const val KEY_QUERY = "query"
         const val KEY_SUBMITTED = "submitted"
+        /** Argument de [com.poro.app.ui.SearchRoute]. */
+        const val KEY_TAB = "tab"
         const val MAX_QUERY = 100
         const val SUGGEST_DELAY_MS = 300L
     }

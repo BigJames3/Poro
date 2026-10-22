@@ -217,6 +217,12 @@ func TestBadEventsArePermanent(t *testing.T) {
 		"like bad owner":     mk(events.TypeSocialLikeCreated, events.SocialLikeCreatedV1{VideoID: uuid.NewString(), VideoOwnerID: "x"}),
 		"like json":          withData(mk(events.TypeSocialLikeCreated, struct{}{}), `{"video_id": 7}`),
 		"unknown type":       mk(events.TypeVideoUploaded, events.VideoUploadedV1{}),
+		"shop no time":       mk(events.TypeShopShopUpdated, events.ShopShopUpdatedV1{ShopID: uuid.NewString(), OwnerID: uuid.NewString(), Name: "a", Handle: "b", CountryCode: "CI", Currency: "XOF", Status: "active"}),
+		"shop no country":    mk(events.TypeShopShopUpdated, events.ShopShopUpdatedV1{ShopID: uuid.NewString(), OwnerID: uuid.NewString(), Name: "a", Handle: "b", Currency: "XOF", Status: "active", UpdatedAt: time.Now()}),
+		"product bad shop":   mk(events.TypeShopProductUpdated, events.ShopProductUpdatedV1{ProductID: uuid.NewString(), ShopID: "x", OwnerID: uuid.NewString(), Title: "t", Currency: "XOF", Status: "active", UpdatedAt: time.Now()}),
+		"product no title":   mk(events.TypeShopProductUpdated, events.ShopProductUpdatedV1{ProductID: uuid.NewString(), ShopID: uuid.NewString(), OwnerID: uuid.NewString(), Currency: "XOF", Status: "active", UpdatedAt: time.Now()}),
+		"product neg price":  mk(events.TypeShopProductUpdated, events.ShopProductUpdatedV1{ProductID: uuid.NewString(), ShopID: uuid.NewString(), OwnerID: uuid.NewString(), Title: "t", Currency: "XOF", Status: "active", UpdatedAt: time.Now(), Variants: []events.ShopVariantV1{{Price: -1}}}),
+		"product deleted id": mk(events.TypeShopProductDeleted, events.ShopProductDeletedV1{ProductID: "x", ShopID: uuid.NewString(), OwnerID: uuid.NewString()}),
 	}
 	for name, env := range cases {
 		t.Run(name, func(t *testing.T) {

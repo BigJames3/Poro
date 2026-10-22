@@ -219,5 +219,101 @@ func EraseUser(ctx context.Context, db DBTX, userID uuid.UUID, at time.Time) err
 	if _, err := db.Exec(ctx, `DELETE FROM users WHERE user_id = $1`, userID); err != nil {
 		return fmt.Errorf("delete user: %w", err)
 	}
+	if _, err := db.Exec(ctx, `DELETE FROM products WHERE owner_id = $1`, userID); err != nil {
+		return fmt.Errorf("delete products: %w", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM shops WHERE owner_id = $1`, userID); err != nil {
+		return fmt.Errorf("delete shops: %w", err)
+	}
+	return nil
+}
+
+// Shop is what poro.shop.shop.updated says about a shop.
+type Shop struct {
+	ShopID      uuid.UUID
+	OwnerID     uuid.UUID
+	Name        string
+	Handle      string
+	Description *string
+	LogoURL     *string
+	CountryCode string
+	Currency    string
+	Status      string
+	UpdatedAt   time.Time
+}
+
+// UpsertShop keeps the newest snapshot of a shop. A shop of an erased account
+// is never indexed again.
+func UpsertShop(ctx context.Context, db DBTX, s Shop) error {
+	_, err := db.Exec(ctx, `
+		INSERT INTO shops (shop_id, owner_id, name, handle, description, logo_url, country_code, currency, status, updated_at)
+		SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+		WHERE NOT EXISTS (SELECT 1 FROM erased_users WHERE user_id = $2)
+		ON CONFLICT (shop_id) DO UPDATE SET
+			owner_id = EXCLUDED.owner_id, name = EXCLUDED.name, handle = EXCLUDED.handle,
+			description = EXCLUDED.description, logo_url = EXCLUDED.logo_url,
+			country_code = EXCLUDED.country_code, currency = EXCLUDED.currency,
+			status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+		WHERE shops.updated_at < EXCLUDED.updated_at`,
+		s.ShopID, s.OwnerID, s.Name, s.Handle, s.Description, s.LogoURL, s.CountryCode, s.Currency, s.Status, s.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("upsert shop: %w", err)
+	}
+	return nil
+}
+
+// Product is what poro.shop.product.updated says about a product.
+type Product struct {
+	ProductID   uuid.UUID
+	ShopID      uuid.UUID
+	OwnerID     uuid.UUID
+	Title       string
+	Description *string
+	Currency    string
+	Status      string
+	ImageURL    *string
+	MinPrice    *int64
+	InStock     bool
+	UpdatedAt   time.Time
+}
+
+// ProductDeleted marks a product removed for good: later snapshots never revive it.
+const ProductDeleted = "deleted"
+
+// UpsertProduct keeps the newest snapshot of a product, unless the product
+// was deleted or its owner erased.
+func UpsertProduct(ctx context.Context, db DBTX, p Product) error {
+	_, err := db.Exec(ctx, `
+		INSERT INTO products (product_id, shop_id, owner_id, title, description, currency, status,
+			image_url, min_price, in_stock, updated_at)
+		SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+		WHERE NOT EXISTS (SELECT 1 FROM erased_users WHERE user_id = $3)
+		ON CONFLICT (product_id) DO UPDATE SET
+			shop_id = EXCLUDED.shop_id, owner_id = EXCLUDED.owner_id, title = EXCLUDED.title,
+			description = EXCLUDED.description, currency = EXCLUDED.currency, status = EXCLUDED.status,
+			image_url = EXCLUDED.image_url, min_price = EXCLUDED.min_price, in_stock = EXCLUDED.in_stock,
+			updated_at = EXCLUDED.updated_at
+		WHERE products.updated_at < EXCLUDED.updated_at AND products.status <> '`+ProductDeleted+`'`,
+		p.ProductID, p.ShopID, p.OwnerID, p.Title, p.Description, p.Currency, p.Status,
+		p.ImageURL, p.MinPrice, p.InStock, p.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("upsert product: %w", err)
+	}
+	return nil
+}
+
+// DeleteProduct keeps a tombstone so that a late snapshot does not index the
+// product again; the tombstone holds no text.
+func DeleteProduct(ctx context.Context, db DBTX, productID, shopID, ownerID uuid.UUID, at time.Time) error {
+	_, err := db.Exec(ctx, `
+		INSERT INTO products (product_id, shop_id, owner_id, title, currency, status, updated_at)
+		VALUES ($1, $2, $3, '', 'XOF', '`+ProductDeleted+`', $4)
+		ON CONFLICT (product_id) DO UPDATE SET
+			title = '', description = NULL, image_url = NULL, min_price = NULL, in_stock = false,
+			status = '`+ProductDeleted+`', updated_at = greatest(products.updated_at, EXCLUDED.updated_at)`,
+		productID, shopID, ownerID, at)
+	if err != nil {
+		return fmt.Errorf("delete product: %w", err)
+	}
 	return nil
 }

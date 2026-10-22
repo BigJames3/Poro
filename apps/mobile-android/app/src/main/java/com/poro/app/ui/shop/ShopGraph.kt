@@ -18,9 +18,11 @@ import com.poro.app.ui.OrderRoute
 import com.poro.app.ui.OrdersRoute
 import com.poro.app.ui.ProductEditorRoute
 import com.poro.app.ui.ProductRoute
+import com.poro.app.ui.SearchRoute
 import com.poro.app.ui.ShopHomeRoute
 import com.poro.app.ui.ShopRoute
 import com.poro.app.ui.poroViewModel
+import com.poro.app.ui.search.SearchTab
 
 /** Un écran enfant a changé le catalogue du vendeur (produit créé, modifié ou supprimé). */
 const val RESULT_PRODUCTS_CHANGED = "products_changed"
@@ -46,6 +48,7 @@ fun NavGraphBuilder.shopGraph(nav: AppNav) {
             onCart = { nav.controller.navigate(CartRoute) },
             onOrders = { nav.controller.navigate(OrdersRoute()) },
             onMyShop = { nav.controller.navigate(MyShopRoute) },
+            onSearchCatalog = { nav.controller.navigate(SearchRoute(tab = SearchTab.Products.name)) },
         )
     }
     composable<ShopRoute> { entry ->
