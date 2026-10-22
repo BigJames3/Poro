@@ -31,6 +31,8 @@ func accountApp(t *testing.T, accounts service.AccountService, claims *service.T
 	app.Delete("/sessions/:id", h.RevokeSession)
 	app.Post("/me/delete", h.DeleteAccount)
 	app.Post("/me/delete/cancel", h.CancelDeletion)
+	app.Post("/admin/users/:id/suspend", h.SuspendAccount)
+	app.Post("/admin/users/:id/reinstate", h.ReinstateAccount)
 	return app
 }
 
@@ -166,6 +168,8 @@ type stubAccounts struct {
 	revokeOthers  func(context.Context, service.TokenClaims) (*dto.RevokeSessionsResponse, error)
 	deleteAccount func(context.Context, service.TokenClaims, dto.DeleteAccountRequest) (*dto.DeletionResponse, error)
 	cancel        func(context.Context, service.TokenClaims) (*dto.UserResponse, error)
+	suspend       func(context.Context, service.TokenClaims, uuid.UUID) (*dto.UserResponse, error)
+	reinstate     func(context.Context, service.TokenClaims, uuid.UUID) (*dto.UserResponse, error)
 	service.SessionRevoker
 }
 
@@ -183,4 +187,52 @@ func (s *stubAccounts) DeleteAccount(ctx context.Context, c service.TokenClaims,
 }
 func (s *stubAccounts) CancelDeletion(ctx context.Context, c service.TokenClaims) (*dto.UserResponse, error) {
 	return s.cancel(ctx, c)
+}
+func (s *stubAccounts) Suspend(ctx context.Context, c service.TokenClaims, id uuid.UUID) (*dto.UserResponse, error) {
+	return s.suspend(ctx, c, id)
+}
+func (s *stubAccounts) Reinstate(ctx context.Context, c service.TokenClaims, id uuid.UUID) (*dto.UserResponse, error) {
+	return s.reinstate(ctx, c, id)
+}
+
+func TestAdminAccountHandlers(t *testing.T) {
+	admin := &service.TokenClaims{UserID: mustUUID(t), Roles: []string{"ADMIN"}}
+	target := mustUUID(t)
+	var got []string
+	accounts := &stubAccounts{
+		suspend: func(_ context.Context, c service.TokenClaims, id uuid.UUID) (*dto.UserResponse, error) {
+			require.Equal(t, *admin, c)
+			got = append(got, "suspend "+id.String())
+			return &dto.UserResponse{ID: id.String(), Status: "SUSPENDED"}, nil
+		},
+		reinstate: func(_ context.Context, _ service.TokenClaims, id uuid.UUID) (*dto.UserResponse, error) {
+			got = append(got, "reinstate "+id.String())
+			return &dto.UserResponse{ID: id.String(), Status: "PENDING"}, nil
+		},
+	}
+	app := accountApp(t, accounts, admin)
+	resp := do(t, app, http.MethodPost, "/admin/users/"+target.String()+"/suspend", "", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp = do(t, app, http.MethodPost, "/admin/users/"+target.String()+"/reinstate", "", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, []string{"suspend " + target.String(), "reinstate " + target.String()}, got)
+
+	resp = do(t, app, http.MethodPost, "/admin/users/not-a-uuid/suspend", "", nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+
+	for err, status := range map[error]int{
+		service.ErrSuspensionForbidden: http.StatusForbidden,
+		service.ErrSelfSuspension:      http.StatusUnprocessableEntity,
+		service.ErrAccountNotFound:     http.StatusNotFound,
+	} {
+		accounts.suspend = func(context.Context, service.TokenClaims, uuid.UUID) (*dto.UserResponse, error) {
+			return nil, err
+		}
+		resp = do(t, app, http.MethodPost, "/admin/users/"+target.String()+"/suspend", "", nil)
+		require.Equal(t, status, resp.StatusCode, err.Error())
+	}
+
+	anonymous := accountApp(t, accounts, nil)
+	resp = do(t, anonymous, http.MethodPost, "/admin/users/"+target.String()+"/suspend", "", nil)
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

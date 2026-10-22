@@ -97,7 +97,7 @@ func (s *Videos) InitUpload(ctx context.Context, userID uuid.UUID, req dto.InitR
 	parts := make([]dto.PartURL, n)
 	for i := 0; i < n; i++ {
 		num := int32(i + 1)
-		url, err := s.store.PresignPart(ctx, key, uploadID, num)
+		url, err := s.store.PresignPart(ctx, key, uploadID, num, model.PartLength(req.SizeBytes, i+1))
 		if err != nil {
 			return nil, errInternal.WithCause(err)
 		}

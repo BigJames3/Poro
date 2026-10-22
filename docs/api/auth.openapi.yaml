@@ -14,6 +14,7 @@ tags:
   - name: email
   - name: session
   - name: account
+  - name: admin
   - name: platform
 paths:
   /api/v1/auth/otp/request:
@@ -423,6 +424,67 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/User" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/auth/admin/users/{id}/suspend:
+    post:
+      tags: [admin]
+      summary: Suspend an account everywhere (ADMIN or MODERATOR)
+      description: |
+        Marks the account SUSPENDED and revokes every session in the shared registry
+        (ADR-0016, ADR-0019): every service refuses its access tokens at once, and auth
+        refuses its sign-ins and refreshes (403 `account_blocked`). Idempotent; repeating
+        a call that failed half-way completes it. A MODERATOR may not target an ADMIN
+        or a MODERATOR. Each call is logged with the actor, the target and the time.
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Suspended account
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: "`forbidden`: the caller is neither ADMIN nor MODERATOR, or a MODERATOR targets an ADMIN or a MODERATOR"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: "`account_not_found`: unknown or deleted account"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: "`self_suspension`: an administrator cannot suspend their own account"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /api/v1/auth/admin/users/{id}/reinstate:
+    post:
+      tags: [admin]
+      summary: Lift a suspension (ADMIN or MODERATOR)
+      description: |
+        The account returns to PENDING; its next sign-in makes it ACTIVE. Idempotent.
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: "`forbidden`: the caller is neither ADMIN nor MODERATOR, or a MODERATOR targets an ADMIN or a MODERATOR"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: "`account_not_found`: unknown or deleted account"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /.well-known/jwks.json:
     get:
       tags: [platform]

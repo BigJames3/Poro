@@ -193,7 +193,11 @@ Les identifiants `PORO-xxx` sont stables : une tâche terminée garde le sien, e
   3. Plafond de taille par partie au moment de la présignature, si le stockage le permet.
 - **Critères d'acceptation** : après le délai, ni la ligne `uploading` ni le multipart ne subsistent.
 - **Tests** : repository et service avec SeaweedFS en testcontainer.
-- **État (2026-10-22, non commité)** : sous-tâche 1 faite pour la vidéo. Le service annule le multipart et supprime la ligne (suppression logique, pas de statut `abandoned` : la contrainte `videos_status_chk` l'interdirait sans migration). Avatar et boutique faits ensuite : les originaux jamais confirmés sont supprimés après 24 h par une tâche horaire (`UploadSweeper` dans user et shop). Restent les sous-tâches 2 (cycle de vie S3, filet de sécurité côté stockage) et 3.
+- **État (2026-10-22)** : **terminé** (sous réserve de la CI).
+  - Sous-tâche 1 : nettoyage applicatif horaire des envois vidéo, avatar et boutique de plus de 24 h (PR #58 et #60). Suppression logique de la ligne vidéo plutôt qu'un statut `abandoned`, que la contrainte `videos_status_chk` refuserait sans migration.
+  - Sous-tâche 2 : durée de vie d'un jour posée par le filer sur `poro-avatar-uploads` et `poro-shop-uploads` (`init.sh`), et service `seaweedfs-janitor` qui annule les multiparts inachevés de plus de 24 h. Testé par `infra/storage/tests/run.sh`. La règle de cycle de vie S3 n'est pas appliquée par SeaweedFS 4.45 sans mode `fastpath` : non utilisée.
+  - Sous-tâche 3 : longueur exacte de chaque partie vidéo signée dans l'URL présignée ; SeaweedFS refuse toute autre taille (403).
+  - Production (Backblaze B2) : règles documentées dans `docs/runbooks/storage.md`, à appliquer à la mise en place.
 - **Risques** : supprimer un upload lent mais légitime ; choisir un délai généreux.
 
 ### PORO-009 — Observabilité (plan P0-13 en attente de validation)
@@ -350,6 +354,10 @@ Les identifiants `PORO-xxx` sont stables : une tâche terminée garde le sien, e
 - **Domaine** : Commandes. **Priorité** : P1. **Estimation** : 0,5 j.
 - **Constat** : `OrdersService.act` ne vérifie pas le statut de la boutique.
 - **Critères d'acceptation** : une boutique suspendue reçoit 403 sur l'expédition et l'annulation vendeur, avec un test E2E. La règle sur les commandes en cours est à décider avec l'utilisateur.
+- **État (2026-10-22)** : **terminé** (sous réserve de la CI), voir [ADR-0019](../architecture/adr/0019-suspension-des-comptes-et-des-boutiques.md).
+  - Order : 403 `shop_suspended` sur l'expédition et l'annulation vendeur ; l'acheteur garde ses actions. Test E2E `refuses seller actions while the shop is suspended`.
+  - Étendu aux comptes : `POST /api/v1/auth/admin/users/{id}/suspend` et `/reinstate` (ADMIN, ou MODERATOR sur un compte qui n'est pas du personnel). La suspension révoque toutes les sessions dans le registre partagé : tous les services refusent le compte immédiatement.
+  - Annulation automatique des commandes non expédiées d'une boutique suspendue, avec le motif `shop_suspended` et un message à l'acheteur (ADR-0019, point 6).
 
 ### PORO-022 — Redemander l'accord de l'acheteur si le prix a changé
 

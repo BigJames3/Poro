@@ -304,6 +304,7 @@ paths:
     post:
       tags: [seller]
       summary: Mark a confirmed or paid order shipped
+      description: "403 `shop_suspended` while the shop is suspended by moderation (PORO-021)."
       requestBody:
         content:
           application/json:
@@ -314,6 +315,7 @@ paths:
                 tracking: { type: ["string", "null"], description: "Free text, 200 characters at most" }
       responses:
         "200": { $ref: "#/components/responses/Order" }
+        "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
   /api/v1/seller/orders/{orderId}/cancel:
@@ -321,8 +323,10 @@ paths:
     post:
       tags: [seller]
       summary: Cancel before shipping; a paid order is refunded
+      description: "403 `shop_suspended` while the shop is suspended by moderation (PORO-021); the buyer can still cancel."
       responses:
         "200": { $ref: "#/components/responses/Order" }
+        "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:

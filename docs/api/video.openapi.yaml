@@ -41,7 +41,10 @@ paths:
       summary: Init multipart upload
       description: |
         Creates a video in `uploading` and returns presigned PUT URLs for each
-        part (8 MiB). Max declared size 256 MiB. Title 1–100 runes, description
+        part (8 MiB). Each URL signs its part's exact length: `part_size` bytes,
+        the rest of `size_bytes` for the last part; storage refuses any other
+        length with 403. Upload URLs expire after 1 h; an upload left in
+        `uploading` for 24 h is aborted and deleted. Max declared size 256 MiB. Title 1–100 runes, description
         0–500 runes; control and format characters (Unicode Cc, Cf, including
         U+200D) are refused with `title_invalid` / `description_invalid`.
       requestBody:

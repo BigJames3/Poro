@@ -433,3 +433,92 @@ func (f *fakeExpiredCodes) DeleteExpired(_ context.Context, before time.Time) (i
 	}
 	return f.deleted, nil
 }
+
+func TestSuspendBlocksTheAccountEverywhere(t *testing.T) {
+	f := newAccountFixture(t)
+	ctx := context.Background()
+	user := f.addUser(t, &model.User{Phone: ptrTo("+2250707070707")})
+	first := f.refresh.seed(t, user.ID, "first")
+	second := f.refresh.seed(t, user.ID, "second")
+	admin := TokenClaims{UserID: mustID(t), Roles: []string{"ADMIN"}}
+
+	f.tokens.failRevoke = true
+	_, err := f.svc.Suspend(ctx, admin, user.ID)
+	require.Error(t, err, "a registry failure is reported")
+	f.tokens.failRevoke = false
+
+	res, err := f.svc.Suspend(ctx, admin, user.ID)
+	require.NoError(t, err, "repeating a half-done suspension completes it")
+	require.Equal(t, string(model.StatusSuspended), res.Status)
+	stored, err := f.users.GetByID(ctx, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.StatusSuspended, stored.Status)
+	require.ElementsMatch(t, []uuid.UUID{first.FamilyID, second.FamilyID}, f.tokens.revoked,
+		"every session enters the registry: no service accepts its access tokens any more")
+	require.NotNil(t, first.RevokedAt)
+	require.NotNil(t, second.RevokedAt)
+
+	reinstated, err := f.svc.Reinstate(ctx, admin, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, string(model.StatusPending), reinstated.Status, "the next sign-in activates it again")
+	again, err := f.svc.Reinstate(ctx, admin, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, string(model.StatusPending), again.Status, "reinstating twice changes nothing")
+}
+
+func TestSuspendRefusals(t *testing.T) {
+	f := newAccountFixture(t)
+	ctx := context.Background()
+	user := f.addUser(t, &model.User{Phone: ptrTo("+2250707070707")})
+	personal := TokenClaims{UserID: mustID(t), Roles: []string{"PERSONAL"}}
+	admin := TokenClaims{UserID: mustID(t), Roles: []string{"ADMIN"}}
+
+	_, err := f.svc.Suspend(ctx, personal, user.ID)
+	require.ErrorIs(t, err, ErrSuspensionForbidden)
+	_, err = f.svc.Reinstate(ctx, personal, user.ID)
+	require.ErrorIs(t, err, ErrSuspensionForbidden)
+	_, err = f.svc.Suspend(ctx, admin, admin.UserID)
+	require.ErrorIs(t, err, ErrSelfSuspension)
+	_, err = f.svc.Suspend(ctx, admin, mustID(t))
+	require.ErrorIs(t, err, ErrAccountNotFound)
+
+	deleted := f.addUser(t, &model.User{Phone: ptrTo("+2250808080808"), Status: model.StatusDeleted})
+	_, err = f.svc.Suspend(ctx, admin, deleted.ID)
+	require.ErrorIs(t, err, ErrAccountNotFound)
+
+	f.users.getByIDErr = errors.New("db down")
+	_, err = f.svc.Suspend(ctx, admin, user.ID)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, ErrAccountNotFound)
+	f.users.getByIDErr = nil
+	require.Equal(t, model.StatusActive, f.users.byID[user.ID].Status, "no refusal changes the account")
+}
+
+func TestModeratorsSuspendMembersButNotStaff(t *testing.T) {
+	f := newAccountFixture(t)
+	ctx := context.Background()
+	member := f.addUser(t, &model.User{Phone: ptrTo("+2250707070701")})
+	otherAdmin := f.addUser(t, &model.User{Phone: ptrTo("+2250707070702"), Roles: []model.UserRole{model.RoleAdmin}})
+	otherModerator := f.addUser(t, &model.User{Phone: ptrTo("+2250707070703"), Roles: []model.UserRole{model.RoleModerator}})
+	moderator := TokenClaims{UserID: mustID(t), Roles: []string{"MODERATOR"}}
+	admin := TokenClaims{UserID: mustID(t), Roles: []string{"ADMIN"}}
+
+	res, err := f.svc.Suspend(ctx, moderator, member.ID)
+	require.NoError(t, err)
+	require.Equal(t, string(model.StatusSuspended), res.Status)
+	res, err = f.svc.Reinstate(ctx, moderator, member.ID)
+	require.NoError(t, err)
+	require.Equal(t, string(model.StatusPending), res.Status)
+
+	for _, staff := range []*model.User{otherAdmin, otherModerator} {
+		_, err = f.svc.Suspend(ctx, moderator, staff.ID)
+		require.ErrorIs(t, err, ErrSuspensionForbidden, "a moderator never suspends staff")
+		_, err = f.svc.Reinstate(ctx, moderator, staff.ID)
+		require.ErrorIs(t, err, ErrSuspensionForbidden)
+		require.Equal(t, model.StatusActive, f.users.byID[staff.ID].Status)
+	}
+
+	res, err = f.svc.Suspend(ctx, admin, otherModerator.ID)
+	require.NoError(t, err, "an admin may suspend a moderator")
+	require.Equal(t, string(model.StatusSuspended), res.Status)
+}

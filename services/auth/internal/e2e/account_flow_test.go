@@ -20,6 +20,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -139,7 +140,7 @@ func startAuthAPI(t *testing.T) (*client, *mailbox, *miniredis.Miniredis) {
 		Accounts: users,
 		Limiter:  middleware.NewLimiter(rdb),
 	})
-	return &client{t: t, app: app}, mails, mr
+	return &client{t: t, app: app, pool: pool}, mails, mr
 }
 
 func TestEmailAccountLifecycle(t *testing.T) {
@@ -238,6 +239,8 @@ type client struct {
 	t   *testing.T
 	app *fiber.App
 	ip  string // sent as X-Forwarded-For when set
+	// pool lets a test change what the API offers no route for, such as roles.
+	pool *pgxpool.Pool
 }
 
 // call returns the status and the data object, or the error object on failure.

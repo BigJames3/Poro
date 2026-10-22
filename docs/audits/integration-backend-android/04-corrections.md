@@ -42,7 +42,7 @@ Aucun secret, aucune infrastructure ni donnée de production modifiés. Aucun co
 | P1 | `username: null` → 500 | TERMINÉ (B-05) |
 | P1 | Limiteurs ouverts si Redis tombe ; CGNAT | TERMINÉ (B-06) |
 | P1 | Envois bruts d'avatar et de boutique orphelins | TERMINÉ : `UploadSweeper` (user, shop), tests `upload-sweeper.spec.ts` |
-| P2 | Règle de cycle de vie S3 (filet de sécurité côté stockage) | À FAIRE (PORO-008, infrastructure) |
+| P2 | Filet de sécurité côté stockage et plafond par partie (PORO-008) | TERMINÉ sur la branche du chantier 1, sous réserve de la CI : TTL du filer, `seaweedfs-janitor`, `Content-Length` signé |
 | P1 | Vendeur suspendu toujours actif dans shop et order (B-07) | À FAIRE (PORO-021, contrôle inter-services) |
 | — | Mode invité (B-02) | **Décision** du propriétaire (B1) : aucune route privée rendue publique |
 | — | Émojis composés dans les titres vidéo (B-04) | **Décision** : autoriser U+200D seul ouvre la porte à du texte invisible |
@@ -64,3 +64,23 @@ Aucun secret, aucune infrastructure ni donnée de production modifiés. Aucun co
 3. Écrans « vidéos aimées » et « qui a aimé » : utiles au lancement ?
 4. Écran « annuler la suppression du compte » : la reconnexion suffit-elle ?
 5. Projet Firebase (FCM) et URL de production de l'API.
+
+## Chantiers de finalisation (prompts du 2026-10-22)
+
+Décisions du propriétaire (2026-10-22) : suspension de compte par ADMIN et MODERATOR (un MODERATOR ne
+vise ni un ADMIN ni un MODERATOR) ; commandes non expédiées d'une boutique suspendue annulées
+automatiquement ; mode invité en lecture seule (fil « Pour toi » public) ; émojis composés autorisés
+dans les titres vidéo (U+200D entre deux émojis seulement) ; Wave seul paiement en ligne au lancement.
+
+| # | Chantier | Statut |
+|---|---|---|
+| 1 | PORO-008 (fin) : expiration côté stockage, plafond par partie | TERMINÉ (PR #61 fusionnée) |
+| 2 | PORO-021 : suspension des comptes (ADMIN, MODERATOR) et des boutiques | TERMINÉ (PR #62 fusionnée) |
+| 2b | Annulation automatique des commandes d'une boutique suspendue | EN COURS : PR #63, CI en cours |
+| 3 | PORO-026 : recherche dans le catalogue des boutiques | À FAIRE |
+| 4 | Émojis composés dans les titres et descriptions vidéo | À FAIRE |
+| 5 | Mode invité en lecture seule | À FAIRE |
+| 6 | Build de release signé dans la CI | À FAIRE ; BLOQUÉ pour la signature (keystore, URL de production) |
+| 7 | Tests instrumentés Android et parcours de bout en bout | À FAIRE |
+| 8 | PORO-015 : service de paiement Wave | À FAIRE ; BLOQUÉ pour la mise en service (clés de bac à sable, secret de webhook) |
+| 9 | Notifications push (FCM) | À FAIRE ; BLOQUÉ pour la mise en service (projet Firebase) |

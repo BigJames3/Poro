@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -102,4 +104,33 @@ func requireClaims(c *fiber.Ctx) (*service.TokenClaims, error) {
 		return nil, httpx.NewAPIError(fiber.StatusUnauthorized, "unauthorized", "unauthorized")
 	}
 	return claims, nil
+}
+
+// SuspendAccount handles POST /api/v1/auth/admin/users/:id/suspend (ADMIN or MODERATOR).
+func (h *AccountHandler) SuspendAccount(c *fiber.Ctx) error {
+	return h.adminAction(c, h.accounts.Suspend)
+}
+
+// ReinstateAccount handles POST /api/v1/auth/admin/users/:id/reinstate (ADMIN or MODERATOR).
+func (h *AccountHandler) ReinstateAccount(c *fiber.Ctx) error {
+	return h.adminAction(c, h.accounts.Reinstate)
+}
+
+func (h *AccountHandler) adminAction(
+	c *fiber.Ctx,
+	action func(context.Context, service.TokenClaims, uuid.UUID) (*dto.UserResponse, error),
+) error {
+	claims, err := requireClaims(c)
+	if err != nil {
+		return err
+	}
+	userID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return mapAuthError(service.ErrAccountNotFound)
+	}
+	res, err := action(c.UserContext(), *claims, userID)
+	if err != nil {
+		return mapAuthError(err)
+	}
+	return writeData(c, fiber.StatusOK, res)
 }

@@ -45,9 +45,17 @@ func TestS3AgainstSeaweedFS(t *testing.T) {
 
 	uploadID, err := store.CreateMultipart(ctx, source, "video/mp4")
 	require.NoError(t, err)
-	url, err := store.PresignPart(ctx, source, uploadID, 1)
-	require.NoError(t, err)
 	body := append([]byte("\x00\x00\x00\x18ftypisom"), bytes.Repeat([]byte{1}, 64)...)
+	url, err := store.PresignPart(ctx, source, uploadID, 1, int64(len(body)))
+	require.NoError(t, err)
+	for _, wrong := range [][]byte{append(body, 0), body[:len(body)-1]} {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(wrong))
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		require.Equal(t, http.StatusForbidden, resp.StatusCode, "a part of another length than signed is refused")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(body))
 	require.NoError(t, err)
 	resp, err := client.Do(req)

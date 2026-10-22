@@ -9,7 +9,7 @@ Statuts : **VERT** appel réel observé contre le backend + tests ; **ORANGE** b
 | Statut | Nombre |
 |---|---|
 | BLEU | 14 |
-| GRIS | 5 |
+| GRIS | 7 |
 | ORANGE | 61 |
 | ROUGE | 3 |
 | VERT | 24 |
@@ -31,6 +31,8 @@ Statuts : **VERT** appel réel observé contre le backend + tests ; **ORANGE** b
 | auth | Current account | `GET /api/v1/auth/me` | Connexion (téléphone, code, email), Paramètres, Suppression du compte | `AuthApi.kt.me` | VERT | Appel réel observé sur émulateur (journal `okhttp`, 2026-10-21), réponse attendue ; + tests JVM du client. |
 | auth | Signed-in devices of the account | `GET /api/v1/auth/sessions` | Connexion (téléphone, code, email), Paramètres, Suppression du compte | `AuthApi.kt.sessions` | À VÉRIFIER | 404 sur émulateur : image Docker `auth` antérieure à la route (route présente dans le code). Rejouer après `docker compose up -d --build`. |
 | auth | Sign a device out | `DELETE /api/v1/auth/sessions/{id}` | Connexion (téléphone, code, email), Paramètres, Suppression du compte | `AuthApi.kt.revokeSession` | ORANGE | Branché (écran → ViewModel → dépôt → API) et couvert par des tests JVM ; pas encore observé contre un vrai backend. |
+| auth | Suspend an account everywhere (ADMIN or MODERATOR) | `POST /api/v1/auth/admin/users/{id}/suspend` | — | — | GRIS | Réservé ADMIN et MODERATOR : outil interne, pas l'app grand public (ADR-0019). L'app traite déjà `account_blocked`. |
+| auth | Lift a suspension (ADMIN or MODERATOR) | `POST /api/v1/auth/admin/users/{id}/reinstate` | — | — | GRIS | Réservé ADMIN et MODERATOR : outil interne (ADR-0019). |
 | auth | Sign every other device out | `POST /api/v1/auth/sessions/revoke-others` | Connexion (téléphone, code, email), Paramètres, Suppression du compte | `AuthApi.kt.revokeOtherSessions` | ORANGE | Branché (écran → ViewModel → dépôt → API) et couvert par des tests JVM ; pas encore observé contre un vrai backend. |
 | auth | Ask for the deletion of the account | `POST /api/v1/auth/me/delete` | Connexion (téléphone, code, email), Paramètres, Suppression du compte | `AuthApi.kt.deleteAccount` | ORANGE | Branché (écran → ViewModel → dépôt → API) et couvert par des tests JVM ; pas encore observé contre un vrai backend. |
 | auth | Cancel a pending deletion | `POST /api/v1/auth/me/delete/cancel` | — | — | BLEU | Annulation de suppression : se reconnecter annule déjà la suppression (`deletion_cancelled`) ; pas d'écran dédié. |
