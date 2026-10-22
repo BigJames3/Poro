@@ -65,6 +65,7 @@ fi
 
 init() {
   docker run --rm --network "$network" \
+    -e UPLOAD_TTL \
     -e S3_USER_ACCESS_KEY_ID -e S3_USER_SECRET_ACCESS_KEY \
     -e S3_VIDEO_ACCESS_KEY_ID -e S3_VIDEO_SECRET_ACCESS_KEY \
     -e S3_SHOP_ACCESS_KEY_ID -e S3_SHOP_SECRET_ACCESS_KEY \
@@ -135,3 +136,14 @@ for secret in "$S3_USER_SECRET_ACCESS_KEY" "$S3_VIDEO_SECRET_ACCESS_KEY" "$S3_SH
   esac
 done
 echo "storage: init.sh is idempotent, rejects shared keys and keeps secrets out of its logs"
+
+# PORO-008: image originals expire and abandoned multipart uploads are aborted
+# by storage alone, while completed video sources stay. Short delays stand in
+# for the production day.
+UPLOAD_TTL=1m init >/dev/null
+sleep 3
+check expiry-seed
+sleep 75
+docker run --rm --network "$network" -e JANITOR_ONCE=1 -e JANITOR_MAX_AGE=1m \
+  -v "$root/infra/storage/janitor.sh:/janitor.sh:ro" --entrypoint /bin/sh "$image" /janitor.sh
+check expiry

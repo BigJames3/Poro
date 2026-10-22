@@ -9,6 +9,7 @@ Décision : [ADR-0015](../architecture/adr/0015-controle-acces-stockage-objet.md
 | `seaweedfs` | Serveur S3, sur `127.0.0.1:9000` (S3), `9001` (master), `9002` (filer) |
 | `seaweedfs-init` | `infra/storage/init.sh` : buckets, identités S3, nettoyage ; à chaque `up` |
 | `video-storage-migrate` | Déplace les anciennes sources vidéo vers `poro-video-sources` ; à chaque `up` |
+| `seaweedfs-janitor` | `infra/storage/janitor.sh` : toutes les heures, annule les envois multipart abandonnés depuis plus de 24 h (PORO-008) |
 
 ## Buckets et identités
 
@@ -25,6 +26,46 @@ Décision : [ADR-0015](../architecture/adr/0015-controle-acces-stockage-objet.md
 Identifiants dans `.env` : `S3_USER_*`, `S3_VIDEO_*`, `S3_SHOP_*` (`ACCESS_KEY_ID` et
 `SECRET_ACCESS_KEY`). Ils doivent être distincts, d'au moins 8 caractères parmi
 `A-Z a-z 0-9 . _ ~ + / = -`.
+
+## Expiration des envois abandonnés (PORO-008)
+
+Deux niveaux, pour qu'aucun original non confirmé ne survive au délai, même si les services sont arrêtés :
+
+| Niveau | Quoi | Où |
+|---|---|---|
+| Services | Les envois `uploading` de plus de 24 h (vidéo), et les originaux non confirmés de plus de 24 h (avatar, boutique), supprimés toutes les heures | `services/video` (`SweepAbandonedUploads`), `services/user` et `services/shop` (`UploadSweeper`) |
+| Stockage | Durée de vie d'un jour posée par le filer sur tout nouvel objet de `poro-avatar-uploads` et `poro-shop-uploads` (`fs.configure -ttl=1d`) | `init.sh` (variable `UPLOAD_TTL`, 1 jour par défaut) |
+| Stockage | Multiparts inachevés depuis plus de 24 h annulés dans tous les buckets (`s3.clean.uploads`) | service `seaweedfs-janitor` (`JANITOR_MAX_AGE`, `JANITOR_INTERVAL`) |
+
+- **Jamais de durée de vie sur `poro-video-sources`.** Les sources terminées sont conservées, et SeaweedFS
+  assemble un envoi terminé à partir des morceaux de ses parties : une durée de vie sur le dossier des
+  parties détruirait aussi les vidéos terminées.
+- La durée de vie du filer ne s'applique qu'aux objets écrits **après** `init.sh` ; les originaux plus
+  anciens restent couverts par le nettoyage des services.
+- Chaque couple bucket × durée de vie a ses propres volumes SeaweedFS : `init.sh` les fait croître un
+  par un (`-volumeGrowthCount=1`), sinon un serveur aux volumes comptés refuse les écritures
+  (`No writable volumes and no free volumes left`).
+- Une règle de cycle de vie S3 (`PutBucketLifecycleConfiguration`) est acceptée par SeaweedFS 4.45 mais
+  **n'est pas appliquée** sans le mode `s3.bucket.lifecycle.fastpath` (vérifié le 2026-10-22) :
+  on n'en dépend pas.
+- Chaque taille de partie vidéo est signée dans l'URL présignée (`Content-Length`) : SeaweedFS refuse
+  (403) une partie plus longue ou plus courte que prévu, donc un client ne peut pas stocker plus qu'il
+  n'a déclaré.
+
+Vérifier la configuration appliquée :
+
+```bash
+docker compose exec seaweedfs sh -c 'echo fs.configure | weed shell' | grep -A3 uploads
+docker compose logs --tail 5 seaweedfs-janitor
+```
+
+**Production (Backblaze B2, ADR-0015)** : à configurer lors de la mise en place, puis à vérifier dans la
+console B2 :
+
+- règles de cycle de vie des buckets d'envoi d'images : masquer après 1 jour et supprimer 1 jour plus
+  tard, sur tout le bucket ;
+- annulation des gros fichiers inachevés (multipart) sur le bucket des sources vidéo après 1 jour ;
+- aucune règle de masquage sur le bucket des sources vidéo.
 
 ## Opérations courantes
 
@@ -78,7 +119,7 @@ aws --endpoint-url http://127.0.0.1:9000 s3 ls s3://poro-video-sources/videos/ -
 | `user`, `shop` ou `video` reçoivent `403 AccessDenied` | Secret modifié sans relancer `seaweedfs-init`, ou l'inverse | Rotation, étapes 2 et 3 |
 | Une miniature ou un HLS renvoie `403` | Objet absent du bucket public : vidéo en quarantaine, ou mauvais bucket | Vérifier `moderation_status` et le bucket |
 | Un upload d'avatar ou de photo échoue juste après la mise à jour | Original supprimé par le nettoyage d'`init.sh` | Recommencer l'upload |
-| Un upload vidéo commencé avant la mise à jour échoue à `complete` | Son upload multipart est resté dans `poro-videos` | Recommencer l'upload ; l'ancien multipart sera purgé avec PORO-008 |
+| Un upload vidéo commencé avant la mise à jour échoue à `complete` | Son upload multipart est resté dans `poro-videos` | Recommencer l'upload ; l'ancien multipart est annulé par `seaweedfs-janitor` après 24 h |
 | `video-storage-migrate` échoue | SeaweedFS indisponible ou identifiant vidéo refusé | Lire ses logs, corriger, relancer `docker compose up -d` (idempotent) |
 
 ## Tests
@@ -97,6 +138,8 @@ puis vérifie :
 - la rotation des clés ;
 - le refus d'une clé partagée ;
 - l'absence de secrets dans les logs ;
+- l'expiration (PORO-008), avec des délais d'une minute : les originaux d'images disparaissent, un
+  multipart abandonné est annulé par `janitor.sh`, une source vidéo terminée reste ;
 - le code de stockage de video, user et shop contre ce SeaweedFS.
 
 Port de test : `127.0.0.1:18333` (`STORAGE_TEST_PORT`).

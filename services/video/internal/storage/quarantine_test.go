@@ -118,7 +118,7 @@ func TestS3SourcesStayPrivate(t *testing.T) {
 
 	uploadID, err := store.CreateMultipart(ctx, key, "video/mp4")
 	require.NoError(t, err)
-	url, err := store.PresignPart(ctx, key, uploadID, 1)
+	url, err := store.PresignPart(ctx, key, uploadID, 1, 10)
 	require.NoError(t, err)
 	require.Contains(t, url, "/poro-video-sources/"+key)
 	part, err := store.internal.UploadPart(ctx, &s3.UploadPartInput{

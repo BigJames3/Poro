@@ -3,6 +3,7 @@ package service_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -127,6 +128,19 @@ func TestAbort(t *testing.T) {
 	require.NoError(t, testdb.Pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events WHERE event_key = $1 AND topic = $2`,
 		init.VideoID, events.TypeVideoDeleted).Scan(&n))
 	require.Zero(t, n, "an aborted upload was never visible: no poro.video.deleted")
+}
+
+func TestInitSignsEachPartLength(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newSvc(t)
+	init, err := svc.InitUpload(ctx, uuid.Must(uuid.NewV7()), dto.InitRequest{
+		Title: "clip", ContentType: "video/mp4", SizeBytes: 2*model.PartSize + 3,
+	})
+	require.NoError(t, err)
+	require.Len(t, init.Parts, 3)
+	require.Contains(t, init.Parts[0].URL, fmt.Sprintf("size=%d", model.PartSize))
+	require.Contains(t, init.Parts[1].URL, fmt.Sprintf("size=%d", model.PartSize))
+	require.Contains(t, init.Parts[2].URL, "size=3", "the last part holds the rest")
 }
 
 func TestSweepAbandonedUploads(t *testing.T) {

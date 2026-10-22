@@ -144,6 +144,21 @@ services:
       - poro-network
     restart: "no"
 
+  # Filet de sécurité PORO-008 : annule toutes les heures les envois multipart
+  # abandonnés depuis plus d'un jour, même si aucun service ne tourne.
+  seaweedfs-janitor:
+    image: chrislusf/seaweedfs:4.45@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5
+    container_name: poro-seaweedfs-janitor
+    entrypoint: ["/bin/sh", "/janitor.sh"]
+    volumes:
+      - ./infra/storage/janitor.sh:/janitor.sh:ro
+    depends_on:
+      seaweedfs-init:
+        condition: service_completed_successfully
+    networks:
+      - poro-network
+    restart: unless-stopped
+
   # ─────────────────────────────────────────────
   # EVENT STREAMING (Kafka-compatible)
   # ─────────────────────────────────────────────

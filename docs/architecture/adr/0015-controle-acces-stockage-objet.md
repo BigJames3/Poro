@@ -81,5 +81,6 @@ seulement via l'API S3 signée, et `fs.mv` refuse de déplacer un objet d'un buc
   identité doit être déclarée dans `init.sh`.
 - En production (Backblaze B2 prévu), la même séparation s'applique avec des clés
   d'application limitées par bucket. Elle sera reprise par P0-12.
-- Restent hors périmètre : la purge des multiparts abandonnés et la limite de taille par partie
-  (PORO-008, `s3.clean.uploads`), ainsi que le CDN devant `poro-videos` (PORO-029).
+- La purge des envois abandonnés et la limite de taille par partie sont traitées par PORO-008
+  (voir `docs/runbooks/storage.md`, « Expiration des envois abandonnés »). Reste hors périmètre le CDN
+  devant `poro-videos` (PORO-029).

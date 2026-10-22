@@ -2,6 +2,25 @@ package model
 
 import "testing"
 
+func TestPartLength(t *testing.T) {
+	cases := []struct {
+		size int64
+		part int
+		want int64
+	}{
+		{size: 1, part: 1, want: 1},
+		{size: PartSize, part: 1, want: PartSize},
+		{size: PartSize + 1, part: 1, want: PartSize},
+		{size: PartSize + 1, part: 2, want: 1},
+		{size: 3*PartSize - 5, part: 3, want: PartSize - 5},
+	}
+	for _, c := range cases {
+		if got := PartLength(c.size, c.part); got != c.want {
+			t.Errorf("PartLength(%d, %d) = %d, want %d", c.size, c.part, got, c.want)
+		}
+	}
+}
+
 func TestPartCountAndKeys(t *testing.T) {
 	if PartCount(0) != 0 {
 		t.Fatal()

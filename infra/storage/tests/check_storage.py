@@ -2,7 +2,7 @@
 
 Runs against a SeaweedFS configured by infra/storage/init.sh.
 
-Usage: python3 check_storage.py <endpoint> seed|matrix|rotated
+Usage: python3 check_storage.py <endpoint> seed|matrix|rotated|expiry-seed|expiry
 
   seed     before init.sh: store the objects an earlier version left behind
            (SeaweedFS still accepts anonymous writes at that point).
@@ -11,6 +11,11 @@ Usage: python3 check_storage.py <endpoint> seed|matrix|rotated
            It also checks that storage-migrate moved the legacy video sources.
   rotated  after init.sh ran again with a new video secret: the old secret
            is refused, the new one works.
+  expiry-seed  after init.sh ran with UPLOAD_TTL=1m: store image originals,
+           an unfinished video multipart upload and a completed video source.
+  expiry   once the TTL elapsed and janitor.sh ran with JANITOR_MAX_AGE=1m:
+           the originals and the multipart upload are gone, the completed
+           source is kept (PORO-008).
 
 Credentials come from the S3_<SERVICE>_ACCESS_KEY_ID / _SECRET_ACCESS_KEY
 variables that init.sh received; S3_VIDEO_OLD_SECRET_ACCESS_KEY holds the
@@ -267,14 +272,48 @@ def check_rotation(endpoint, failures):
     )
 
 
+EXPIRING = [("USER", "poro-avatar-uploads", "avatars/uploads/u1/expiring"), ("SHOP", "poro-shop-uploads", "uploads/o1/expiring")]
+SOURCE = "videos/u1/v1/source.mp4"
+UNFINISHED = "videos/u1/v2/source.mp4"
+
+
+def expiry_seed(endpoint):
+    for name, bucket, key in EXPIRING:
+        service(endpoint, name).put_object(Bucket=bucket, Key=key, Body=b"original")
+    video = service(endpoint, "VIDEO")
+    video.put_object(Bucket="poro-video-sources", Key=SOURCE, Body=b"completed source")
+    upload = video.create_multipart_upload(Bucket="poro-video-sources", Key=UNFINISHED)
+    video.upload_part(
+        Bucket="poro-video-sources", Key=UNFINISHED, UploadId=upload["UploadId"], PartNumber=1, Body=b"part"
+    )
+
+
+def check_expiry(endpoint, failures):
+    for name, bucket, key in EXPIRING:
+        listed = service(endpoint, name).list_objects_v2(Bucket=bucket).get("Contents", [])
+        expect(failures, all(o["Key"] != key for o in listed), f"{bucket}/{key} outlived its TTL")
+    video = service(endpoint, "VIDEO")
+    uploads = video.list_multipart_uploads(Bucket="poro-video-sources").get("Uploads", [])
+    expect(failures, all(u["Key"] != UNFINISHED for u in uploads), "the abandoned multipart upload was not aborted")
+    expect(
+        failures,
+        allowed(video.head_object, Bucket="poro-video-sources", Key=SOURCE),
+        "a completed video source was deleted",
+    )
+
+
 def main():
     endpoint, phase = sys.argv[1], sys.argv[2]
     if phase == "seed":
         seed(endpoint)
         return
+    if phase == "expiry-seed":
+        expiry_seed(endpoint)
+        return
     phases = {
         "matrix": [check_services, check_anonymous, check_cleanup, check_migrated],
         "rotated": [check_rotation, check_anonymous],
+        "expiry": [check_expiry],
     }
     if phase not in phases:
         sys.exit(f"unknown phase {phase}")
