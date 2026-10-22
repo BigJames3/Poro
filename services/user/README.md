@@ -61,6 +61,7 @@ clés S3 obligatoires.
 | `GET` | `/api/v1/users/me` | Bearer |
 | `PATCH` | `/api/v1/users/me` | Bearer |
 | `GET` | `/api/v1/users/username-availability?username=` | Bearer |
+| `GET` | `/api/v1/users?ids=a,b,c` (1 à 100 comptes, profils publics en un appel) | — |
 | `GET` | `/api/v1/users/by-username/:username` | — |
 | `POST` | `/api/v1/users/me/avatar/upload-url` | Bearer |
 | `PUT` | `/api/v1/users/me/avatar` | Bearer |

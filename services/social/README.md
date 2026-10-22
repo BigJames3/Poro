@@ -103,7 +103,9 @@ Les tests d'intégration démarrent Postgres et Redpanda avec testcontainers
   des topics, sont inconnus : `404`. Un compte se rattrape dès qu'il appelle
   social avec un JWT. Un backfill depuis video et auth reste à faire.
 - **Les listes renvoient des identifiants**, pas des profils : le client
-  résout noms et avatars auprès de user (pas encore d'API de lecture par lot).
-- Pas d'événement à l'édition d'un commentaire ni sur les likes de commentaire.
-- Pas de modération : un commentaire n'est filtré que sur sa forme.
+  résout noms et avatars en un appel par page, `GET /api/v1/users?ids=…` (user).
+- Pas d'événement sur les likes de commentaire.
+- La modération des commentaires est asynchrone : moderation les analyse après
+  publication et social applique le retrait à réception de
+  `poro.moderation.content.removed`.
 - Le rate limit est une fenêtre fixe d'une minute (limiter Fiber).

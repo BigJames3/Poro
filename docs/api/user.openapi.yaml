@@ -108,6 +108,40 @@ paths:
         "400": { $ref: "#/components/responses/InvalidRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/users:
+    get:
+      tags: [profiles]
+      security: []
+      summary: Public profiles of several accounts in one call
+      description: |
+        To show the authors of a list of comments, likes or followers with one
+        request. Unknown and deleted accounts are left out; the order follows
+        `ids`, duplicates once.
+      parameters:
+        - in: query
+          name: ids
+          required: true
+          description: 1 to 100 comma-separated user ids
+          schema: { type: string }
+      responses:
+        "200":
+          description: Public fields only (no country)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: "#/components/schemas/PublicProfile" }
+        "400":
+          description: "`invalid_request`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
   /api/v1/users/by-username/{username}:
     get:
       tags: [profiles]

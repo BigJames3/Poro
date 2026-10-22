@@ -79,6 +79,37 @@ paths:
               schema: { $ref: "#/components/schemas/VideoLikePage" }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /api/v1/videos/stats:
+    get:
+      tags: [likes]
+      security: [{}, { bearerAuth: [] }]
+      summary: Counters of several videos in one call
+      description: |
+        For a feed page: one request instead of one per video. Videos that are
+        not ready (unknown, deleted, removed by moderation) are left out; the
+        order follows `ids`, duplicates once.
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          description: 1 to 50 comma-separated video ids
+          schema: { type: string }
+      responses:
+        "200":
+          description: Counters of the ready videos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          items:
+                            type: array
+                            items: { $ref: "#/components/schemas/VideoStats" }
+        "400": { $ref: "#/components/responses/Error" }
   /api/v1/videos/{videoId}/stats:
     parameters: [{ $ref: "#/components/parameters/VideoID" }]
     get:
