@@ -69,6 +69,7 @@ fun cancelReasonLabel(reason: String): Int = when (reason) {
     "payment_timeout" -> R.string.order_cancel_reason_payment_timeout
     "buyer_cancelled" -> R.string.order_cancel_reason_buyer
     "seller_cancelled" -> R.string.order_cancel_reason_seller
+    "shop_suspended" -> R.string.order_cancel_reason_shop_suspended
     else -> R.string.order_cancel_reason_other
 }
 

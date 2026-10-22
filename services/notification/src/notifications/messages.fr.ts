@@ -138,6 +138,15 @@ export const messages = {
     };
   },
 
+  orderCancelledShopSuspended(shop: string, refund: boolean): Message {
+    return {
+      title: 'Commande annulée',
+      body:
+        `Ta commande chez ${shop} est annulée : la boutique a été suspendue.` +
+        (refund ? REFUND_NOTICE : ''),
+    };
+  },
+
   orderCancelledByBuyer(buyer: string): Message {
     return { title: 'Commande annulée', body: `${buyer} a annulé sa commande.` };
   },

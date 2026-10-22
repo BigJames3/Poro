@@ -395,6 +395,7 @@
     <string name="order_cancel_reason_payment_timeout">paiement non reçu à temps</string>
     <string name="order_cancel_reason_buyer">annulée par l\'acheteur</string>
     <string name="order_cancel_reason_seller">annulée par la boutique</string>
+    <string name="order_cancel_reason_shop_suspended">boutique suspendue</string>
     <string name="order_cancel_reason_other">autre</string>
     <string name="delivery_too_short">3 caractères au moins.</string>
     <string name="delivery_text_limit">300 caractères et 3 lignes au plus, sans caractère invisible.</string>

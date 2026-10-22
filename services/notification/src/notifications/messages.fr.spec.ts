@@ -86,6 +86,9 @@ describe('French messages', () => {
     expect(messages.orderPaymentTimeout('la boutique', true).body).toBe(
       'Ta commande chez la boutique est annulée faute de paiement dans le délai. Ton remboursement est en cours.',
     );
+    expect(messages.orderCancelledShopSuspended('Chez Fatou', false).body).toBe(
+      'Ta commande chez Chez Fatou est annulée : la boutique a été suspendue.',
+    );
     expect(messages.orderCancelledAccountDeleted('Chez Fatou', false).body).toBe(
       'Ta commande chez Chez Fatou est annulée suite à la suppression d’un compte.',
     );

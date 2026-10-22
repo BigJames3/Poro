@@ -588,7 +588,7 @@ components:
             - { $ref: "#/components/schemas/Delivery" }
             - { type: "null", description: Erased 90 days after the order ended }
         tracking: { type: ["string", "null"] }
-        cancel_reason: { enum: [stock_rejected, payment_timeout, buyer_cancelled, seller_cancelled, null] }
+        cancel_reason: { enum: [stock_rejected, payment_timeout, buyer_cancelled, seller_cancelled, account_deleted, shop_suspended, null] }
         paid: { type: boolean }
         last_payment_error: { type: ["string", "null"] }
         expires_at: { type: ["string", "null"], format: date-time }

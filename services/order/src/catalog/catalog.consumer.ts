@@ -13,8 +13,11 @@ import { Envelope } from '../events/envelope';
 import { KafkaEventConsumer, PermanentError } from '../events/event-consumer';
 import { Data, amountField, arrayField, stringField, timeField, uuidField } from '../events/fields';
 import { claim } from '../events/outbox';
+import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MetricsService } from '../metrics/metrics';
+import { CANCELLABLE, cancelOrder } from '../orders/orders.service';
+import { lockOrder } from '../orders/publish';
 
 export const CATALOG_CONSUMER_GROUP = 'poro-order-catalog';
 export const CATALOG_TOPICS = [TYPE_SHOP_UPDATED, TYPE_PRODUCT_UPDATED, TYPE_PRODUCT_DELETED];
@@ -83,7 +86,7 @@ export class CatalogConsumer implements OnApplicationBootstrap, OnApplicationShu
       if (!(await claim(tx, CATALOG_CONSUMER_GROUP, eventId))) {
         return;
       }
-      await tx.$executeRaw`
+      const applied = await tx.$executeRaw`
         INSERT INTO catalog_shops (id, owner_id, name, handle, currency, status, source_updated_at)
         VALUES (${shop.id}::uuid, ${shop.ownerId}::uuid, ${shop.name}, ${shop.handle},
                 ${shop.currency}, ${shop.status}, ${shop.sourceUpdatedAt})
@@ -92,6 +95,16 @@ export class CatalogConsumer implements OnApplicationBootstrap, OnApplicationShu
           currency = EXCLUDED.currency, status = EXCLUDED.status,
           source_updated_at = EXCLUDED.source_updated_at
         WHERE catalog_shops.source_updated_at < EXCLUDED.source_updated_at`;
+      if (applied > 0 && shop.status === 'suspended') {
+        const cancelled = await cancelUnshippedOrders(tx, shop.id, new Date());
+        if (cancelled > 0) {
+          this.logger.log({
+            msg: 'orders of a suspended shop cancelled',
+            shopId: shop.id,
+            cancelled,
+          });
+        }
+      }
     });
   }
 
@@ -165,4 +178,30 @@ export class CatalogConsumer implements OnApplicationBootstrap, OnApplicationShu
       await tx.catalogVariant.updateMany({ where: { productId }, data: { removed: true } });
     });
   }
+}
+
+/**
+ * A suspended shop's orders that have not left it are cancelled with reason
+ * shop_suspended (ADR-0019); a paid one is flagged for refund by the event.
+ * Shipped orders stay with the buyer. Checkout only takes active shops, so no
+ * order can arrive while the shop stays suspended.
+ */
+async function cancelUnshippedOrders(
+  tx: Prisma.TransactionClient,
+  shopId: string,
+  now: Date,
+): Promise<number> {
+  const open = await tx.order.findMany({
+    where: { shopId, status: { in: CANCELLABLE } },
+    select: { id: true },
+  });
+  let cancelled = 0;
+  for (const { id } of open) {
+    const order = await lockOrder(tx, id);
+    if (order && CANCELLABLE.includes(order.status as (typeof CANCELLABLE)[number])) {
+      await cancelOrder(tx, order, 'shop_suspended', now);
+      cancelled++;
+    }
+  }
+  return cancelled;
 }
