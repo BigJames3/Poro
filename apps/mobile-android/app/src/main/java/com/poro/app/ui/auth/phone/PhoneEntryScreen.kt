@@ -47,6 +47,7 @@ import com.poro.app.ui.legal.LegalMention
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.quantityString
 import com.poro.app.ui.theme.PoroTheme
+import com.poro.app.ui.theme.brandButtonColors
 
 @Composable
 fun PhoneEntryScreen(
@@ -98,6 +99,7 @@ fun PhoneEntryScreen(
         Button(
             onClick = onSubmit,
             enabled = state.canSubmit,
+            colors = brandButtonColors(),
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) {
             when {

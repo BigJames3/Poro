@@ -1,0 +1,4 @@
+<resources>
+    <!-- Fond de la fenêtre avant le premier rendu Compose : background de PoroTheme (clair). -->
+    <color name="poro_window_background">#FFFFFBF8</color>
+</resources>

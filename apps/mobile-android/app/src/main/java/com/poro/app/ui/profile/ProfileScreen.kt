@@ -30,6 +30,7 @@ import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.LoadableContent
 import com.poro.app.ui.common.displayNameOf
+import com.poro.app.ui.theme.brandButtonColors
 
 /**
  * Profil de l'utilisateur connecté. [extra] accueille ce qui dépend d'autres services
@@ -90,6 +91,7 @@ fun ProfileScreen(
                 Button(
                     onClick = onBecomeCreator,
                     enabled = profile.username != null && !state.becomingCreator,
+                    colors = brandButtonColors(),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 ) {
                     Text(stringResource(R.string.profile_become_creator))

@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.ui.quantityString
+import com.poro.app.ui.theme.brandButtonColors
 
 /** Mise en page commune des écrans de connexion : titre annoncé comme tel, contenu défilant. */
 @Composable
@@ -57,7 +58,7 @@ fun SubmitButton(
     modifier: Modifier = Modifier,
     retryInSeconds: Int = 0,
 ) {
-    Button(onClick = onClick, enabled = enabled, modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+    Button(onClick = onClick, enabled = enabled, colors = brandButtonColors(), modifier = modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         when {
             loading -> {
                 val description = stringResource(R.string.loading)

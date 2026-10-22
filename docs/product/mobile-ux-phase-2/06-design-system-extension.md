@@ -6,6 +6,14 @@ proposée : Material 3 (BOM Compose 2025.06.00) et `material-icons-core` suffise
 
 Légende : **R** = existant à réutiliser, **A** = amélioration nécessaire, **N** = nouveau composant justifié.
 
+> **DS1 tranchée le 2026-10-22 : piste A, texte foncé sur l'orange.** Appliquée ainsi dans
+> `Theme.kt` : boutons pleins en orange de marque `#FF6A00` avec texte `#1A0A00` (6,73:1), via
+> `primaryContainer` et `brandButtonColors()` ; textes, liens, icônes et contours orange en
+> `primary` = `#A84100` (5,09:1 au pire, sur `surfaceVariant`), car l'orange de marque reste
+> trop pâle pour du texte sur fond clair (2,79:1) même avec la piste A. Gris `surfaceVariant`
+> réchauffés, fenêtre clair/sombre sans flash au démarrage. `ThemeContrastTest` vérifie chaque
+> paire texte/fond des deux thèmes (≥ 4,5:1).
+
 ## 1. Inventaire de l'existant
 
 ### 1.1 Couleurs (`Theme.kt`, marquées « provisoires » dans le code)

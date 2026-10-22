@@ -1,0 +1,6 @@
+<resources>
+    <!-- Mode sombre : fenêtre sombre dès le démarrage, sans flash blanc avant Compose. -->
+    <style name="Theme.Poro" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/poro_window_background</item>
+    </style>
+</resources>

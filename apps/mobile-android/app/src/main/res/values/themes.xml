@@ -1,4 +1,7 @@
 <resources>
-    <!-- Thème de la fenêtre uniquement : l'interface est en Jetpack Compose (ui/theme). -->
-    <style name="Theme.Poro" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Thème de la fenêtre uniquement : l'interface est en Jetpack Compose (ui/theme). Le fond
+         reprend celui de PoroTheme pour éviter un éclair de couleur au démarrage. -->
+    <style name="Theme.Poro" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/poro_window_background</item>
+    </style>
 </resources>

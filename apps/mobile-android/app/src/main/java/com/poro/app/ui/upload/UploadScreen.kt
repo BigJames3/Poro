@@ -36,6 +36,7 @@ import com.poro.app.data.video.UploadState
 import com.poro.app.data.video.VideoDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.toErrorMessage
+import com.poro.app.ui.theme.brandButtonColors
 
 @Composable
 fun UploadScreen(
@@ -101,7 +102,7 @@ fun UploadScreen(
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             modifier = Modifier.fillMaxWidth(),
         )
-        Button(onClick = onPublish, enabled = form.canPublish, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+        Button(onClick = onPublish, enabled = form.canPublish, colors = brandButtonColors(), modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(stringResource(R.string.upload_publish))
         }
     }

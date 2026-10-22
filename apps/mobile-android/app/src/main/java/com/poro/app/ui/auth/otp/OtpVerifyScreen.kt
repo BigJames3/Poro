@@ -34,6 +34,7 @@ import com.poro.app.ui.auth.CodeField
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.quantityString
 import com.poro.app.ui.theme.PoroTheme
+import com.poro.app.ui.theme.brandButtonColors
 
 @Composable
 fun OtpVerifyScreen(
@@ -82,6 +83,7 @@ fun OtpVerifyScreen(
         Button(
             onClick = onVerify,
             enabled = state.canVerify,
+            colors = brandButtonColors(),
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) {
             Text(stringResource(R.string.action_verify))

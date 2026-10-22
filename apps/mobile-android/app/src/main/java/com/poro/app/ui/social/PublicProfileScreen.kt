@@ -41,6 +41,7 @@ import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.BackTopBar
 import com.poro.app.ui.common.displayNameOf
+import com.poro.app.ui.theme.brandButtonColors
 
 @Composable
 fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggleFollow: () -> Unit, onReport: () -> Unit) {
@@ -82,7 +83,7 @@ fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggl
             if (!state.isMe) {
                 val follow = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 if (state.following) {
-                    OutlinedButton(onClick = onToggleFollow, enabled = !state.followBusy, modifier = follow) {
+                    OutlinedButton(onClick = onToggleFollow, enabled = !state.followBusy, colors = brandButtonColors(), modifier = follow) {
                         Text(stringResource(R.string.action_unfollow))
                     }
                 } else {
