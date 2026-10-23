@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.core.format.Formats
 import com.poro.app.data.social.CommentDto
-import com.poro.app.data.user.ProfileDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.displayNameOf
@@ -48,6 +47,10 @@ class CommentsActions(
     val onDraftChange: (String) -> Unit,
     val onPost: () -> Unit,
     val onLike: (CommentDto) -> Unit,
+    val onEdit: (CommentDto) -> Unit,
+    val onEditDraftChange: (String) -> Unit,
+    val onSaveEdit: () -> Unit,
+    val onCancelEdit: () -> Unit,
     val onDelete: (CommentDto) -> Unit,
     val onReport: (CommentDto) -> Unit,
 )
@@ -67,7 +70,7 @@ fun CommentsSheet(state: CommentsUiState, actions: CommentsActions, onDismiss: (
                     item { Text(stringResource(R.string.comments_empty), modifier = Modifier.padding(16.dp)) }
                 }
                 items(state.comments, key = { it.id }) { comment ->
-                    CommentRow(comment, state.myUserId, state.authors, actions)
+                    CommentRow(comment, state, actions)
                     val replies = state.replies[comment.id]
                     if (comment.repliesCount > 0) {
                         TextButton(
@@ -84,7 +87,7 @@ fun CommentsSheet(state: CommentsUiState, actions: CommentsActions, onDismiss: (
                         }
                     }
                     if (replies?.expanded == true) {
-                        replies.items.forEach { reply -> CommentRow(reply, state.myUserId, state.authors, actions, Modifier.padding(start = 40.dp)) }
+                        replies.items.forEach { reply -> CommentRow(reply, state, actions, Modifier.padding(start = 40.dp)) }
                         if (replies.loading) CircularProgressIndicator(Modifier.padding(start = 56.dp))
                         if (replies.nextCursor != null && !replies.loading) {
                             TextButton(onClick = { actions.onLoadMoreReplies(comment.id) }, modifier = Modifier.padding(start = 56.dp)) {
@@ -127,12 +130,14 @@ fun CommentsSheet(state: CommentsUiState, actions: CommentsActions, onDismiss: (
 @Composable
 private fun CommentRow(
     comment: CommentDto,
-    myUserId: String?,
-    authors: Map<String, ProfileDto>,
+    state: CommentsUiState,
     actions: CommentsActions,
     modifier: Modifier = Modifier,
 ) {
+    val myUserId = state.myUserId
+    val authors = state.authors
     val mine = comment.userId != null && comment.userId == myUserId
+    val editingThis = state.editing?.id == comment.id
     // Profil lu par lot ; avant sa réponse, ou pour un compte supprimé : « Membre Poro ».
     val profile = comment.userId?.let { authors[it] }
     val author = when {
@@ -151,10 +156,27 @@ private fun CommentRow(
             )
             if (comment.deleted) {
                 Text(stringResource(R.string.comments_deleted), fontStyle = FontStyle.Italic)
+            } else if (editingThis) {
+                OutlinedTextField(
+                    value = state.editDraft,
+                    onValueChange = actions.onEditDraftChange,
+                    label = { Text(stringResource(R.string.comments_edit)) },
+                    enabled = !state.posting,
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row {
+                    TextButton(onClick = actions.onSaveEdit, enabled = state.canSaveEdit) { Text(stringResource(R.string.comments_save)) }
+                    TextButton(onClick = actions.onCancelEdit, enabled = !state.posting) { Text(stringResource(R.string.action_cancel)) }
+                }
             } else {
                 Text(comment.content.orEmpty())
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { actions.onReplyTo(comment) }) { Text(stringResource(R.string.comments_reply)) }
+                    // Proposé dans les 15 minutes selon l'horloge du téléphone ; le serveur a le dernier mot.
+                    if (mine && state.editing == null && CommentRules.canEdit(comment, myUserId, System.currentTimeMillis())) {
+                        TextButton(onClick = { actions.onEdit(comment) }) { Text(stringResource(R.string.comments_edit)) }
+                    }
                     if (mine) {
                         TextButton(onClick = { actions.onDelete(comment) }) { Text(stringResource(R.string.action_delete)) }
                     } else if (myUserId != null) {

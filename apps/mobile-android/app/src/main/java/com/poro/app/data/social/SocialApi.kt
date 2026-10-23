@@ -71,6 +71,20 @@ interface SocialApi {
     @GET("api/v1/users/{userId}/stats")
     suspend fun userStats(@Path("userId") userId: String): Response<ApiEnvelope<UserStatsDto>>
 
+    @GET("api/v1/users/{userId}/followers")
+    suspend fun followers(
+        @Path("userId") userId: String,
+        @Query("cursor") cursor: String?,
+        @Query("limit") limit: Int,
+    ): Response<ApiEnvelope<PageDto<FollowEntryDto>>>
+
+    @GET("api/v1/users/{userId}/following")
+    suspend fun following(
+        @Path("userId") userId: String,
+        @Query("cursor") cursor: String?,
+        @Query("limit") limit: Int,
+    ): Response<ApiEnvelope<PageDto<FollowEntryDto>>>
+
     @POST("api/v1/videos/{videoId}/shares")
     suspend fun share(@Path("videoId") videoId: String, @Body body: ShareRequest): Response<ApiEnvelope<ShareResultDto>>
 }
@@ -82,6 +96,12 @@ data class VideoStatsDto(
     val comments: Long = 0,
     val shares: Long = 0,
     @SerialName("liked_by_me") val likedByMe: Boolean = false,
+)
+
+@Serializable
+data class FollowEntryDto(
+    @SerialName("user_id") val userId: String,
+    @SerialName("followed_at") val followedAt: String? = null,
 )
 
 @Serializable

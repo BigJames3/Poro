@@ -1,5 +1,6 @@
 package com.poro.app.ui.social
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -29,9 +31,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.poro.app.R
@@ -44,7 +47,14 @@ import com.poro.app.ui.common.displayNameOf
 import com.poro.app.ui.theme.brandButtonColors
 
 @Composable
-fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggleFollow: () -> Unit, onReport: () -> Unit) {
+fun PublicProfileScreen(
+    state: PublicProfileUiState,
+    onBack: () -> Unit,
+    onToggleFollow: () -> Unit,
+    onReport: () -> Unit,
+    onOpenFollowers: () -> Unit,
+    onOpenFollowing: () -> Unit,
+) {
     val profile = state.profile
     val name = displayNameOf(profile?.displayName, profile?.username)
     var menu by remember { mutableStateOf(false) }
@@ -79,7 +89,7 @@ fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggl
             profile?.username?.let { Text("@$it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             if (profile?.isCreator == true) Text(stringResource(R.string.profile_creator_badge), color = MaterialTheme.colorScheme.primary)
             profile?.bio?.takeIf { it.isNotBlank() }?.let { Text(it, textAlign = TextAlign.Center) }
-            state.stats?.let { FollowCounts(it) }
+            state.stats?.let { FollowCounts(it, onOpenFollowers, onOpenFollowing) }
             if (!state.isMe) {
                 val follow = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 if (state.following) {
@@ -97,16 +107,30 @@ fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggl
     }
 }
 
-/** « 1,2 k abonnés · 85 abonnements », lu d'une traite par TalkBack. */
+/**
+ * « 1,2 k abonnés · 85 abonnements » : chaque compteur ouvre sa liste, avec une cible
+ * tactile d'au moins 48 dp et un libellé lu par TalkBack comme un bouton.
+ */
 @Composable
-fun FollowCounts(stats: UserStatsDto, modifier: Modifier = Modifier) {
-    val followers = stringResource(R.string.profile_followers, Formats.count(stats.followers))
-    val following = stringResource(R.string.profile_following, Formats.count(stats.following))
-    Row(
-        modifier.clearAndSetSemantics { contentDescription = "$followers, $following" },
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+fun FollowCounts(stats: UserStatsDto, onFollowers: () -> Unit, onFollowing: () -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FollowCount(stringResource(R.string.profile_followers, Formats.count(stats.followers)), onFollowers)
+        FollowCount(stringResource(R.string.profile_following, Formats.count(stats.following)), onFollowing)
+    }
+}
+
+@Composable
+private fun FollowCount(label: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .heightIn(min = 48.dp)
+            .widthIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.small)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) {}
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(followers, style = MaterialTheme.typography.titleSmall)
-        Text(following, style = MaterialTheme.typography.titleSmall)
+        Text(label, style = MaterialTheme.typography.titleSmall)
     }
 }
