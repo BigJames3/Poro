@@ -1,5 +1,7 @@
 package com.poro.app.ui.social
 
+import com.poro.app.R
+import com.poro.app.core.network.ApiErrorCodes
 import com.poro.app.core.network.ApiResult
 import com.poro.app.core.network.PageDto
 import com.poro.app.data.social.CommentDto
@@ -97,6 +99,24 @@ class CommentsViewModelTest {
     }
 
     @Test
+    fun `an own comment can be edited then marked edited`() = runTest(main.dispatcher) {
+        val created = "2026-10-22T04:00:00Z"
+        social.commentPages += page(comment("c1", user = "u1").copy(createdAt = created))
+        social.editResults += ApiResult.Success(comment("c1", user = "u1").copy(content = "corrigé", edited = true, createdAt = created))
+        val vm = CommentsViewModel("v1", social, profiles)
+        runCurrent()
+
+        vm.startEdit(vm.state.value.comments.single(), nowMs = com.poro.app.core.format.Formats.parseIsoMillis(created)!! + 1_000)
+        vm.onEditDraftChange("corrigé")
+        vm.saveEdit()
+        runCurrent()
+
+        assertEquals("edit:c1:corrigé", social.calls.last())
+        assertTrue(vm.state.value.comments.single().edited)
+        assertEquals(null, vm.state.value.editing)
+    }
+
+    @Test
     fun `a deleted comment with replies stays as an empty shell`() = runTest(main.dispatcher) {
         social.commentPages += page(comment("c1", user = "u1", replies = 2), comment("c2", user = "u1"))
         val vm = CommentsViewModel("v1", social, profiles)
@@ -110,5 +130,45 @@ class CommentsViewModelTest {
         assertEquals("c1", remaining.id)
         assertTrue(remaining.deleted)
         assertEquals(null, remaining.content)
+    }
+
+    @Test
+    fun `a refusal of the server closes the edit and says why`() = runTest(main.dispatcher) {
+        val created = "2026-10-22T04:00:00Z"
+        social.commentPages += page(comment("c1", user = "u1").copy(createdAt = created, content = "avant"))
+        // Horloge du téléphone en retard : l'appli propose encore la modification, le serveur la refuse.
+        social.editResults += ApiResult.Failure(403, ApiErrorCodes.COMMENT_EDIT_WINDOW_CLOSED, "closed", "req-1", null)
+        val vm = CommentsViewModel("v1", social, profiles)
+        runCurrent()
+
+        vm.startEdit(vm.state.value.comments.single(), nowMs = com.poro.app.core.format.Formats.parseIsoMillis(created)!! + 1_000)
+        vm.onEditDraftChange("après")
+        vm.saveEdit()
+        runCurrent()
+
+        val state = vm.state.value
+        assertEquals(null, state.editing)
+        assertEquals("", state.editDraft)
+        assertEquals(R.string.error_comment_edit_window, state.error?.text)
+        assertEquals("avant", state.comments.single().content)
+        assertEquals(false, state.posting)
+    }
+
+    @Test
+    fun `a network error keeps the edit open to retry`() = runTest(main.dispatcher) {
+        val created = "2026-10-22T04:00:00Z"
+        social.commentPages += page(comment("c1", user = "u1").copy(createdAt = created))
+        social.editResults += ApiResult.NetworkError(java.io.IOException("offline"))
+        val vm = CommentsViewModel("v1", social, profiles)
+        runCurrent()
+
+        vm.startEdit(vm.state.value.comments.single(), nowMs = com.poro.app.core.format.Formats.parseIsoMillis(created)!! + 1_000)
+        vm.onEditDraftChange("après")
+        vm.saveEdit()
+        runCurrent()
+
+        assertEquals("c1", vm.state.value.editing?.id)
+        assertEquals("après", vm.state.value.editDraft)
+        assertEquals(R.string.error_network, vm.state.value.error?.text)
     }
 }

@@ -64,6 +64,10 @@ data class VideoRoute(val videoId: String)
 @Serializable
 data class PublicProfileRoute(val userId: String, val username: String? = null)
 
+/** Abonnés ([FollowListKind.Followers]) ou abonnements d'un compte, depuis ses compteurs. */
+@Serializable
+data class FollowListRoute(val userId: String, val kind: String)
+
 /** Carnet d'adresses de livraison (Paramètres, et lien depuis le checkout). */
 @Serializable
 data object AddressesRoute

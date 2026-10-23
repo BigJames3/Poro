@@ -39,6 +39,7 @@ fun ApiResult<*>.toErrorMessage(): ErrorMessage? = when (this) {
         ApiErrorCodes.REAUTH_REQUIRED -> ErrorMessage(R.string.error_reauth_required)
         ApiErrorCodes.NOT_FOUND, ApiErrorCodes.PROFILE_NOT_FOUND -> ErrorMessage(R.string.error_not_found)
         ApiErrorCodes.FORBIDDEN -> ErrorMessage(R.string.error_forbidden)
+        ApiErrorCodes.COMMENT_EDIT_WINDOW_CLOSED -> ErrorMessage(R.string.error_comment_edit_window)
         ApiErrorCodes.USERNAME_TAKEN -> ErrorMessage(R.string.username_taken)
         ApiErrorCodes.USERNAME_INVALID -> ErrorMessage(R.string.username_invalid)
         ApiErrorCodes.USERNAME_RESERVED -> ErrorMessage(R.string.username_reserved)

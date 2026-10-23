@@ -82,6 +82,24 @@ dans les titres vidéo (U+200D entre deux émojis seulement) ; Wave seul paiemen
 | 5 | Mode invité en lecture seule | TERMINÉ (PR #66 fusionnée) |
 | 6 | Build de release signé dans la CI | TERMINÉ (PR #67 fusionnée, workflow `android-release.yml`) ; BLOQUÉ pour la signature réelle (keystore, URL de production) |
 | 7 | Tests instrumentés Android et parcours de bout en bout | EN COURS : 7a diagnostic E-01 (PR #68 fusionnée) ; 7b tests instrumentés (PR #69 fusionnée) ; 7c parcours de bout en bout, 97/97 routes de l'app (PR ouverte, job `e2e`) ; correctifs E-01 et B-10 (PR #70) |
-| 7d | Portage de la sauvegarde, lot A (marketplace) : carnet d'adresses, vider le panier, retirer le logo | EN COURS : branche locale `claude/lot-a-marketplace`, en attente d'autorisation de pousser |
+| 7d | Portage de la sauvegarde, lot A (marketplace) : carnet d'adresses, vider le panier, retirer le logo | TERMINÉ (PR #72 fusionnée) |
+| 7e | Portage de la sauvegarde, lot B (social) : listes d'abonnés et d'abonnements, compteurs cliquables, édition de commentaire | EN COURS : PR ouverte, fusion soumise à l'accord du propriétaire |
 | 8 | PORO-015 : service de paiement Wave | À FAIRE ; BLOQUÉ pour la mise en service (clés de bac à sable, secret de webhook) |
 | 9 | Notifications push (FCM) | À FAIRE ; BLOQUÉ pour la mise en service (projet Firebase) |
+
+## Lot B : social (portage de la sauvegarde)
+
+Depuis `origin/main` (`08c8187`), sans les composants du redesign (lot C). Trois défauts de la
+sauvegarde corrigés au passage :
+
+- **Listes sans noms** : la sauvegarde n'affichait que « Membre Poro ». Les noms et avatars sont lus
+  par lot (`GET /users?ids=`, une requête par page) ; un compte supprimé garde le libellé par défaut.
+- **Compteurs trop petits** : chaque compteur est un bouton d'au moins 48 dp, lu comme tel par TalkBack.
+- **Fenêtre d'édition jugée sur l'horloge du téléphone** : le bouton « Modifier » reste proposé
+  d'après l'heure locale, mais le serveur décide. Sur `comment_edit_window_closed` ou `forbidden`,
+  l'édition se ferme et le message l'explique (« Ce commentaire ne peut plus être modifié (15 minutes). ») ;
+  une erreur réseau laisse le brouillon ouvert pour réessayer.
+
+Vérifications : tests JVM (225, 0 échec), parcours de bout en bout locaux 104/104 routes de l'app,
+test instrumenté `FollowUiTest` (job `mobile-instrumented`).
+
