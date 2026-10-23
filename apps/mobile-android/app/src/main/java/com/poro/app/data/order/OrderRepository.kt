@@ -12,9 +12,15 @@ interface OrderRepository {
 
     suspend fun removeItem(variantId: String): ApiResult<CartDto>
 
+    suspend fun clearCart(): ApiResult<CartDto>
+
     suspend fun prefill(): ApiResult<Prefill>
 
     suspend fun addresses(): ApiResult<List<AddressDto>>
+
+    suspend fun saveAddress(input: AddressInput, addressId: String?): ApiResult<AddressDto>
+
+    suspend fun setDefaultAddress(addressId: String): ApiResult<AddressDto>
 
     suspend fun deleteAddress(addressId: String): ApiResult<Unit>
 
@@ -48,9 +54,16 @@ class DefaultOrderRepository(private val api: OrderApi) : OrderRepository {
 
     override suspend fun removeItem(variantId: String) = apiCall { api.removeItem(variantId) }
 
+    override suspend fun clearCart() = apiCall { api.clearCart() }
+
     override suspend fun prefill() = apiCall { api.prefill() }
 
     override suspend fun addresses() = apiCall { api.addresses() }
+
+    override suspend fun saveAddress(input: AddressInput, addressId: String?) =
+        apiCall { if (addressId == null) api.createAddress(input) else api.updateAddress(addressId, input) }
+
+    override suspend fun setDefaultAddress(addressId: String) = apiCall { api.setDefaultAddress(addressId) }
 
     override suspend fun deleteAddress(addressId: String) = apiCall(ifEmpty = {}) { api.deleteAddress(addressId) }
 

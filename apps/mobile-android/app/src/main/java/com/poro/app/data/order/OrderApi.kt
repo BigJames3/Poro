@@ -23,6 +23,9 @@ interface OrderApi {
     @GET("api/v1/cart")
     suspend fun cart(): Response<ApiEnvelope<CartDto>>
 
+    @DELETE("api/v1/cart")
+    suspend fun clearCart(): Response<ApiEnvelope<CartDto>>
+
     @PUT("api/v1/cart/items/{variantId}")
     suspend fun setQuantity(@Path("variantId") variantId: String, @Body body: Quantity): Response<ApiEnvelope<CartDto>>
 
@@ -40,6 +43,15 @@ interface OrderApi {
 
     @GET("api/v1/addresses")
     suspend fun addresses(): Response<ApiEnvelope<List<AddressDto>>>
+
+    @POST("api/v1/addresses")
+    suspend fun createAddress(@Body body: AddressInput): Response<ApiEnvelope<AddressDto>>
+
+    @PUT("api/v1/addresses/{addressId}")
+    suspend fun updateAddress(@Path("addressId") addressId: String, @Body body: AddressInput): Response<ApiEnvelope<AddressDto>>
+
+    @POST("api/v1/addresses/{addressId}/default")
+    suspend fun setDefaultAddress(@Path("addressId") addressId: String): Response<ApiEnvelope<AddressDto>>
 
     /** 204 sans corps. */
     @DELETE("api/v1/addresses/{addressId}")
@@ -197,6 +209,17 @@ data class Placed(
     @SerialName("checkout_id") val checkoutId: String = "",
     val orders: List<OrderDto> = emptyList(),
     @SerialName("address_saved") val addressSaved: Boolean = false,
+)
+
+@Serializable
+data class AddressInput(
+    @SerialName("full_name") val fullName: String,
+    val phone: String,
+    val city: String,
+    val address: String? = null,
+    val landmark: String? = null,
+    val label: String? = null,
+    @SerialName("is_default") val isDefault: Boolean = false,
 )
 
 @Serializable

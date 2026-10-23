@@ -470,4 +470,23 @@
     <string name="upload_forbidden_chars">Caractère invisible non accepté (par exemple un émoji composé) : retirez-le.</string>
     <string name="bio_too_many_lines">%1$d lignes au plus.</string>
     <string name="prefs_push_unavailable">Les notifications sur le téléphone (push) ne sont pas encore disponibles : vos notifications restent dans l\'application.</string>
+
+    <!-- Carnet d'adresses, panier et logo (lot A) -->
+    <string name="action_edit">Modifier</string>
+    <string name="addresses_add">Ajouter une adresse</string>
+    <string name="addresses_default">Adresse par défaut</string>
+    <string name="addresses_deleted">Adresse supprimée.</string>
+    <string name="addresses_delete_confirm">Supprimer cette adresse ?</string>
+    <string name="addresses_edit">Modifier l’adresse</string>
+    <string name="addresses_empty">Aucune adresse enregistrée.</string>
+    <string name="addresses_label">Libellé (Maison, Bureau…)</string>
+    <string name="addresses_saved">Adresse enregistrée.</string>
+    <string name="addresses_set_default">Définir par défaut</string>
+    <string name="addresses_title">Carnet d’adresses</string>
+    <string name="cart_clear">Vider le panier</string>
+    <string name="cart_clear_confirm_text">Tous les articles seront retirés. Cette action est définitive.</string>
+    <string name="cart_clear_confirm_title">Vider le panier ?</string>
+    <string name="checkout_manage_addresses">Gérer mes adresses</string>
+    <string name="settings_addresses">Carnet d’adresses</string>
+    <string name="shop_remove_logo">Retirer le logo</string>
 </resources>

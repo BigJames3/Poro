@@ -10,6 +10,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import retrofit2.Retrofit
@@ -75,6 +76,27 @@ class OrderRepositoryTest {
         )
         assertEquals("""{"preview_id":"pv1","confirmed":true}""", server.takeRequest().body.readUtf8())
         assertEquals("o1", placed.orders.single().orderId)
+    }
+
+    @Test
+    fun `clearing the cart hits DELETE cart`() = runTest {
+        server.enqueue(json("""{"data":{"shops":[],"unavailable":[],"item_count":0},"error":null,"meta":{}}"""))
+        val cart = (repo.clearCart() as ApiResult.Success).data
+        val request = server.takeRequest()
+        assertEquals("DELETE", request.method)
+        assertEquals("/api/v1/cart", request.path)
+        assertEquals(0, cart.itemCount)
+    }
+
+    @Test
+    fun `a new address is posted with its label`() = runTest {
+        server.enqueue(json("""{"data":{"address_id":"a1","label":"Maison","is_default":true,"full_name":"Awa","phone":"+2250701020304","city":"Abidjan"},"error":null,"meta":{}}"""))
+        val saved = (repo.saveAddress(AddressInput("Awa", "+2250701020304", "Abidjan", "Cocody", label = "Maison"), null) as ApiResult.Success).data
+        val request = server.takeRequest()
+        assertEquals("POST", request.method)
+        assertEquals("/api/v1/addresses", request.path)
+        assertEquals("a1", saved.addressId)
+        assertTrue(request.body.readUtf8().contains("\"label\":\"Maison\""))
     }
 
     @Test

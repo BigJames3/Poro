@@ -21,6 +21,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +50,8 @@ fun CheckoutScreen(
     onReview: () -> Unit,
     onEdit: () -> Unit,
     onConfirm: () -> Unit,
+    onRetryLoad: () -> Unit,
+    onManageAddresses: () -> Unit,
 ) {
     val preview = state.preview
     // Sur le récapitulatif, « retour » revient à la livraison plutôt que de quitter la commande.
@@ -64,8 +67,13 @@ fun CheckoutScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (preview == null) {
-                DeliveryFields(state, onFormChange, onUseAddress, onSaveAddressChange)
+                DeliveryFields(state, onFormChange, onUseAddress, onSaveAddressChange, onManageAddresses)
                 state.error?.let { ErrorMessageText(it) }
+                if (state.error != null) {
+                    TextButton(onClick = onRetryLoad, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.action_retry))
+                    }
+                }
                 SubmitButton(stringResource(R.string.checkout_continue), enabled = state.form.isValid, loading = state.working, onClick = onReview)
             } else {
                 Review(preview)
@@ -85,6 +93,7 @@ private fun DeliveryFields(
     onFormChange: (DeliveryForm) -> Unit,
     onUseAddress: (AddressDto) -> Unit,
     onSaveAddressChange: (Boolean) -> Unit,
+    onManageAddresses: () -> Unit,
 ) {
     val form = state.form
     if (state.addresses.isNotEmpty()) {
@@ -95,6 +104,7 @@ private fun DeliveryFields(
             }
         }
     }
+    TextButton(onClick = onManageAddresses, enabled = !state.working) { Text(stringResource(R.string.checkout_manage_addresses)) }
     DeliveryField(form.fullName, R.string.delivery_full_name, KeyboardType.Text, KeyboardCapitalization.Words) { onFormChange(form.copy(fullName = it.take(80))) }
     DeliveryField(form.phone, R.string.delivery_phone, KeyboardType.Phone, supporting = R.string.delivery_phone_hint) {
         onFormChange(form.copy(phone = it.filter { c -> c.isDigit() || c == '+' }.take(16)))
@@ -129,7 +139,7 @@ private fun DeliveryFields(
 }
 
 @Composable
-private fun DeliveryField(
+internal fun DeliveryField(
     value: String,
     label: Int,
     keyboardType: KeyboardType,
@@ -175,4 +185,5 @@ private fun Review(preview: PreviewDto) {
     }
     Text(stringResource(R.string.checkout_payment), style = MaterialTheme.typography.titleSmall)
     Text(preview.paymentMethodLabel.ifBlank { stringResource(R.string.payment_cash_on_delivery) })
+    Text(stringResource(R.string.cart_payment_notice), style = MaterialTheme.typography.bodySmall)
 }

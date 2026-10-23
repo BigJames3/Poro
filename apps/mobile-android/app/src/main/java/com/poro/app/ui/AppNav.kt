@@ -78,6 +78,9 @@ class AppNav(
 /** Un écran enfant du profil l'a modifié (pseudo, avatar, adresse vérifiée) : le recharger au retour. */
 const val RESULT_PROFILE_CHANGED = "profile_changed"
 
+/** Le carnet d'adresses a changé : le checkout relit les adresses enregistrées au retour. */
+const val RESULT_ADDRESSES_CHANGED = "addresses_changed"
+
 /** Exécute [onResult] une fois quand un écran enfant a posé [key] (voir [AppNav.backWithResult]). */
 @Composable
 fun ConsumeResult(entry: NavBackStackEntry, key: String, onResult: () -> Unit) {

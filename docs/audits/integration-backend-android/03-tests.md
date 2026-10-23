@@ -14,7 +14,7 @@ ces outils ne sont **pas** comptés comme exécutés.
 | Garde-fou release (sonde Gradle, mêmes fonctions que `app/build.gradle.kts`) | `assembleDebug` et `testDebugUnitTest` passent ; `assembleRelease` **échoue** sans URL (« Release sans URL d'API… ») ; `bundleRelease` passe avec `PORO_API_BASE_URL=https://api.example.com/` | AGP non chargé : la logique Gradle est vérifiée, pas la release réelle |
 | `assembleRelease` / `bundleRelease` réels | **Non exécuté** | Pas de SDK Android ni de keystore |
 | Tests instrumentés (`androidTest`) | 3 classes, job CI `mobile-instrumented` (émulateur API 34) | Configuration réseau de debug lue par Android, émojis composés avec l'ICU de l'appareil, démarrage invité puis connexion et retour ; sans backend |
-| Parcours de bout en bout (pile complète) | `tests/e2e`, job CI `e2e` | 97/97 routes de l'app ; voir § Tests de bout en bout |
+| Parcours de bout en bout (pile complète) | `tests/e2e`, job CI `e2e` | 102/102 routes de l'app (97 avant le lot A) ; voir § Tests de bout en bout |
 | Parcours réels sur émulateur | **Partiels**, journaux du propriétaire du 2026-10-21 | 24 endpoints observés avec la réponse attendue (VERT dans la matrice) ; échecs : envoi d'images (E-01), sessions 404 et statistiques 503 (environnement) |
 | Envoi présigné de l'app contre SeaweedFS | 2026-10-23, SeaweedFS 4.45 local, formulaire du service user | `PresignedUploader` : `Success` (ETag) en direct et avec la réécriture `localhost` de l'émulateur ; l'écart E-01 ne vient pas du code de l'app |
 
@@ -64,8 +64,9 @@ d'auth (fournisseurs `log` du mode dev).
 | Social | Abonnement, j'aime, commentaire et réponse, édition, j'aime de commentaire, partage, compteurs, puis tout défaire et supprimer la vidéo |
 | Fil, recherche | Vidéo dans « Abonnements », `for-you`, tendances ; comptes, vidéos, hashtags, produits et boutiques indexés |
 | Notifications | Reçues par le vendeur, compteur, lecture, préférences |
-| Boutique | Création, logo, produit à deux variantes, photos, publication, stock, suppression d'une photo et d'un brouillon, vitrine publique, fermeture puis réouverture |
-| Commandes | Panier, préremplissage, aperçu, confirmation (paiement à la livraison), réservation du stock, expédition puis réception ; annulation par l'acheteur, refus par le vendeur ; carnet d'adresses |
+| Boutique | Création, logo envoyé puis retiré, produit à deux variantes, photos, publication, stock, suppression d'une photo et d'un brouillon, vitrine publique, fermeture puis réouverture |
+| Commandes | Panier, préremplissage, aperçu, confirmation (paiement à la livraison), réservation du stock, expédition puis réception ; annulation par l'acheteur, refus par le vendeur ; panier vidé |
+| Carnet d'adresses | Adresse enregistrée au checkout, ajout, modification, choix par défaut (listée en premier), suppression |
 | Signalement | Signalement d'une vidéo |
 
 Résultat local du 2026-10-23 (pile complète, services hors conteneur, vraie gateway) : **97 routes

@@ -64,6 +64,10 @@ data class VideoRoute(val videoId: String)
 @Serializable
 data class PublicProfileRoute(val userId: String, val username: String? = null)
 
+/** Carnet d'adresses de livraison (Paramètres, et lien depuis le checkout). */
+@Serializable
+data object AddressesRoute
+
 @Serializable
 data object ProfileRoute
 
