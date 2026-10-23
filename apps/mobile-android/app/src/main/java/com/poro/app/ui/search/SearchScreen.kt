@@ -23,8 +23,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +39,8 @@ import coil3.compose.AsyncImage
 import com.poro.app.R
 import com.poro.app.core.format.Formats
 import com.poro.app.data.search.HashtagHit
+import com.poro.app.data.search.ProductHit
+import com.poro.app.data.search.ShopHit
 import com.poro.app.data.search.UserHit
 import com.poro.app.data.search.VideoHit
 import com.poro.app.ui.auth.ErrorMessageText
@@ -54,6 +56,8 @@ fun SearchScreen(
     onLoadMore: () -> Unit,
     onOpenVideo: (VideoHit) -> Unit,
     onOpenUser: (UserHit) -> Unit,
+    onOpenProduct: (ProductHit) -> Unit,
+    onOpenShop: (ShopHit) -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
         OutlinedTextField(
@@ -86,7 +90,7 @@ fun SearchScreen(
             Text(stringResource(R.string.search_hint), modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
             return@Column
         }
-        TabRow(selectedTabIndex = state.tab.ordinal) {
+        ScrollableTabRow(selectedTabIndex = state.tab.ordinal, edgePadding = 16.dp) {
             SearchTab.entries.forEach { tab ->
                 Tab(
                     selected = tab == state.tab,
@@ -100,6 +104,8 @@ fun SearchScreen(
                 SearchTab.Videos -> results(state.videos, onLoadMore) { video -> VideoRow(video) { onOpenVideo(video) } }
                 SearchTab.Users -> results(state.users, onLoadMore) { user -> UserRow(user) { onOpenUser(user) } }
                 SearchTab.Hashtags -> results(state.hashtags, onLoadMore) { tag -> HashtagRow(tag) { onSubmit("#" + tag.tag) } }
+                SearchTab.Products -> results(state.products, onLoadMore) { product -> ProductRow(product) { onOpenProduct(product) } }
+                SearchTab.Shops -> results(state.shops, onLoadMore) { shop -> ShopRow(shop) { onOpenShop(shop) } }
             }
         }
     }
@@ -110,6 +116,8 @@ private val SearchTab.label: Int
         SearchTab.Videos -> R.string.search_tab_videos
         SearchTab.Users -> R.string.search_tab_users
         SearchTab.Hashtags -> R.string.search_tab_hashtags
+        SearchTab.Products -> R.string.search_tab_products
+        SearchTab.Shops -> R.string.search_tab_shops
     }
 
 /** Liste paginée : la page suivante se charge quand on atteint la fin. */
@@ -163,3 +171,40 @@ private fun HashtagRow(tag: HashtagHit, onClick: () -> Unit) {
         modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
     )
 }
+
+@Composable
+private fun ProductRow(product: ProductHit, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(Modifier.size(72.dp)) {
+            AsyncImage(product.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(product.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            product.minPrice?.let {
+                Text(stringResource(R.string.search_price_from, Formats.money(it, product.currency)), style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(
+                listOfNotNull(
+                    product.shop.name,
+                    if (product.inStock) null else stringResource(R.string.search_out_of_stock),
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShopRow(shop: ShopHit, onClick: () -> Unit) {
+    ListItem(
+        leadingContent = { Avatar(shop.logoUrl, shop.name, size = 40.dp) },
+        headlineContent = { Text(shop.name) },
+        supportingContent = { Text("@${shop.handle}") },
+        modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
+    )
+}
+

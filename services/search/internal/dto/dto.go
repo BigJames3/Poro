@@ -48,6 +48,31 @@ type Hashtag struct {
 	VideosCount int64  `json:"videos_count"`
 }
 
+type ShopRef struct {
+	ShopID      string  `json:"shop_id"`
+	Name        string  `json:"name"`
+	Handle      string  `json:"handle"`
+	LogoURL     *string `json:"logo_url"`
+	CountryCode string  `json:"country_code"`
+}
+
+// Product is an active product of an active shop. MinPrice is the lowest
+// variant price in minor units of Currency.
+type Product struct {
+	ProductID string  `json:"product_id"`
+	Title     string  `json:"title"`
+	ImageURL  *string `json:"image_url"`
+	MinPrice  *int64  `json:"min_price"`
+	Currency  string  `json:"currency"`
+	InStock   bool    `json:"in_stock"`
+	Shop      ShopRef `json:"shop"`
+}
+
+type Shop struct {
+	ShopRef
+	Currency string `json:"currency"`
+}
+
 // Suggestions answers GET /api/v1/search/suggest.
 type Suggestions struct {
 	Users    []User    `json:"users"`

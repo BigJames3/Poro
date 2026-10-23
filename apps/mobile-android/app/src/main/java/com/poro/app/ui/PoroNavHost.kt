@@ -64,7 +64,7 @@ enum class TopLevelTab(
     val matches: (NavDestination) -> Boolean,
 ) {
     Home(HomeRoute, R.string.tab_feed, Icons.Filled.Home, { it.hasRoute<HomeRoute>() }),
-    Search(SearchRoute, R.string.tab_search, Icons.Filled.Search, { it.hasRoute<SearchRoute>() }),
+    Search(SearchRoute(), R.string.tab_search, Icons.Filled.Search, { it.hasRoute<SearchRoute>() }),
     Upload(UploadRoute, R.string.tab_upload, Icons.Filled.AddCircle, { it.hasRoute<UploadRoute>() }),
     Shop(ShopHomeRoute, R.string.tab_shop, Icons.Filled.ShoppingCart, { it.hasRoute<ShopHomeRoute>() }),
     Profile(ProfileRoute, R.string.tab_profile, Icons.Filled.Person, { it.hasRoute<ProfileRoute>() }),

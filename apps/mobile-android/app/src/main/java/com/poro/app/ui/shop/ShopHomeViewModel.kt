@@ -32,8 +32,8 @@ sealed interface ShopHomeEvent {
 }
 
 /**
- * Accueil de l'onglet Boutique. Le catalogue n'a pas encore de recherche (PORO-026) : on trouve
- * une boutique par son identifiant « @… », partagé par le vendeur.
+ * Accueil de l'onglet Boutique : recherche dans le catalogue (onglet Produits de la recherche,
+ * PORO-026), ou boutique trouvée directement par son identifiant « @… » partagé par le vendeur.
  */
 class ShopHomeViewModel(
     private val shops: ShopRepository,

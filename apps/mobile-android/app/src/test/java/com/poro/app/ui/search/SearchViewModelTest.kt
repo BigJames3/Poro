@@ -3,8 +3,10 @@ package com.poro.app.ui.search
 import androidx.lifecycle.SavedStateHandle
 import com.poro.app.core.network.ApiResult
 import com.poro.app.data.search.HashtagHit
+import com.poro.app.data.search.ProductHit
 import com.poro.app.data.search.SearchPage
 import com.poro.app.data.search.SearchRepository
+import com.poro.app.data.search.ShopHit
 import com.poro.app.data.search.Suggestions
 import com.poro.app.data.search.UserHit
 import com.poro.app.data.search.VideoHit
@@ -39,6 +41,16 @@ class SearchViewModelTest {
         override suspend fun hashtags(q: String, cursor: String?): ApiResult<SearchPage<HashtagHit>> {
             calls += "hashtags:$q"
             return ApiResult.Success(SearchPage(listOf(HashtagHit("foot", 12))))
+        }
+
+        override suspend fun products(q: String, cursor: String?): ApiResult<SearchPage<ProductHit>> {
+            calls += "products:$q"
+            return ApiResult.Success(SearchPage(listOf(ProductHit("p1", "Pagne wax", minPrice = 9000, currency = "XOF"))))
+        }
+
+        override suspend fun shops(q: String, cursor: String?): ApiResult<SearchPage<ShopHit>> {
+            calls += "shops:$q"
+            return ApiResult.Success(SearchPage(listOf(ShopHit("s1", "Pagnes Awa", "pagnes.awa"))))
         }
 
         override suspend fun suggest(q: String): ApiResult<Suggestions> {
@@ -89,4 +101,21 @@ class SearchViewModelTest {
         assertEquals(SearchTab.Users, vm.state.value.tab)
         assertEquals(listOf("users:@kofi"), calls)
     }
+
+    @Test
+    fun `opened from the shop tab, a search starts on products and a handle opens shops`() = runTest(main.dispatcher) {
+        val vm = SearchViewModel(repo, SavedStateHandle().apply { set("tab", SearchTab.Products.name) })
+        assertEquals(SearchTab.Products, vm.state.value.tab)
+
+        vm.submit("pagne")
+        runCurrent()
+        assertEquals("p1", vm.state.value.products.items.single().productId)
+
+        vm.submit("@pagnes")
+        runCurrent()
+        assertEquals("a handle in the catalogue is a shop's", SearchTab.Shops, vm.state.value.tab)
+        assertEquals("pagnes.awa", vm.state.value.shops.items.single().handle)
+        assertEquals(listOf("products:pagne", "shops:@pagnes"), calls)
+    }
 }
+

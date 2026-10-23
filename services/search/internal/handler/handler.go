@@ -20,7 +20,9 @@ func New(svc *service.Search) *Search {
 }
 
 func (h *Search) Search(c *fiber.Ctx) error {
-	out, err := h.svc.Search(c.UserContext(), c.Query("q"), c.Query("type"), c.Query("cursor"), c.QueryInt("limit"))
+	filters := service.Filters{Country: c.Query("country"), Currency: c.Query("currency"),
+		MinPrice: c.Query("min_price"), MaxPrice: c.Query("max_price")}
+	out, err := h.svc.Search(c.UserContext(), c.Query("q"), c.Query("type"), c.Query("cursor"), c.QueryInt("limit"), filters)
 	if err != nil {
 		return err
 	}

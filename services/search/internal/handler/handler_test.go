@@ -163,10 +163,12 @@ func TestSearchWithAndWithoutAccount(t *testing.T) {
 	require.Contains(t, string(data), `"users":[`)
 
 	for path, want := range map[string]string{
-		"/api/v1/search":                     "invalid_query",
-		"/api/v1/search?q=x&type=shops":      "invalid_type",
-		"/api/v1/search?q=x&cursor=nope":     "invalid_cursor",
-		"/api/v1/search/suggest?q=%20%20%20": "invalid_query",
+		"/api/v1/search":                              "invalid_query",
+		"/api/v1/search?q=x&type=places":              "invalid_type",
+		"/api/v1/search?q=x&type=products&country=FR": "invalid_filter",
+		"/api/v1/search?q=x&type=videos&min_price=10": "invalid_filter",
+		"/api/v1/search?q=x&cursor=nope":              "invalid_cursor",
+		"/api/v1/search/suggest?q=%20%20%20":          "invalid_query",
 	} {
 		status, _, code := a.get(path, nil)
 		require.Equal(t, 400, status, path)

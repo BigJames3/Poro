@@ -53,6 +53,41 @@ type HashtagHit struct {
 	VideosCount int64
 }
 
+// ShopRef is the shop shown with a product hit.
+type ShopRef struct {
+	ShopID      uuid.UUID
+	Name        string
+	Handle      string
+	LogoURL     *string
+	CountryCode string
+}
+
+// ProductHit is an active product of an active shop.
+type ProductHit struct {
+	ProductID uuid.UUID
+	Title     string
+	ImageURL  *string
+	MinPrice  *int64
+	Currency  string
+	InStock   bool
+	Shop      ShopRef
+}
+
+// ShopHit is an active shop.
+type ShopHit struct {
+	ShopRef
+	Currency string
+}
+
+// CatalogFilter narrows product and shop results; nil fields do not filter.
+// Prices are in minor units and apply to products only.
+type CatalogFilter struct {
+	CountryCode *string
+	Currency    *string
+	MinPrice    *int64
+	MaxPrice    *int64
+}
+
 // Suggestions are prefix matches for the search box.
 type Suggestions struct {
 	Users    []UserHit
@@ -64,5 +99,7 @@ type Index interface {
 	Videos(ctx context.Context, query string, offset, limit int) (Page[VideoHit], error)
 	Users(ctx context.Context, query string, offset, limit int) (Page[UserHit], error)
 	Hashtags(ctx context.Context, query string, offset, limit int) (Page[HashtagHit], error)
+	Products(ctx context.Context, query string, filter CatalogFilter, offset, limit int) (Page[ProductHit], error)
+	Shops(ctx context.Context, query string, filter CatalogFilter, offset, limit int) (Page[ShopHit], error)
 	Suggest(ctx context.Context, prefix string, perKind int) (Suggestions, error)
 }

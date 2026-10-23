@@ -38,9 +38,9 @@ data object HomeRoute
 @Serializable
 data class EmailVerifyRoute(val codeAlreadySent: Boolean = true)
 
-/** Onglet « Rechercher ». */
+/** Onglet « Rechercher » ; [tab] est le nom d'un `SearchTab` à ouvrir d'emblée. */
 @Serializable
-data object SearchRoute
+data class SearchRoute(val tab: String? = null)
 
 @Serializable
 data object NotificationsRoute
