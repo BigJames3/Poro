@@ -105,4 +105,30 @@ class FeedViewModelTest {
         assertEquals(FeedKind.Trending to null, feed.requests.last())
         assertEquals(listOf("v9"), vm.state.value.current.items.map { it.videoId })
     }
+
+    @Test
+    fun `a guest sees only the public feed, paged like the others`() = runTest(main.dispatcher) {
+        feed.pages.getValue(FeedKind.Guest) += page("v1", "v2", next = "c2")
+        feed.pages.getValue(FeedKind.Guest) += page("v3", next = null)
+        val vm = FeedViewModel(feed, kinds = listOf(FeedKind.Guest))
+        runCurrent()
+
+        assertEquals(listOf(FeedKind.Guest), vm.state.value.kinds)
+        assertEquals(FeedKind.Guest, vm.state.value.kind)
+        vm.onItemShown(0)
+        runCurrent()
+
+        assertEquals(listOf(FeedKind.Guest to null, FeedKind.Guest to "c2"), feed.requests)
+        assertEquals(listOf("v1", "v2", "v3"), vm.state.value.current.items.map { it.videoId })
+    }
+
+    @Test
+    fun `a signed-in account never loads the guest feed`() = runTest(main.dispatcher) {
+        feed.pages.getValue(FeedKind.ForYou) += page("v1", next = null)
+        val vm = FeedViewModel(feed)
+        runCurrent()
+
+        assertEquals(listOf(FeedKind.ForYou, FeedKind.Following, FeedKind.Trending), vm.state.value.kinds)
+        assertEquals(listOf(FeedKind.ForYou to null), feed.requests)
+    }
 }

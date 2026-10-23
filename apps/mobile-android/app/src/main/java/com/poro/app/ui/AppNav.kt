@@ -50,9 +50,18 @@ class AppNav(
         }
     }
 
-    /** Retour à la connexion, pile vidée (déconnexion, session expirée ou supprimée). */
+    /**
+     * Retour à la connexion, pile vidée (déconnexion, session expirée ou supprimée). Le fil invité
+     * reste dessous : « retour » y mène au lieu de fermer l'app.
+     */
     fun goToSignIn() {
-        controller.navigate(PhoneRoute) { popUpTo(controller.graph.id) { inclusive = true } }
+        controller.navigate(GuestFeedRoute) { popUpTo(controller.graph.id) { inclusive = true } }
+        controller.navigate(PhoneRoute)
+    }
+
+    /** Un invité tente une action réservée aux comptes : écran de connexion, fil invité dessous. */
+    fun signInPrompt() {
+        controller.navigate(PhoneRoute) { launchSingleTop = true }
     }
 
     fun back() {
@@ -83,7 +92,7 @@ fun ConsumeResult(entry: NavBackStackEntry, key: String, onResult: () -> Unit) {
 
 /** Écrans utilisables sans session : une déconnexion n'a pas à les quitter. */
 fun NavDestination.isSignInScreen(): Boolean =
-    hasRoute<PhoneRoute>() || hasRoute<OtpRoute>() || hasRoute<EmailLoginRoute>() || hasRoute<EmailRegisterRoute>() ||
+    hasRoute<GuestFeedRoute>() || hasRoute<PhoneRoute>() || hasRoute<OtpRoute>() || hasRoute<EmailLoginRoute>() || hasRoute<EmailRegisterRoute>() ||
         hasRoute<ForgotPasswordRoute>() || hasRoute<ResetPasswordRoute>() ||
         // Ouverts depuis les écrans de connexion (mention légale).
         hasRoute<LegalIndexRoute>() || hasRoute<LegalDocumentRoute>()

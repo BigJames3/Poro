@@ -97,7 +97,7 @@ fun FeedScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
-                FeedKind.entries.forEach { kind -> FeedTab(kind, selected = kind == state.kind, onClick = { onSelect(kind) }) }
+                state.kinds.forEach { kind -> FeedTab(kind, selected = kind == state.kind, onClick = { onSelect(kind) }) }
             }
             topEnd()
         }
@@ -108,7 +108,7 @@ fun FeedScreen(
 private fun FeedTab(kind: FeedKind, selected: Boolean, onClick: () -> Unit) {
     val label = stringResource(
         when (kind) {
-            FeedKind.ForYou -> R.string.feed_for_you
+            FeedKind.ForYou, FeedKind.Guest -> R.string.feed_for_you
             FeedKind.Following -> R.string.feed_following
             FeedKind.Trending -> R.string.feed_trending
         },

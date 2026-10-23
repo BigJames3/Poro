@@ -1,14 +1,25 @@
 package com.poro.app.ui.feed
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
+import com.poro.app.R
 import com.poro.app.data.feed.FeedItem
+import com.poro.app.data.feed.FeedKind
 import com.poro.app.data.video.VideoDto
 import com.poro.app.ui.AppNav
+import com.poro.app.ui.GuestFeedRoute
 import com.poro.app.ui.HomeRoute
 import com.poro.app.ui.VideoRoute
 import com.poro.app.ui.player.rememberVideoPlayer
@@ -26,6 +37,8 @@ fun NavGraphBuilder.feedGraph(
     feedTopEnd: @Composable () -> Unit = {},
     /** Vidéos du fil affiché, à chaque nouvelle page (préchargement des compteurs). */
     onFeedItems: @Composable (List<FeedItem>) -> Unit = {},
+    /** Colonne d'actions du fil invité : chaque bouton ouvre la connexion. */
+    guestActions: @Composable (FeedItem) -> Unit = {},
 ) {
     val container = nav.container
 
@@ -44,6 +57,26 @@ fun NavGraphBuilder.feedGraph(
             onOpenAuthor = { item -> onOpenAuthor(item.author.id, item.author.username) },
             actions = feedActions,
             topEnd = feedTopEnd,
+        )
+    }
+    // Invité : un seul fil, public ; l'auteur, les actions et « Se connecter » ouvrent la connexion.
+    composable<GuestFeedRoute> {
+        val vm = poroViewModel { FeedViewModel(container.feedRepository, kinds = listOf(FeedKind.Guest)) }
+        val state by vm.state.collectAsStateWithLifecycle()
+        val player = rememberVideoPlayer(container.network.mediaClient)
+        FeedScreen(
+            state = state,
+            player = player,
+            onSelect = { vm.refresh() },
+            onItemShown = vm::onItemShown,
+            onRetry = { vm.refresh() },
+            onOpenAuthor = { nav.signInPrompt() },
+            actions = guestActions,
+            topEnd = {
+                TextButton(onClick = nav::signInPrompt, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(R.string.action_sign_in), color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
         )
     }
     composable<VideoRoute> { entry ->

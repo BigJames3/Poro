@@ -40,6 +40,15 @@ func (h *Feed) Trending(c *fiber.Ctx) error {
 	})
 }
 
+// PublicTrending serves the trending feed to guests: no token, no viewer.
+func (h *Feed) PublicTrending(c *fiber.Ctx) error {
+	page, err := h.svc.Trending(c.UserContext(), c.Query("cursor"), c.QueryInt("limit"))
+	if err != nil {
+		return err
+	}
+	return httpx.WriteData(c, fiber.StatusOK, page)
+}
+
 type feedFunc func(ctx context.Context, viewer uuid.UUID, cursor string, limit int) (*dto.Page, error)
 
 func (h *Feed) serve(c *fiber.Ctx, fn feedFunc) error {

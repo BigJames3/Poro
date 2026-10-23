@@ -15,7 +15,7 @@
 
 | ID | Question | Options | Recommandation |
 |---|---|---|---|
-| B1 | Rendre une partie du fil publique ? | a) `trending` en jeton facultatif ; b) `for-you` non personnalisé public ; c) aucun mode invité | a), avec revue sécurité (B3) |
+| B1 | Rendre une partie du fil publique ? | a) `trending` en jeton facultatif ; b) `for-you` non personnalisé public ; c) aucun mode invité | **Tranché** : route distincte `GET /api/v1/feed/public/trending` (sans jeton, 60 req/IP/min, champs publics seulement) ; `following` et `for-you` restent privés |
 | B2 | Limiter les visiteurs derrière un CGNAT ? | a) limite par IP relevée ; b) jeton d'appareil anonyme | À évaluer par le backend avec des mesures réelles |
 | M1 | « Ajouter au panier » additionne-t-il ? | a) additionner (plafond 99) ; b) libeller « Mettre N au panier » | a) |
 | M2 | Accès « Voir le panier » après ajout | snackbar avec action / navigation directe | Snackbar avec action |

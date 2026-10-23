@@ -3,13 +3,15 @@ info:
   title: PORO Feed API
   version: 1.0.0
   description: |
-    Following, trending and For You feeds of ready videos. All feed routes need
-    a token. Every JSON response uses `{data, error, meta}`.
+    Following, trending and For You feeds of ready videos. Every feed route
+    needs a token except `GET /api/v1/feed/public/trending`, the read-only
+    feed of guests. Every JSON response uses `{data, error, meta}`.
 
     Items are compact for slow mobile networks: no description (read it from
     the video API) and no `liked_by_me` in v1 (read it from social stats).
     Counters are the feed's projection of social events and may lag by a few
-    seconds. 120 requests per user per minute, then `429 rate_limited`.
+    seconds. 120 requests per user per minute, 60 per IP per minute on the
+    public route, then `429 rate_limited`.
 servers:
   - url: http://localhost:8084
     description: Local development
@@ -77,6 +79,24 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
+  /api/v1/feed/public/trending:
+    get:
+      tags: [feed]
+      security: []
+      summary: Trending videos for guests, without a token
+      description: |
+        Same pages and cursors as `/api/v1/feed/trending`, for a guest who
+        has not signed in (read-only mode of the app). Only public fields are
+        returned: title, hashtags, counters, media URLs and the author's
+        public profile. A token, if sent, is ignored. Limited to 60 requests
+        per IP per minute, counted apart from signed-in requests. Following
+        and For You stay private.
+      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200": { $ref: "#/components/responses/Page" }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503": { description: Rate limiter unavailable }
 components:
   securitySchemes:
     bearerAuth:

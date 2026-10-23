@@ -18,6 +18,10 @@ interface FeedApi {
 
     @GET("api/v1/feed/trending")
     suspend fun trending(@Query("cursor") cursor: String?, @Query("limit") limit: Int): Response<ApiEnvelope<PageDto<FeedItem>>>
+
+    /** Tendances sans jeton, pour le mode invité ; limitées par adresse IP. */
+    @GET("api/v1/feed/public/trending")
+    suspend fun publicTrending(@Query("cursor") cursor: String?, @Query("limit") limit: Int): Response<ApiEnvelope<PageDto<FeedItem>>>
 }
 
 /** Élément compact (réseaux lents) : pas de description ni de `liked_by_me`, lus ailleurs. */

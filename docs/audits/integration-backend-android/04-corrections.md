@@ -44,7 +44,7 @@ Aucun secret, aucune infrastructure ni donnée de production modifiés. Aucun co
 | P1 | Envois bruts d'avatar et de boutique orphelins | TERMINÉ : `UploadSweeper` (user, shop), tests `upload-sweeper.spec.ts` |
 | P2 | Filet de sécurité côté stockage et plafond par partie (PORO-008) | TERMINÉ sur la branche du chantier 1, sous réserve de la CI : TTL du filer, `seaweedfs-janitor`, `Content-Length` signé |
 | P1 | Vendeur suspendu toujours actif dans shop et order (B-07) | À FAIRE (PORO-021, contrôle inter-services) |
-| — | Mode invité (B-02) | **Décision** du propriétaire (B1) : aucune route privée rendue publique |
+| — | Mode invité (B-02) | **Décision** du propriétaire : seul le fil public des tendances est ouvert (nouvelle route), aucune route privée rendue publique ; voir chantier 5 |
 | — | Émojis composés dans les titres vidéo (B-04) | **Décision** : autoriser U+200D seul ouvre la porte à du texte invisible |
 | — | Wave (B-09) | Laissé désactivé : seul `cash_on_delivery` est proposé ; aucune confirmation simulée |
 | — | Fusion du travail Android local non poussé | **BLOQUÉ** : `wip/android-local` absente de GitHub |
@@ -59,7 +59,7 @@ Aucun secret, aucune infrastructure ni donnée de production modifiés. Aucun co
 
 ## Décisions métier ouvertes
 
-1. Mode invité : rendre `trending` public (B1) ?
+1. Mode invité : tranché (fil public en lecture seule, chantier 5).
 2. Émojis composés dans les titres et descriptions vidéo (B-04).
 3. Écrans « vidéos aimées » et « qui a aimé » : utiles au lancement ?
 4. Écran « annuler la suppression du compte » : la reconnexion suffit-elle ?
@@ -79,7 +79,7 @@ dans les titres vidéo (U+200D entre deux émojis seulement) ; Wave seul paiemen
 | 2b | Annulation automatique des commandes d'une boutique suspendue | TERMINÉ (PR #63 fusionnée) |
 | 3 | PORO-026 : recherche dans le catalogue des boutiques | TERMINÉ (PR #64 fusionnée) |
 | 4 | Émojis composés dans les titres et descriptions vidéo | TERMINÉ (PR #65 fusionnée) |
-| 5 | Mode invité en lecture seule | À FAIRE |
+| 5 | Mode invité en lecture seule | TERMINÉ (PR #66 fusionnée) |
 | 6 | Build de release signé dans la CI | À FAIRE ; BLOQUÉ pour la signature (keystore, URL de production) |
 | 7 | Tests instrumentés Android et parcours de bout en bout | À FAIRE |
 | 8 | PORO-015 : service de paiement Wave | À FAIRE ; BLOQUÉ pour la mise en service (clés de bac à sable, secret de webhook) |

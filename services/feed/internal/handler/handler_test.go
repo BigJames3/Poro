@@ -157,7 +157,22 @@ func TestFeedsOverHTTP(t *testing.T) {
 		require.Nil(t, it.Author.AvatarURL)
 	}
 
-	status, _, code := a.get("/api/v1/feed/following?cursor=bad", &viewer)
+	// Guests read trending only, without a token; the other feeds stay private.
+	status, data, _ := a.get("/api/v1/feed/public/trending?limit=5", nil)
+	require.Equal(t, 200, status)
+	var guest dto.Page
+	require.NoError(t, json.Unmarshal(data, &guest))
+	require.Len(t, guest.Items, 1)
+	require.Equal(t, vid.String(), guest.Items[0].VideoID)
+	for _, path := range []string{"/api/v1/feed/public/following", "/api/v1/feed/public/for-you", "/api/v1/feed/public"} {
+		status, _, _ := a.get(path, nil)
+		require.NotEqual(t, 200, status, path)
+	}
+	status, _, code := a.get("/api/v1/feed/public/trending?cursor=bad", nil)
+	require.Equal(t, 400, status)
+	require.Equal(t, "invalid_cursor", code)
+
+	status, _, code = a.get("/api/v1/feed/following?cursor=bad", &viewer)
 	require.Equal(t, 400, status)
 	require.Equal(t, "invalid_cursor", code)
 }

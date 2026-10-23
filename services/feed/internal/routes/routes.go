@@ -21,13 +21,17 @@ type Dependencies struct {
 	Limiter *ratelimit.Limiter
 }
 
-// Register mounts the probes (at the root and under /api/v1), the metrics and
-// the authenticated /api/v1/feed routes. /metrics must not be exposed by the
-// public gateway.
+// Register mounts the probes (at the root and under /api/v1), the metrics,
+// the public trending feed and the authenticated /api/v1/feed routes. /metrics
+// must not be exposed by the public gateway.
 func Register(app *fiber.App, deps Dependencies) {
 	deps.Health.Register(app)
 	deps.Health.Register(app.Group("/api/v1"))
 	app.Get("/metrics", deps.Metrics)
+
+	// Guests browse trending videos without a token. Registered before the
+	// authenticated group so its JWT middleware never runs for this path.
+	app.Get("/api/v1/feed/public/trending", middleware.PublicLimit(deps.Limiter), deps.Feed.PublicTrending)
 
 	feed := app.Group("/api/v1/feed", jwtauth.Middleware(deps.JWT), middleware.GeneralLimit(deps.Limiter))
 	feed.Get("/for-you", deps.Feed.ForYou)

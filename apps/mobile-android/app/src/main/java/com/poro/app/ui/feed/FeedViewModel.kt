@@ -7,6 +7,7 @@ import com.poro.app.core.network.ApiResult
 import com.poro.app.data.feed.FeedItem
 import com.poro.app.data.feed.FeedKind
 import com.poro.app.data.feed.FeedRepository
+import com.poro.app.data.feed.SIGNED_IN_FEEDS
 import com.poro.app.ui.auth.ErrorMessage
 import com.poro.app.ui.auth.toErrorMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,20 +30,25 @@ data class FeedList(
 }
 
 data class FeedUiState(
-    val kind: FeedKind = FeedKind.ForYou,
+    /** Onglets affichés, dans l'ordre. */
+    val kinds: List<FeedKind> = SIGNED_IN_FEEDS,
+    val kind: FeedKind = kinds.first(),
     val lists: Map<FeedKind, FeedList> = FeedKind.entries.associateWith { FeedList() },
 ) {
     val current: FeedList get() = lists.getValue(kind)
 }
 
-/** Les trois fils (Pour toi, Abonnements, Tendances), chacun avec sa propre pagination. */
-class FeedViewModel(private val feed: FeedRepository) : ViewModel() {
+/**
+ * Les fils [kinds], chacun avec sa propre pagination : Pour toi, Abonnements et Tendances pour un
+ * compte connecté, le seul fil public pour un invité.
+ */
+class FeedViewModel(private val feed: FeedRepository, kinds: List<FeedKind> = SIGNED_IN_FEEDS) : ViewModel() {
 
-    private val _state = MutableStateFlow(FeedUiState())
+    private val _state = MutableStateFlow(FeedUiState(kinds = kinds))
     val state: StateFlow<FeedUiState> = _state.asStateFlow()
 
     init {
-        loadMore(FeedKind.ForYou)
+        loadMore(kinds.first())
     }
 
     fun select(kind: FeedKind) {
