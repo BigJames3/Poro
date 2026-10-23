@@ -32,12 +32,19 @@ func Description(raw string) (string, string) {
 	return s, ""
 }
 
+// hasForbidden reports control and format characters, which can hide or
+// reorder text. The zero-width joiner is the one exception, between two
+// emoji only, so composed emoji (a family, a heart on fire, a profession with a skin tone) are kept.
 func hasForbidden(s string, allowNewline bool) bool {
-	for _, r := range s {
+	runes := []rune(s)
+	for i, r := range runes {
 		if r == '\n' || r == '\r' {
 			if !allowNewline {
 				return true
 			}
+			continue
+		}
+		if r == zeroWidthJoiner && joinsEmoji(runes, i) {
 			continue
 		}
 		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
@@ -46,6 +53,30 @@ func hasForbidden(s string, allowNewline bool) bool {
 	}
 	return false
 }
+
+const (
+	zeroWidthJoiner   = '\u200D'
+	variationSelector = '\uFE0F'
+)
+
+// joinsEmoji reports whether the joiner at i sits between two emoji: an
+// emoji, a skin tone or an emoji presentation selector before it, an emoji
+// after it.
+func joinsEmoji(runes []rune, i int) bool {
+	if i == 0 || i == len(runes)-1 {
+		return false
+	}
+	before, after := runes[i-1], runes[i+1]
+	return (isEmoji(before) || isSkinTone(before) || before == variationSelector) && isEmoji(after)
+}
+
+// isEmoji is a symbol of the emoji blocks or a pictographic other symbol
+// (♀, ⚕, ❤): every rune a joiner links in a recommended emoji sequence.
+func isEmoji(r rune) bool {
+	return unicode.Is(unicode.So, r) && !isSkinTone(r)
+}
+
+func isSkinTone(r rune) bool { return r >= 0x1F3FB && r <= 0x1F3FF }
 
 // MaxHashtags caps how many tags one video carries.
 const MaxHashtags = 20

@@ -77,8 +77,8 @@ dans les titres vidéo (U+200D entre deux émojis seulement) ; Wave seul paiemen
 | 1 | PORO-008 (fin) : expiration côté stockage, plafond par partie | TERMINÉ (PR #61 fusionnée) |
 | 2 | PORO-021 : suspension des comptes (ADMIN, MODERATOR) et des boutiques | TERMINÉ (PR #62 fusionnée) |
 | 2b | Annulation automatique des commandes d'une boutique suspendue | TERMINÉ (PR #63 fusionnée) |
-| 3 | PORO-026 : recherche dans le catalogue des boutiques | EN COURS : PR ouverte, CI en cours |
-| 4 | Émojis composés dans les titres et descriptions vidéo | À FAIRE |
+| 3 | PORO-026 : recherche dans le catalogue des boutiques | TERMINÉ (PR #64 fusionnée) |
+| 4 | Émojis composés dans les titres et descriptions vidéo | TERMINÉ (PR #65 fusionnée) |
 | 5 | Mode invité en lecture seule | À FAIRE |
 | 6 | Build de release signé dans la CI | À FAIRE ; BLOQUÉ pour la signature (keystore, URL de production) |
 | 7 | Tests instrumentés Android et parcours de bout en bout | À FAIRE |
