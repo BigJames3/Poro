@@ -35,7 +35,7 @@ func (s *Social) CreateComment(ctx context.Context, user, videoID uuid.UUID, req
 
 	comment := repository.Comment{ID: newID(), UserID: user, VideoID: videoID, ParentID: parentID, Content: content}
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
-		owner, err := readyVideo(ctx, tx, videoID)
+		owner, err := shownVideo(ctx, tx, videoID)
 		if err != nil {
 			return err
 		}
@@ -238,7 +238,7 @@ func (s *Social) ListComments(ctx context.Context, videoID uuid.UUID, viewer *uu
 	if err != nil {
 		return nil, err
 	}
-	if _, err := readyVideo(ctx, s.pool, videoID); err != nil {
+	if _, err := shownVideo(ctx, s.pool, videoID); err != nil {
 		return nil, asAPIError(err)
 	}
 	limit = model.PageSize(limit)
@@ -263,7 +263,7 @@ func (s *Social) ListReplies(ctx context.Context, commentID uuid.UUID, viewer *u
 	if err != nil {
 		return nil, errInternal.WithCause(err)
 	}
-	if _, err := readyVideo(ctx, s.pool, parent.VideoID); err != nil {
+	if _, err := shownVideo(ctx, s.pool, parent.VideoID); err != nil {
 		return nil, asAPIError(err)
 	}
 	limit = model.PageSize(limit)

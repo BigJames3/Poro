@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/poro/shared-go/hiding"
+
 	"github.com/poro/social/internal/model"
 )
 
@@ -84,6 +86,17 @@ func EnsureUser(ctx context.Context, db DBTX, userID uuid.UUID) error {
 		return fmt.Errorf("ensure user: %w", err)
 	}
 	return nil
+}
+
+// AccountHidden reports whether an account is hidden because its deletion is
+// pending (shared-go/hiding): its videos and profile take no new action and
+// leave the public reads.
+func AccountHidden(ctx context.Context, db DBTX, userID uuid.UUID) (bool, error) {
+	var shown bool
+	if err := db.QueryRow(ctx, `SELECT `+hiding.NotHidden("$1::uuid"), userID).Scan(&shown); err != nil {
+		return false, fmt.Errorf("account hidden: %w", err)
+	}
+	return !shown, nil
 }
 
 // UserExists reports whether the account is known.

@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/poro/shared-go/hiding"
+
 	"github.com/poro/feed/internal/cursor"
 	"github.com/poro/feed/internal/mix"
 )
@@ -24,8 +26,9 @@ type Item struct {
 	AvatarURL     *string
 }
 
-// visible keeps videos a feed may show.
-const visible = `v.deleted_at IS NULL AND v.moderation_status = 'approved'`
+// visible keeps videos a feed may show: not deleted, approved, and not by an
+// account whose deletion is pending.
+var visible = `v.deleted_at IS NULL AND v.moderation_status = 'approved' AND ` + hiding.NotHidden("v.author_id")
 
 const itemColumns = `v.video_id, v.author_id, v.title, v.hashtags, v.thumbnail_key, v.hls_key, v.duration_ms, v.published_at,
 	COALESCE(s.likes_count, 0), COALESCE(s.comments_count, 0), COALESCE(s.shares_count, 0), COALESCE(s.trending_score, 0),

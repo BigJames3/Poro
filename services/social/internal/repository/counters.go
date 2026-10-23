@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/poro/shared-go/hiding"
+
 	"github.com/poro/social/internal/model"
 )
 
@@ -116,7 +118,7 @@ func ReadyVideoStats(ctx context.Context, db DBTX, ids []uuid.UUID, viewer *uuid
 			$3::uuid IS NOT NULL AND EXISTS (SELECT 1 FROM likes l WHERE l.user_id = $3 AND l.video_id = v.video_id)
 		FROM videos_projection v
 		LEFT JOIN video_counters c ON c.video_id = v.video_id
-		WHERE v.video_id = ANY($1) AND v.status = $2`, ids, model.VideoReady, viewer)
+		WHERE v.video_id = ANY($1) AND v.status = $2 AND `+hiding.NotHidden("v.owner_id"), ids, model.VideoReady, viewer)
 	if err != nil {
 		return nil, fmt.Errorf("ready video stats: %w", err)
 	}

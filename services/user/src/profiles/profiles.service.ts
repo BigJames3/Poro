@@ -148,7 +148,7 @@ export class ProfilesService {
     const profile = usernameProblem(username)
       ? null
       : await this.prisma.profile.findFirst({ where: { username, deletedAt: null } });
-    if (!profile) {
+    if (!profile || (await this.hidden([profile.userId])).size > 0) {
       throw new ApiError(404, 'profile_not_found', 'profile not found');
     }
     return toPublicView(profile, (key) => this.avatars.publicUrl(key));
@@ -173,7 +173,8 @@ export class ProfilesService {
     const found = await this.prisma.profile.findMany({
       where: { userId: { in: ids }, deletedAt: null },
     });
-    const byId = new Map(found.map((p) => [p.userId, p]));
+    const hidden = await this.hidden(found.map((p) => p.userId));
+    const byId = new Map(found.filter((p) => !hidden.has(p.userId)).map((p) => [p.userId, p]));
     const avatarUrl = (key: string) => this.avatars.publicUrl(key);
     return {
       items: ids.flatMap((id) => {
@@ -181,6 +182,18 @@ export class ProfilesService {
         return profile ? [toPublicView(profile, avatarUrl)] : [];
       }),
     };
+  }
+
+  /** Accounts among ids whose deletion is pending: their profile is not shown. */
+  private async hidden(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) {
+      return new Set();
+    }
+    const rows = await this.prisma.hiddenAccount.findMany({
+      where: { userId: { in: ids }, hidden: true },
+      select: { userId: true },
+    });
+    return new Set(rows.map((r) => r.userId));
   }
 
   async createAvatarUpload(

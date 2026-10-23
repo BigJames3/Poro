@@ -32,6 +32,17 @@ model Profile {
   @@map("profiles")
 }
 
+// Accounts whose deletion is pending (poro.auth.user.deletion_scheduled and
+// .deletion_cancelled): their profile is hidden, its data kept. The latest
+// changed_at wins, so a late or replayed event changes nothing.
+model HiddenAccount {
+  userId    String   @id @map("user_id") @db.Uuid
+  hidden    Boolean
+  changedAt DateTime @map("changed_at") @db.Timestamptz(6)
+
+  @@map("hidden_accounts")
+}
+
 // Transactional outbox relayed by services/outbox-relay. The relay owns the
 // column set (github.com/poro/shared-go/outbox.Schema), so there is no updated_at.
 model OutboxEvent {

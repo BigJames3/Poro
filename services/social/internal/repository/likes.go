@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/poro/shared-go/hiding"
+
 	"github.com/poro/social/internal/cursor"
 	"github.com/poro/social/internal/model"
 )
@@ -53,7 +55,7 @@ func HasLiked(ctx context.Context, db DBTX, userID, videoID uuid.UUID) (bool, er
 func ListVideoLikes(ctx context.Context, db DBTX, videoID uuid.UUID, after *cursor.Position, limit int) ([]Like, error) {
 	ts, id := keyset(after)
 	rows, err := db.Query(ctx, `SELECT id, user_id, video_id, created_at FROM likes
-		WHERE video_id = $1 AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))
+		WHERE video_id = $1 AND `+hiding.NotHidden("likes.user_id")+` AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3::uuid))
 		ORDER BY created_at DESC, id DESC LIMIT $4`, videoID, ts, id, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list video likes: %w", err)
@@ -65,7 +67,7 @@ func ListVideoLikes(ctx context.Context, db DBTX, videoID uuid.UUID, after *curs
 func ListUserLikes(ctx context.Context, db DBTX, userID uuid.UUID, after *cursor.Position, limit int) ([]Like, error) {
 	ts, id := keyset(after)
 	rows, err := db.Query(ctx, `SELECT l.id, l.user_id, l.video_id, l.created_at FROM likes l
-		JOIN videos_projection v ON v.video_id = l.video_id AND v.status = $5
+		JOIN videos_projection v ON v.video_id = l.video_id AND v.status = $5 AND `+hiding.NotHidden("v.owner_id")+`
 		WHERE l.user_id = $1 AND ($2::timestamptz IS NULL OR (l.created_at, l.id) < ($2::timestamptz, $3::uuid))
 		ORDER BY l.created_at DESC, l.id DESC LIMIT $4`, userID, ts, id, limit, model.VideoReady)
 	if err != nil {

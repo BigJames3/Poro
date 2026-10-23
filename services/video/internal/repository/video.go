@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/poro/shared-go/hiding"
+
 	"github.com/poro/video/internal/model"
 )
 
@@ -55,6 +57,16 @@ func (r *Videos) Create(ctx context.Context, v *model.Video) error {
 func (r *Videos) Get(ctx context.Context, id uuid.UUID) (*model.Video, error) {
 	return scanVideo(r.pool.QueryRow(ctx,
 		`SELECT `+videoColumns+` FROM videos WHERE id = $1 AND deleted_at IS NULL`, id))
+}
+
+// OwnerHidden reports whether the account owning videos is hidden because its
+// deletion is pending (shared-go/hiding).
+func (r *Videos) OwnerHidden(ctx context.Context, userID uuid.UUID) (bool, error) {
+	var shown bool
+	if err := r.pool.QueryRow(ctx, `SELECT `+hiding.NotHidden("$1::uuid"), userID).Scan(&shown); err != nil {
+		return false, fmt.Errorf("owner hidden: %w", err)
+	}
+	return !shown, nil
 }
 
 // GetAny returns a video including soft-deleted rows (worker / abort).

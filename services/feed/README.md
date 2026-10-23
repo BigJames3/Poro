@@ -34,6 +34,10 @@ Groupe `poro-feed-projector` (inbox, DLQ). Le feed ne publie rien.
 | `poro.social.like.*`, `poro.social.comment.*`, `poro.social.share.created` | Compteurs et score de tendance |
 | `poro.user.profile.updated` | Nom, nom affiché et avatar des auteurs (instantané le plus récent) |
 
+Groupe `poro-feed-account-hiding` sur `poro.auth.user.deletion_scheduled` et `.deletion_cancelled`
+([ADR-0019](../../docs/architecture/adr/0019-masquage-pendant-la-suppression.md)) : les vidéos d'un
+compte dont la suppression est demandée sortent de tous les flux, jusqu'à l'annulation.
+
 Groupe `poro-feed-account-erasure` sur `poro.auth.user.deleted`
 ([ADR-0018](../../docs/architecture/adr/0018-effacement-du-compte-dans-les-services.md)) :
 profil d'auteur, abonnements dans les deux sens (`RemoveFollow`) et nombre d'abonnés

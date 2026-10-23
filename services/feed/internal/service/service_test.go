@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/poro/shared-go/hiding"
 	"github.com/poro/shared-go/httpx"
 
 	"github.com/poro/feed/internal/cursor"
@@ -35,7 +36,7 @@ func newEnv(t *testing.T) env {
 	testdb.Available(t)
 	ctx := context.Background()
 	// Each test sees only its own rows.
-	_, err := testdb.Pool.Exec(ctx, `TRUNCATE videos, follows, author_followers, video_stats, authors`)
+	_, err := testdb.Pool.Exec(ctx, `TRUNCATE videos, follows, author_followers, video_stats, authors, hidden_accounts`)
 	require.NoError(t, err)
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
@@ -123,6 +124,31 @@ func TestFollowingKeysetHasNoGapOrDuplicate(t *testing.T) {
 	}
 	require.Equal(t, want, seen, "every followed video exactly once, nothing else")
 	require.Equal(t, 4, pages)
+}
+
+// An account whose deletion is pending disappears from the feeds, and comes
+// back when the deletion is cancelled.
+func TestHiddenAccountLeavesTheFeeds(t *testing.T) {
+	e := newEnv(t)
+	viewer, author := uuid.New(), uuid.New()
+	follow(t, viewer, author)
+	id := video(t, author, time.Now().Add(-time.Minute))
+	setHidden := func(hidden bool) {
+		t.Helper()
+		_, err := testdb.Pool.Exec(ctx, hiding.Upsert, author, hidden, time.Now())
+		require.NoError(t, err)
+		e.mr.FlushAll() // the first page cache lives 60 seconds
+	}
+
+	setHidden(true)
+	p, err := e.svc.Following(ctx, viewer, "", 10)
+	require.NoError(t, err)
+	require.Empty(t, p.Items)
+
+	setHidden(false)
+	p, err = e.svc.Following(ctx, viewer, "", 10)
+	require.NoError(t, err)
+	require.Equal(t, []string{id.String()}, ids(p.Items))
 }
 
 func TestFollowingFirstPageIsCached(t *testing.T) {

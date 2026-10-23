@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/poro/shared-go/health"
+	"github.com/poro/shared-go/hiding"
 	"github.com/poro/shared-go/httpx"
 	"github.com/poro/shared-go/jwtauth"
 	"github.com/poro/shared-go/kafka"
@@ -37,6 +38,9 @@ import (
 )
 
 const version = "1.0.0"
+
+// hidingGroup hides the videos of accounts whose deletion is pending (shared-go/hiding).
+const hidingGroup = "poro-video-account-hiding"
 
 func main() {
 	if err := run(); err != nil {
@@ -126,6 +130,16 @@ func run() error {
 		return fmt.Errorf("init account erasure consumer: %w", err)
 	}
 
+	hider, err := kafka.NewConsumer(kafka.ConsumerConfig{
+		Brokers: cfg.KafkaBrokers,
+		Group:   hidingGroup,
+		Topics:  hiding.Topics,
+		Metrics: m.Registry(),
+	}, hiding.Handler(pool), log)
+	if err != nil {
+		return fmt.Errorf("init account hiding consumer: %w", err)
+	}
+
 	app := fiber.New(fiber.Config{
 		AppName:                 "poro-video",
 		DisableStartupMessage:   true,
@@ -156,7 +170,7 @@ func run() error {
 	go func() {
 		defer close(consumerDone)
 		var wg sync.WaitGroup
-		for _, c := range []*kafka.Consumer{moderator, eraser} {
+		for _, c := range []*kafka.Consumer{moderator, eraser, hider} {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

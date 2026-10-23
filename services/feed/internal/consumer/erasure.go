@@ -18,6 +18,10 @@ import (
 // ErasureGroup is the Kafka consumer group that erases accounts (ADR-0018).
 const ErasureGroup = "poro-feed-account-erasure"
 
+// HidingGroup is the Kafka consumer group that hides the accounts whose
+// deletion is pending (shared-go/hiding).
+const HidingGroup = "poro-feed-account-hiding"
+
 // ErasureTopics are the events the erasure group consumes.
 var ErasureTopics = []string{events.TypeAuthUserDeleted}
 

@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/poro/shared-go/hiding"
+
 	"github.com/poro/social/internal/cursor"
 )
 
@@ -128,6 +130,7 @@ func ListTopComments(ctx context.Context, db DBTX, videoID, viewer uuid.UUID, af
 		EXISTS (SELECT 1 FROM comment_likes cl WHERE cl.comment_id = c.id AND cl.user_id = $2)
 		FROM comments c
 		WHERE c.video_id = $1 AND c.parent_id IS NULL AND (c.deleted_at IS NULL OR c.replies_count > 0)
+		  AND `+hiding.NotHidden("c.user_id")+`
 		  AND ($3::timestamptz IS NULL OR (c.created_at, c.id) < ($3::timestamptz, $4::uuid))
 		ORDER BY c.created_at DESC, c.id DESC LIMIT $5`, videoID, viewer, ts, id, limit)
 	if err != nil {
@@ -142,7 +145,7 @@ func ListReplies(ctx context.Context, db DBTX, parentID, viewer uuid.UUID, after
 	rows, err := db.Query(ctx, `SELECT `+commentColumns+`,
 		EXISTS (SELECT 1 FROM comment_likes cl WHERE cl.comment_id = c.id AND cl.user_id = $2)
 		FROM comments c
-		WHERE c.parent_id = $1 AND c.deleted_at IS NULL
+		WHERE c.parent_id = $1 AND c.deleted_at IS NULL AND `+hiding.NotHidden("c.user_id")+`
 		  AND ($3::timestamptz IS NULL OR (c.created_at, c.id) > ($3::timestamptz, $4::uuid))
 		ORDER BY c.created_at ASC, c.id ASC LIMIT $5`, parentID, viewer, ts, id, limit)
 	if err != nil {

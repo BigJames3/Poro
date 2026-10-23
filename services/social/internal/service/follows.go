@@ -21,7 +21,7 @@ func (s *Social) Follow(ctx context.Context, follower, following uuid.UUID) (*dt
 		return nil, errFollowSelf
 	}
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
-		if err := knownUser(ctx, tx, following); err != nil {
+		if err := shownUser(ctx, tx, following); err != nil {
 			return err
 		}
 		if err := repository.EnsureUser(ctx, tx, follower); err != nil {
@@ -61,7 +61,7 @@ func (s *Social) Unfollow(ctx context.Context, follower, following uuid.UUID) (*
 	if err != nil {
 		return nil, err
 	}
-	return s.UserStats(ctx, following, &follower)
+	return s.userStats(ctx, following, &follower)
 }
 
 // removeFollow deletes a follow, updates both counters and publishes
@@ -81,9 +81,14 @@ func removeFollow(ctx context.Context, tx pgx.Tx, follower, following uuid.UUID,
 
 // UserStats returns the follow counters of a known account. viewer may be nil.
 func (s *Social) UserStats(ctx context.Context, userID uuid.UUID, viewer *uuid.UUID) (*dto.UserStats, error) {
-	if err := knownUser(ctx, s.pool, userID); err != nil {
+	if err := shownUser(ctx, s.pool, userID); err != nil {
 		return nil, asAPIError(err)
 	}
+	return s.userStats(ctx, userID, viewer)
+}
+
+// userStats reads the counters without checking the account, already checked.
+func (s *Social) userStats(ctx context.Context, userID uuid.UUID, viewer *uuid.UUID) (*dto.UserStats, error) {
 	c, err := repository.GetUserCounters(ctx, s.pool, userID)
 	if err != nil {
 		return nil, errInternal.WithCause(err)
@@ -114,7 +119,7 @@ func (s *Social) listFollows(ctx context.Context, userID uuid.UUID, rawCursor st
 	if err != nil {
 		return nil, err
 	}
-	if err := knownUser(ctx, s.pool, userID); err != nil {
+	if err := shownUser(ctx, s.pool, userID); err != nil {
 		return nil, asAPIError(err)
 	}
 	limit = model.PageSize(limit)
