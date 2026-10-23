@@ -81,6 +81,6 @@ dans les titres vidéo (U+200D entre deux émojis seulement) ; Wave seul paiemen
 | 4 | Émojis composés dans les titres et descriptions vidéo | TERMINÉ (PR #65 fusionnée) |
 | 5 | Mode invité en lecture seule | TERMINÉ (PR #66 fusionnée) |
 | 6 | Build de release signé dans la CI | TERMINÉ (PR #67 fusionnée, workflow `android-release.yml`) ; BLOQUÉ pour la signature réelle (keystore, URL de production) |
-| 7 | Tests instrumentés Android et parcours de bout en bout | EN COURS : 7a diagnostic E-01 (PR #68 fusionnée) ; 7b tests instrumentés (PR ouverte, job `mobile-instrumented`) ; 7c parcours de bout en bout |
+| 7 | Tests instrumentés Android et parcours de bout en bout | EN COURS : 7a diagnostic E-01 (PR #68 fusionnée) ; 7b tests instrumentés (PR #69 fusionnée) ; 7c parcours de bout en bout, 97/97 routes de l'app (PR ouverte, job `e2e`) ; correctifs E-01 et B-10 (PR #70) |
 | 8 | PORO-015 : service de paiement Wave | À FAIRE ; BLOQUÉ pour la mise en service (clés de bac à sable, secret de webhook) |
 | 9 | Notifications push (FCM) | À FAIRE ; BLOQUÉ pour la mise en service (projet Firebase) |

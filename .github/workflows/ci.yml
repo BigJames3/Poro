@@ -30,6 +30,7 @@ jobs:
       shop: ${{ steps.filter.outputs.shop }}
       order: ${{ steps.filter.outputs.order }}
       mobile: ${{ steps.filter.outputs.mobile }}
+      e2e: ${{ steps.filter.outputs.e2e }}
       gateway: ${{ steps.filter.outputs.gateway }}
       storage: ${{ steps.filter.outputs.storage }}
       backup: ${{ steps.filter.outputs.backup }}
@@ -114,6 +115,19 @@ jobs:
               - '.github/actions/**'
             mobile:
               - 'apps/mobile-android/**'
+            # The journeys cross every service: any backend change runs them,
+            # and so does a change to the routes the app calls.
+            e2e:
+              - 'services/**'
+              - 'packages/**'
+              - 'infra/gateway/**'
+              - 'infra/storage/**'
+              - 'infra/media-worker/**'
+              - 'docker-compose.yml'
+              - '.env.example'
+              - 'tests/e2e/**'
+              - 'apps/mobile-android/app/src/main/java/com/poro/app/data/**'
+              - '.github/workflows/ci.yml'
             gateway:
               - 'infra/gateway/**'
               - 'docs/api/**'
@@ -825,6 +839,21 @@ jobs:
           path: apps/mobile-android/app/build/reports/androidTests/
           retention-days: 14
 
+  e2e:
+    # The app's journeys against the whole stack built from source, through
+    # the gateway: at least 80% of the routes the app calls must answer as
+    # expected (tests/e2e/e2e.py lists the ones it did not exercise).
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.e2e == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: shellcheck
+        run: shellcheck tests/e2e/run.sh
+      - name: Journeys of the app on the whole stack
+        run: tests/e2e/run.sh
+
   repo-checks:
     # Every change: a broken workflow, docker-compose.yml or infra script
     # breaks CI or every developer's environment, whatever the service touched.
@@ -869,6 +898,7 @@ jobs:
       - search
       - mobile-build
       - mobile-instrumented
+      - e2e
     runs-on: ubuntu-latest
     steps:
       - name: Every job passed or was not needed
