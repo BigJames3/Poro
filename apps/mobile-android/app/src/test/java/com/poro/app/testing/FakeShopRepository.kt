@@ -32,6 +32,8 @@ class FakeShopRepository : ShopRepository {
 
     override suspend fun uploadLogo(bytes: ByteArray, contentType: String) = shop.also { calls += "uploadLogo:$contentType:${bytes.size}" }
 
+    override suspend fun deleteLogo() = shop.also { calls += "deleteLogo" }
+
     override suspend fun myProducts(cursor: String?) = products.also { calls += "myProducts:$cursor" }
 
     override suspend fun myProduct(productId: String) = product.also { calls += "myProduct:$productId" }

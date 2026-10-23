@@ -60,6 +60,9 @@ interface ShopApi {
     @PUT("api/v1/shops/me/logo")
     suspend fun confirmLogo(@Body body: UploadKey): Response<ApiEnvelope<ShopDto>>
 
+    @DELETE("api/v1/shops/me/logo")
+    suspend fun deleteLogo(): Response<ApiEnvelope<ShopDto>>
+
     @GET("api/v1/shops/me/products")
     suspend fun myProducts(@Query("cursor") cursor: String?, @Query("limit") limit: Int): Response<ApiEnvelope<PageDto<ProductDto>>>
 

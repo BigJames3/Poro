@@ -34,6 +34,8 @@ interface ShopRepository {
 
     suspend fun uploadLogo(bytes: ByteArray, contentType: String): ApiResult<ShopDto>
 
+    suspend fun deleteLogo(): ApiResult<ShopDto>
+
     suspend fun myProducts(cursor: String?): ApiResult<PageDto<ProductDto>>
 
     suspend fun myProduct(productId: String): ApiResult<ProductDto>
@@ -85,6 +87,8 @@ class DefaultShopRepository(
         presignedImage({ api.logoUploadUrl(ImageUploadRequest(contentType)) }, bytes, contentType) { key ->
             api.confirmLogo(UploadKey(key))
         }
+
+    override suspend fun deleteLogo() = apiCall { api.deleteLogo() }
 
     override suspend fun myProducts(cursor: String?) = apiCall { api.myProducts(cursor, PAGE_SIZE) }
 

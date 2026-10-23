@@ -360,6 +360,9 @@ def shop(seller, buyer):
     check(mine["handle"] == handle, f"shops/me: {mine}")
     seller.call("PATCH", "/api/v1/shops/me", body={"description": "Pagnes, bijoux et sacs"})
     presigned_image(seller, "/api/v1/shops/me/logo/upload-url", None, "/api/v1/shops/me/logo", None)
+    check(seller.call("GET", "/api/v1/shops/me").get("logo_url"), "logo not set after confirmation")
+    removed = seller.call("DELETE", "/api/v1/shops/me/logo")
+    check(removed.get("logo_url") is None, f"logo still set after removal: {removed.get('logo_url')}")
 
     product = seller.call("POST", "/api/v1/shops/me/products", expect=201, body={
         "title": f"Pagne wax {RUN}", "description": "Coton, 6 yards",
@@ -457,7 +460,27 @@ def orders(seller, buyer, variant_id):
     addresses = buyer.call("GET", "/api/v1/addresses")
     items = addresses["items"] if isinstance(addresses, dict) else addresses
     check(items, "address not saved at checkout")
-    buyer.call("DELETE", "/api/v1/addresses/{addressId}", f"/api/v1/addresses/{items[0]['address_id']}", expect=(200, 204))
+
+    # The address book of Settings: add, edit, choose the default, delete.
+    office = buyer.call("POST", "/api/v1/addresses", expect=201, body={
+        "full_name": "Awa Koné", "phone": "+2250701020304", "city": "Abidjan",
+        "address": "Plateau, avenue Chardy", "label": "Bureau", "is_default": False})
+    check(office["is_default"] is False, "a second address must not become the default")
+    office = buyer.call("PUT", "/api/v1/addresses/{addressId}", f"/api/v1/addresses/{office['address_id']}", body={
+        "full_name": "Awa Koné", "phone": "+2250701020304", "city": "Abidjan",
+        "address": "Plateau, avenue Chardy, 3e étage", "label": "Bureau"})
+    check("3e étage" in office["address"], f"address not replaced: {office}")
+    buyer.call("POST", "/api/v1/addresses/{addressId}/default", f"/api/v1/addresses/{office['address_id']}/default")
+    book = buyer.call("GET", "/api/v1/addresses")
+    book = book["items"] if isinstance(book, dict) else book
+    check(book[0]["address_id"] == office["address_id"] and book[0]["is_default"], "the new default is not listed first")
+    for a in book:
+        buyer.call("DELETE", "/api/v1/addresses/{addressId}", f"/api/v1/addresses/{a['address_id']}", expect=(200, 204))
+
+    # Emptying the cart from the cart screen.
+    buyer.call("PUT", "/api/v1/cart/items/{variantId}", f"/api/v1/cart/items/{variant_id}", body={"quantity": 1})
+    emptied = buyer.call("DELETE", "/api/v1/cart")
+    check(not emptied.get("shops") and not emptied.get("unavailable"), f"cart not emptied: {emptied}")
 
 
 def cleanup(seller, buyer, video_id, comment, reply):

@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -40,7 +45,24 @@ fun CartScreen(
     onQuantityChange: (variantId: String, quantity: Int) -> Unit,
     onRemove: (variantId: String) -> Unit,
     onCheckout: () -> Unit,
+    onClear: () -> Unit,
 ) {
+    // Vider retire toutes les lignes d'un coup : on demande confirmation.
+    var confirmClear by rememberSaveable { mutableStateOf(false) }
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text(stringResource(R.string.cart_clear_confirm_title)) },
+            text = { Text(stringResource(R.string.cart_clear_confirm_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmClear = false
+                    onClear()
+                }) { Text(stringResource(R.string.cart_clear)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
     Scaffold(topBar = { BackTopBar(stringResource(R.string.cart_title), onBack) }) { padding ->
         LoadableContent(state.cart, onRetry, Modifier.padding(padding)) { cart ->
             if (cart.shops.isEmpty() && cart.unavailable.isEmpty()) {
@@ -48,6 +70,13 @@ fun CartScreen(
                 return@LoadableContent
             }
             LazyColumn(Modifier.fillMaxSize().padding(padding), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item(key = "clear") {
+                    TextButton(
+                        onClick = { confirmClear = true },
+                        enabled = "cart" !in state.busy,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    ) { Text(stringResource(R.string.cart_clear)) }
+                }
                 cart.shops.forEach { group ->
                     item(key = "shop-${group.shop.shopId}") {
                         Text(group.shop.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp).semantics { heading() })

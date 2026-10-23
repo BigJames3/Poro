@@ -1,5 +1,6 @@
 package com.poro.app.ui.shop
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -8,6 +9,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import com.poro.app.R
+import com.poro.app.ui.AddressesRoute
 import com.poro.app.ui.AppNav
 import com.poro.app.ui.CartRoute
 import com.poro.app.ui.CheckoutRoute
@@ -18,6 +20,7 @@ import com.poro.app.ui.OrderRoute
 import com.poro.app.ui.OrdersRoute
 import com.poro.app.ui.ProductEditorRoute
 import com.poro.app.ui.ProductRoute
+import com.poro.app.ui.RESULT_ADDRESSES_CHANGED
 import com.poro.app.ui.SearchRoute
 import com.poro.app.ui.ShopHomeRoute
 import com.poro.app.ui.ShopRoute
@@ -96,11 +99,39 @@ fun NavGraphBuilder.shopGraph(nav: AppNav) {
             onQuantityChange = vm::setQuantity,
             onRemove = vm::remove,
             onCheckout = { nav.controller.navigate(CheckoutRoute) },
+            onClear = vm::clear,
         )
     }
-    composable<CheckoutRoute> {
+    composable<AddressesRoute> {
+        val vm = poroViewModel { AddressesViewModel(container.orderRepository) }
+        val state by vm.state.collectAsStateWithLifecycle()
+        CollectEvents(vm.events) { event ->
+            when (event) {
+                AddressesEvent.Saved -> nav.showMessage(R.string.addresses_saved)
+                AddressesEvent.Deleted -> nav.showMessage(R.string.addresses_deleted)
+            }
+        }
+        val back = { if (state.changed) nav.backWithResult(RESULT_ADDRESSES_CHANGED) else nav.back() }
+        // Le geste retour système passe aussi par là, sinon le checkout garderait l'ancienne liste.
+        BackHandler(enabled = state.changed) { back() }
+        AddressesScreen(
+            state = state,
+            onBack = back,
+            onRetry = vm::load,
+            onAdd = vm::startCreate,
+            onEdit = vm::startEdit,
+            onFormChange = vm::onFormChange,
+            onLabelChange = vm::onLabelChange,
+            onSave = vm::save,
+            onCancel = vm::cancelForm,
+            onSetDefault = vm::setDefault,
+            onDelete = vm::delete,
+        )
+    }
+    composable<CheckoutRoute> { entry ->
         val vm = poroViewModel { CheckoutViewModel(container.orderRepository, createSavedStateHandle()) }
         val state by vm.state.collectAsStateWithLifecycle()
+        ConsumeResult(entry, RESULT_ADDRESSES_CHANGED) { vm.reloadAddresses() }
         CollectEvents(vm.events) { event ->
             when (event) {
                 is CheckoutEvent.Placed -> {
@@ -119,6 +150,8 @@ fun NavGraphBuilder.shopGraph(nav: AppNav) {
             onReview = vm::review,
             onEdit = vm::edit,
             onConfirm = vm::confirm,
+            onRetryLoad = vm::retryLoad,
+            onManageAddresses = { nav.controller.navigate(AddressesRoute) },
         )
     }
     composable<OrdersRoute> { entry ->
@@ -171,6 +204,7 @@ fun NavGraphBuilder.shopGraph(nav: AppNav) {
                 onSaveDetails = vm::saveDetails,
                 onSetOpen = vm::setOpen,
                 onLogoPicked = vm::onLogoPicked,
+                onRemoveLogo = vm::removeLogo,
                 onLoadMoreProducts = { vm.loadProducts() },
                 onNewProduct = { state.shop?.let { nav.controller.navigate(ProductEditorRoute(currency = it.currency)) } },
                 onEditProduct = { product -> nav.controller.navigate(ProductEditorRoute(product.productId, product.currency)) },

@@ -8,12 +8,14 @@ import com.poro.app.data.order.CartLine
 import com.poro.app.data.order.CartShop
 import com.poro.app.data.order.OrderDto
 import com.poro.app.data.shop.ProductDto
+import com.poro.app.data.shop.ShopDto
 import com.poro.app.data.shop.ShopRef
 import com.poro.app.data.shop.VariantDto
 import com.poro.app.testing.FakeMediaReader
 import com.poro.app.testing.FakeOrderRepository
 import com.poro.app.testing.FakeShopRepository
 import com.poro.app.testing.MainDispatcherRule
+import com.poro.app.ui.common.Loadable
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
@@ -236,5 +238,39 @@ class ShopViewModelsTest {
         assertFalse(vm.state.value.loading)
         assertEquals(null, vm.state.value.shop)
         assertEquals(null, vm.state.value.error)
+    }
+
+    @Test
+    fun `emptying the cart replaces it with the server answer, once at a time`() = runTest {
+        orders.cart = ApiResult.Success(CartDto(shops = listOf(CartShop(items = listOf(CartLine("v1", quantity = 2))))))
+        val vm = CartViewModel(orders)
+        vm.load()
+        runCurrent()
+
+        orders.cart = ApiResult.Success(CartDto())
+        vm.clear()
+        vm.clear()
+        runCurrent()
+
+        assertEquals("a second tap while emptying is ignored", 1, orders.calls.count { it == "clearCart" })
+        val cart = (vm.state.value.cart as Loadable.Loaded).value
+        assertTrue(cart.shops.isEmpty())
+    }
+
+    @Test
+    fun `removing the logo asks the server only when there is one`() = runTest {
+        val vm = MyShopViewModel(shops, FakeMediaReader())
+        vm.load()
+        runCurrent()
+        vm.removeLogo()
+        runCurrent()
+        assertFalse("no logo: nothing sent", "deleteLogo" in shops.calls)
+
+        shops.shop = ApiResult.Success(ShopDto("s1", "kofi.store", "Kofi Store", currency = "XOF", status = ShopDto.ACTIVE, logoUrl = "http://localhost:9000/l.webp"))
+        vm.load()
+        runCurrent()
+        vm.removeLogo()
+        runCurrent()
+        assertTrue("deleteLogo" in shops.calls)
     }
 }

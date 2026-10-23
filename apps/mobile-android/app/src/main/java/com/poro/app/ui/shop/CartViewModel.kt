@@ -52,6 +52,21 @@ class CartViewModel(private val orders: OrderRepository) : ViewModel() {
 
     fun remove(variantId: String) = change(variantId) { orders.removeItem(variantId) }
 
+    fun clear() {
+        if ("cart" in _state.value.busy) return
+        _state.update { it.copy(busy = it.busy + "cart", error = null) }
+        viewModelScope.launch {
+            val result = orders.clearCart()
+            _state.update {
+                it.copy(
+                    busy = it.busy - "cart",
+                    cart = if (result is ApiResult.Success) Loadable.Loaded(result.data) else it.cart,
+                    error = result.toErrorMessage(),
+                )
+            }
+        }
+    }
+
     private fun change(variantId: String, call: suspend () -> ApiResult<CartDto>) {
         if (variantId in _state.value.busy) return
         _state.update { it.copy(busy = it.busy + variantId, error = null) }
