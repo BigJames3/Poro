@@ -52,5 +52,9 @@ pour lire les traces de plantage.
 ## Limites connues
 
 - Pas encore de notifications push (aucun projet Firebase) ni de paiement en ligne (Wave, PORO-015).
-- Un envoi de vidéo ne survit pas à l'arrêt du processus (pas de WorkManager).
+- L'envoi de vidéo continue via WorkManager après la fermeture de l'écran. Un arrêt du
+  processus relance l'envoi depuis le début (nouveau `POST /videos/uploads`) : le contrat
+  n'expose pas les URL présignées ni les ETag déjà obtenus. Une reprise par partie exigerait
+  `GET /videos/uploads/{id}` côté backend.
 - Le catalogue n'a pas de recherche (PORO-026) : une boutique s'ouvre par son identifiant.
+  `GET /api/v1/search` ne porte que vidéos, comptes et hashtags.

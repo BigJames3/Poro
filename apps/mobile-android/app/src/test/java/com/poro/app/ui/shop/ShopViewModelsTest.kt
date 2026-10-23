@@ -147,6 +147,16 @@ class ShopViewModelsTest {
     }
 
     @Test
+    fun `clearing the cart calls the repository once`() = runTest {
+        orders.cart = ApiResult.Success(CartDto(shops = listOf(CartShop(items = listOf(CartLine("v1", quantity = 2))))))
+        val vm = CartViewModel(orders)
+        runCurrent()
+        vm.clear()
+        runCurrent()
+        assertTrue("clearCart" in orders.calls)
+    }
+
+    @Test
     fun `a seller ships with the tracking number and a buyer confirms receipt`() = runTest {
         val seller = OrderViewModel("o1", orders, asSeller = true)
         runCurrent()

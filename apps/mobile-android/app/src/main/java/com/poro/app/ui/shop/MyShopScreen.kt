@@ -58,6 +58,7 @@ class MyShopActions(
     val onSaveDetails: () -> Unit,
     val onSetOpen: (Boolean) -> Unit,
     val onLogoPicked: (String) -> Unit,
+    val onRemoveLogo: () -> Unit,
     val onLoadMoreProducts: () -> Unit,
     val onNewProduct: () -> Unit,
     val onEditProduct: (ProductDto) -> Unit,
@@ -136,6 +137,11 @@ private fun Dashboard(shop: ShopDto, state: MyShopUiState, actions: MyShopAction
             Text(stringResource(shopStatusLabel(shop.status)), style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = !state.working) {
                 Text(stringResource(R.string.shop_change_logo))
+            }
+            if (shop.logoUrl != null) {
+                TextButton(onClick = actions.onRemoveLogo, enabled = !state.working) {
+                    Text(stringResource(R.string.shop_remove_logo))
+                }
             }
         }
     }

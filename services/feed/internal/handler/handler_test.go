@@ -136,7 +136,7 @@ func TestFeedsOverHTTP(t *testing.T) {
 	name := "awa.k"
 	require.NoError(t, repository.UpsertAuthor(ctx, testdb.Pool, author, &name, nil, nil, time.Now()))
 
-	for _, path := range []string{"/api/v1/feed/following", "/api/v1/feed/trending", "/api/v1/feed/for-you"} {
+	for _, path := range []string{"/api/v1/feed/following", "/api/v1/feed/for-you"} {
 		status, _, code := a.get(path, nil)
 		require.Equal(t, 401, status, path)
 		require.Equal(t, "unauthorized", code)
@@ -153,6 +153,25 @@ func TestFeedsOverHTTP(t *testing.T) {
 		require.Equal(t, "awa.k", *it.Author.Username)
 		require.Nil(t, it.Author.AvatarURL)
 	}
+
+	status, data, _ := a.get("/api/v1/feed/trending?limit=5", nil)
+	require.Equal(t, 200, status)
+	var anon dto.Page
+	require.NoError(t, json.Unmarshal(data, &anon))
+	require.NotEmpty(t, anon.Items)
+	require.Equal(t, vid.String(), anon.Items[0].VideoID)
+
+	status, data, _ = a.get("/api/v1/feed/trending?limit=5", &viewer)
+	require.Equal(t, 200, status)
+	require.NoError(t, json.Unmarshal(data, &anon))
+	require.Equal(t, vid.String(), anon.Items[0].VideoID)
+
+	req := httptest.NewRequest("GET", "/api/v1/feed/trending", nil)
+	req.Header.Set("Authorization", "Bearer not-a-jwt")
+	res, err := a.app.Test(req, 10000)
+	require.NoError(t, err)
+	require.Equal(t, 401, res.StatusCode)
+	_ = res.Body.Close()
 
 	status, _, code := a.get("/api/v1/feed/following?cursor=bad", &viewer)
 	require.Equal(t, 400, status)

@@ -30,7 +30,9 @@ import com.poro.app.data.social.SocialRepository
 import com.poro.app.data.user.DefaultProfileRepository
 import com.poro.app.data.user.ProfileRepository
 import com.poro.app.data.video.DefaultVideoRepository
+import com.poro.app.data.video.PendingUploadStore
 import com.poro.app.data.video.UploadManager
+import com.poro.app.data.video.VideoUploadScheduler
 import com.poro.app.data.video.VideoUploader
 import com.poro.app.data.video.VideoRepository
 import kotlinx.coroutines.CoroutineScope
@@ -92,10 +94,15 @@ class AppContainer(context: Context) {
 
     val orderRepository: OrderRepository = DefaultOrderRepository(network.api())
 
+    val pendingUploads = PendingUploadStore(context)
+
+    private val uploadScheduler = VideoUploadScheduler(context, pendingUploads, applicationScope)
+
     val uploadManager = UploadManager(
         client = VideoUploader(network.api(), uploader, mediaReader),
         videos = videoRepository,
         scope = applicationScope,
+        durability = uploadScheduler,
     )
 }
 

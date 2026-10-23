@@ -112,6 +112,7 @@
     <string name="action_unfollow">Abonné·e</string>
     <string name="action_cancel">Annuler</string>
     <string name="action_delete">Supprimer</string>
+    <string name="action_edit">Modifier</string>
     <string name="comments_title">Commentaires</string>
     <string name="comments_empty">Aucun commentaire. Soyez le premier !</string>
     <string name="comments_placeholder">Ajouter un commentaire…</string>
@@ -124,6 +125,14 @@
     <string name="comments_you">Vous</string>
     <string name="comments_edited">modifié</string>
     <string name="comments_deleted">Commentaire supprimé</string>
+    <string name="comments_edit">Modifier</string>
+    <string name="comments_save">Enregistrer</string>
+    <string name="comments_editing">Modification du commentaire</string>
+    <string name="follow_list_followers">Abonnés</string>
+    <string name="follow_list_following">Abonnements</string>
+    <string name="follow_list_empty_followers">Aucun abonné pour le moment.</string>
+    <string name="follow_list_empty_following">Aucun abonnement pour le moment.</string>
+    <string name="follow_list_open">Voir le profil</string>
     <string name="share_title">Partager la vidéo</string>
     <string name="share_whatsapp">WhatsApp</string>
     <string name="share_other">Autres applications</string>
@@ -155,7 +164,10 @@
     <string name="upload_hashtags_hint">Ajoutez des #hashtags pour être trouvé dans la recherche.</string>
     <string name="upload_publish">Publier</string>
     <string name="upload_sending">Envoi de « %1$s » : %2$d %%</string>
-    <string name="upload_keep_open">Gardez l’application ouverte jusqu’à la fin de l’envoi.</string>
+    <string name="upload_keep_open">L’envoi continue en arrière-plan, même si vous quittez l’écran.</string>
+    <string name="upload_notification_title">Envoi de la vidéo</string>
+    <string name="upload_notification_text">Publication de « %1$s » en cours.</string>
+    <string name="upload_description_counter">%1$d / %2$d</string>
     <string name="upload_new">Publier une autre vidéo</string>
     <string name="upload_ready">Votre vidéo est en ligne !</string>
     <string name="upload_watch">Voir la vidéo</string>
@@ -191,7 +203,7 @@
         <item quantity="other">Notifications, %d non lues</item>
     </plurals>
     <string name="prefs_push">Notifications sur le téléphone</string>
-    <string name="prefs_push_hint">Désactivées, les notifications restent visibles dans l’application.</string>
+    <string name="prefs_push_hint">Préférence enregistrée pour plus tard : les alertes sur le téléphone nécessitent Firebase, non configuré. Les notifications restent visibles dans l’application.</string>
     <string name="prefs_likes">J’aime</string>
     <string name="prefs_comments">Commentaires et réponses</string>
     <string name="prefs_follows">Nouveaux abonnés</string>
@@ -234,6 +246,7 @@
     <string name="settings_sign_out_device">Déconnecter</string>
     <string name="settings_sign_out_others">Déconnecter les autres appareils</string>
     <string name="settings_notifications">Notifications</string>
+    <string name="settings_addresses">Carnet d’adresses</string>
     <string name="settings_delete_account">Supprimer mon compte</string>
     <string name="settings_legal">Informations légales</string>
     <string name="settings_version">Version %1$s</string>
@@ -287,8 +300,9 @@
     <string name="error_avatar_invalid">Image illisible. Choisissez une photo JPEG, PNG ou WebP.</string>
     <string name="error_upload_rejected">L’envoi du fichier a été refusé. Réessayez.</string>
     <string name="error_comment_invalid">Commentaire invalide : 1 000 caractères et 20 retours à la ligne au plus.</string>
+    <string name="error_comment_edit_window">Ce commentaire ne peut plus être modifié (15 minutes).</string>
     <string name="error_title_invalid">Titre invalide : 1 à 100 caractères.</string>
-    <string name="error_description_invalid">Description invalide : 1 000 caractères au plus.</string>
+    <string name="error_description_invalid">Description invalide : 500 caractères au plus.</string>
     <string name="error_invalid_media">Fichier vidéo illisible. Choisissez une autre vidéo.</string>
     <string name="error_payload_too_large">Fichier trop lourd.</string>
     <string name="shop_not_found">Boutique introuvable. Vérifiez l’identifiant.</string>
@@ -316,6 +330,9 @@
     <string name="error_order_status_conflict">Cette commande a changé d’état : rechargez-la.</string>
     <string name="error_order_not_found">Commande introuvable.</string>
     <string name="error_tracking_invalid">Suivi invalide : 200 caractères au plus.</string>
+    <string name="error_address_book_full">Carnet d’adresses plein (10 adresses au plus).</string>
+    <string name="error_address_label_invalid">Libellé d’adresse invalide : 40 caractères au plus.</string>
+    <string name="error_address_not_found">Adresse introuvable.</string>
     <string name="error_cannot_report_self">Vous ne pouvez pas signaler votre propre contenu.</string>
     <string name="error_unavailable">Service momentanément indisponible. Réessayez plus tard.</string>
     <string name="error_unexpected">Une erreur inattendue est survenue. Réessayez.</string>
@@ -340,6 +357,7 @@
     <string name="shop_country_label">Pays</string>
     <string name="shop_country_hint">Le pays fixe la devise de vos prix ; il ne pourra plus être modifié.</string>
     <string name="shop_change_logo">Changer le logo</string>
+    <string name="shop_remove_logo">Retirer le logo</string>
     <string name="shop_close">Fermer la boutique</string>
     <string name="shop_reopen">Rouvrir la boutique</string>
     <string name="shop_status_active">Ouverte</string>
@@ -385,11 +403,23 @@
     <string name="cart_subtotal">Sous-total : %1$s</string>
     <string name="cart_unavailable">Plus en vente : retirez ces articles pour commander.</string>
     <string name="cart_remove">Retirer</string>
+    <string name="cart_clear">Vider le panier</string>
+    <string name="cart_clear_confirm_title">Vider le panier ?</string>
+    <string name="cart_clear_confirm_text">Tous les articles seront retirés. Cette action est définitive.</string>
     <string name="cart_payment_notice">Paiement à la livraison. Une commande est créée par boutique.</string>
     <string name="cart_checkout">Commander</string>
     <string name="checkout_delivery_title">Livraison</string>
     <string name="checkout_review_title">Récapitulatif</string>
     <string name="checkout_saved_addresses">Mes adresses</string>
+    <string name="addresses_title">Carnet d’adresses</string>
+    <string name="addresses_empty">Aucune adresse enregistrée.</string>
+    <string name="addresses_add">Ajouter une adresse</string>
+    <string name="addresses_edit">Modifier l’adresse</string>
+    <string name="addresses_label">Libellé (Maison, Bureau…)</string>
+    <string name="addresses_default">Adresse par défaut</string>
+    <string name="addresses_set_default">Définir par défaut</string>
+    <string name="addresses_saved">Adresse enregistrée.</string>
+    <string name="addresses_deleted">Adresse supprimée.</string>
     <string name="checkout_save_address">Enregistrer cette adresse</string>
     <string name="checkout_continue">Continuer</string>
     <string name="checkout_line">%1$d × %2$s (%3$s)</string>

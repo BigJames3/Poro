@@ -38,6 +38,8 @@ class AuthErrorMessagesTest {
             ApiErrorCodes.CODE_TOO_MANY_ATTEMPTS to R.string.error_code_too_many_attempts,
             ApiErrorCodes.CANNOT_REPORT_SELF to R.string.error_cannot_report_self,
             ApiErrorCodes.UNAVAILABLE to R.string.error_unavailable,
+            ApiErrorCodes.COMMENT_EDIT_WINDOW_CLOSED to R.string.error_comment_edit_window,
+            ApiErrorCodes.ADDRESS_BOOK_FULL to R.string.error_address_book_full,
         )
         for ((code, text) in expected) {
             assertEquals(code, ErrorMessage(text), failure(code).toErrorMessage())

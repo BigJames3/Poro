@@ -27,3 +27,16 @@ func TestGeneralLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, fiber.StatusTooManyRequests, res.StatusCode)
 }
+
+func TestTrendingLimit(t *testing.T) {
+	app := fiber.New()
+	app.Get("/", TrendingLimit(nil), func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
+	for range trendingLimit {
+		res, err := app.Test(httptest.NewRequest("GET", "/", nil))
+		require.NoError(t, err)
+		require.Equal(t, fiber.StatusNoContent, res.StatusCode)
+	}
+	res, err := app.Test(httptest.NewRequest("GET", "/", nil))
+	require.NoError(t, err)
+	require.Equal(t, fiber.StatusTooManyRequests, res.StatusCode)
+}

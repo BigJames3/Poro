@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.poro.app.R
+import com.poro.app.core.account.TextLimits
 import com.poro.app.core.media.LocalMedia
 import com.poro.app.core.media.LocalMediaReader
 import com.poro.app.data.video.UploadManager
@@ -24,11 +25,12 @@ data class UploadFormState(
     val fileError: ErrorMessage? = null,
 ) {
     val canPublish: Boolean
-        get() = file != null && title.trim().length in 1..TITLE_MAX && description.length <= DESCRIPTION_MAX
+        get() = file != null && title.trim().length in 1..TITLE_MAX && TextLimits.runeCount(description) <= DESCRIPTION_MAX
 
     companion object {
         const val TITLE_MAX = 100
-        const val DESCRIPTION_MAX = 1000
+        /** Aligné sur `MaxDescriptionRunes` du service vidéo (OpenAPI dit 1000 : écart serveur). */
+        const val DESCRIPTION_MAX = 500
     }
 }
 
@@ -77,7 +79,7 @@ class UploadViewModel(
     }
 
     fun onDescriptionChange(value: String) {
-        val description = value.take(UploadFormState.DESCRIPTION_MAX)
+        val description = TextLimits.takeRunes(value, UploadFormState.DESCRIPTION_MAX)
         savedState[KEY_DESCRIPTION] = description
         _form.update { it.copy(description = description) }
     }

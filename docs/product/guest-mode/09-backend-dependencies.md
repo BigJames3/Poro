@@ -61,9 +61,9 @@ Lots G1+ **après** autorisation explicite. Sans B-FEED, G1 livrerait un Accueil
 
 ## 6. Ordre de validation humaine
 
-1. Accepter B-FEED (trending public + quota IP + ADR) **ou** refuser le mode visiteur fil.
-2. Si accepté : implémenter le backend (hors cette phase docs).
-3. Autoriser alors le Kotlin guest (G1).
-4. Q-MED-06 / images sociales : indépendant ; le visiteur verra des clips tant que bloqué.
+1. **Fait le 21 octobre 2026** : B-FEED accepté ([ADR-0019](../../architecture/adr/0019-feed-trending-public.md)).
+2. **Fait le 21 octobre 2026** : backend trending Opt + quota IP 60/min + OpenAPI + tests (`services/feed`, ADR-0019).
+3. Autoriser alors le Kotlin guest (G1) — **pas autorisé** le 21 octobre 2026. Vérifier d’abord trending 200 sans header sur la gateway.
+4. Q-MED-06 / images sociales : toujours indépendant ; **pas autorisé**.
 
-Si B-FEED est **refusé** : le dossier reste la spec ; lot guest **annulé** ; l’app garde l’auth-wall. C’est un choix produit légitime, pas un bug de spec.
+Le refus de B-FEED n’est plus le choix par défaut. Sans l’implémentation, l’app garde l’auth-wall.

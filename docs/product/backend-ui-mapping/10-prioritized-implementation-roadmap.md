@@ -9,7 +9,7 @@ Aucun Kotlin / backend dans **cette** phase. Lots existants (phase-2, design, me
 | Valider lots 1–3 | COD, report, légal déjà codés | QA appareil + Q-03 textes | déjà touché, non commité |
 | Alignement limites | bio 50/160, desc vidéo 500 | — | oui après OK |
 | Push honnête | Labelliser / cacher prefs_push | Q-21 | oui |
-| B-FEED décision | Trending public **ou** garder le wall | Produit + sécu | non (d’abord backend) |
+| B-FEED décision | Trending public **ou** garder le wall | **Accepté** ADR-0019 | code feed pas encore modifié |
 | Staff hors app | Confirmer 0 route cases | Q-16 | revue seulement |
 | Pas de bouton fantôme | Image sociale, save vidéo, Wave, favoris, catalogue | — | ne pas ajouter |
 

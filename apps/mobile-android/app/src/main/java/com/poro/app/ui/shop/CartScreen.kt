@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,7 +51,9 @@ fun CartScreen(
     onQuantityChange: (variantId: String, quantity: Int) -> Unit,
     onRemove: (variantId: String) -> Unit,
     onCheckout: () -> Unit,
+    onClear: () -> Unit,
 ) {
+    var confirmClear by rememberSaveable { mutableStateOf(false) }
     Scaffold(topBar = { BackTopBar(stringResource(R.string.cart_title), onBack) }) { padding ->
         LoadableContent(state.cart, onRetry, Modifier.padding(padding)) { cart ->
             if (cart.shops.isEmpty() && cart.unavailable.isEmpty()) {
@@ -87,10 +94,31 @@ fun CartScreen(
                         state.error?.let { ErrorMessageText(it) }
                         Text(stringResource(R.string.cart_payment_notice), style = MaterialTheme.typography.bodySmall)
                         SubmitButton(stringResource(R.string.cart_checkout), enabled = state.canCheckout, loading = false, onClick = onCheckout)
+                        TextButton(onClick = { confirmClear = true }, enabled = "cart" !in state.busy) {
+                            Text(stringResource(R.string.cart_clear))
+                        }
                     }
                 }
             }
         }
+    }
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text(stringResource(R.string.cart_clear_confirm_title)) },
+            text = { Text(stringResource(R.string.cart_clear_confirm_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClear = false
+                        onClear()
+                    },
+                ) { Text(stringResource(R.string.cart_clear)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
     }
 }
 

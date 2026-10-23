@@ -35,9 +35,11 @@ func (h *Feed) Following(c *fiber.Ctx) error {
 }
 
 func (h *Feed) Trending(c *fiber.Ctx) error {
-	return h.serve(c, func(ctx context.Context, _ uuid.UUID, cursor string, limit int) (*dto.Page, error) {
-		return h.svc.Trending(ctx, cursor, limit)
-	})
+	page, err := h.svc.Trending(c.UserContext(), c.Query("cursor"), c.QueryInt("limit"))
+	if err != nil {
+		return err
+	}
+	return httpx.WriteData(c, fiber.StatusOK, page)
 }
 
 type feedFunc func(ctx context.Context, viewer uuid.UUID, cursor string, limit int) (*dto.Page, error)

@@ -2,6 +2,9 @@ import { Logger } from '@nestjs/common';
 import { Consumer, Kafka, Producer, logLevel } from 'kafkajs';
 
 import { Envelope, decodeEnvelope, dlqTopic } from './envelope';
+import { registerSnappyCodec } from './snappy-codec';
+
+registerSnappyCodec();
 
 /** Header names set on dead-lettered records, shared with shared-go/kafka. */
 export const HEADER_ERROR = 'x-poro-error';

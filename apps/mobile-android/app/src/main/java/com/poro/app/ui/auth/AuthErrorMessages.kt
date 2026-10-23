@@ -52,6 +52,7 @@ fun ApiResult<*>.toErrorMessage(): ErrorMessage? = when (this) {
         ApiErrorCodes.CANNOT_REPORT_SELF -> ErrorMessage(R.string.error_cannot_report_self)
         ApiErrorCodes.UNAVAILABLE -> ErrorMessage(R.string.error_unavailable)
         ApiErrorCodes.COMMENT_INVALID -> ErrorMessage(R.string.error_comment_invalid)
+        ApiErrorCodes.COMMENT_EDIT_WINDOW_CLOSED -> ErrorMessage(R.string.error_comment_edit_window)
         ApiErrorCodes.TITLE_INVALID -> ErrorMessage(R.string.error_title_invalid)
         ApiErrorCodes.DESCRIPTION_INVALID -> ErrorMessage(R.string.error_description_invalid)
         ApiErrorCodes.CONTENT_TYPE_INVALID -> ErrorMessage(R.string.upload_error_format)
@@ -82,6 +83,9 @@ fun ApiResult<*>.toErrorMessage(): ErrorMessage? = when (this) {
         ApiErrorCodes.ORDER_STATUS_CONFLICT -> ErrorMessage(R.string.error_order_status_conflict)
         ApiErrorCodes.ORDER_NOT_FOUND -> ErrorMessage(R.string.error_order_not_found)
         ApiErrorCodes.TRACKING_INVALID -> ErrorMessage(R.string.error_tracking_invalid)
+        ApiErrorCodes.ADDRESS_BOOK_FULL -> ErrorMessage(R.string.error_address_book_full)
+        ApiErrorCodes.ADDRESS_LABEL_INVALID -> ErrorMessage(R.string.error_address_label_invalid)
+        ApiErrorCodes.ADDRESS_NOT_FOUND -> ErrorMessage(R.string.error_address_not_found)
         else -> ErrorMessage(R.string.error_unexpected, requestId)
     }
 }

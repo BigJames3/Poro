@@ -5,8 +5,8 @@ Tout ce qui suit est **non tranché dans le code** ou **contradictoire entre doc
 | ID | Question | Pourquoi ça bloque | Options constatées | Décideur probable |
 |---|---|---|---|---|
 | Q-01 | La marketplace est-elle dans le **premier** lancement public Android ? | ADR-0004 : P1. APK : onglet Boutique. Priorité P0 des écrans shop dépend de la réponse. | A : masquer l’onglet. B : garder COD. | Produit |
-| Q-02 | Faut-il un **mode visiteur** (feed / vidéo / boutique sans compte) ? | Backend : GET publics. Android : session obligatoire. Deep links inutiles sinon. | Garder auth-wall MVP. Ou lecteur public + CTA login. | Produit + mobile |
-| Q-03 | Où sont les **CGU, politique de confidentialité, mentions** des 4 pays ? | Aucun texte dans le dépôt. Stores et lois (ADR-0004) l’exigent. | URL distante vs écran local. | Juridique |
+| Q-02 | Faut-il un **mode visiteur** (feed / vidéo / boutique sans compte) ? | **Tranché le 21 oct. 2026** : oui, via trending public ([ADR-0019](../../architecture/adr/0019-feed-trending-public.md)). Code feed **pas encore** modifié. G1 Android interdit tant que B-FEED n’est pas vert. | — | Produit (fait) |
+| Q-03 | Où sont les **CGU, politique de confidentialité, mentions** des 4 pays ? | **Brouillons** dans `docs/legal/` (markdown local, v0.1-draft). Non opposables. Visa avocat + identité éditeur encore requis. Android reste « indisponible ». | Local versionné (retenu) vs URL. | Juridique (visa) |
 | Q-04 | Que signifie **Devenir créateur** pour l’utilisateur ? | N’ajoute aucun droit de publication (ADR-0007). Badge + rôle JWT seulement. | Recopier le fait (« badge ») ou reporter le CTA jusqu’à un vrai bénéfice. | Produit |
 | Q-05 | **ENTERPRISE** a-t-il un périmètre ? | Enum sans grant, sans UI, sans permission. | Reporter (recommandé) ou spécifier employés boutique (ADR-0001). | Produit |
 | Q-06 | Un compte peut-il **lier téléphone et email** ? | Deux parcours d’identité disjoints, pas d’API de liaison. | Rester disjoint. Ou projet backend nouveau. | Produit + auth |

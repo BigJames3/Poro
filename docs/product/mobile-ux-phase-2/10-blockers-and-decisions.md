@@ -7,8 +7,8 @@ Les questions tranchées en phase 2 ne sont plus listées comme ouvertes (Q-01 b
 | ID | Bloque | Détail | Owner |
 |---|---|---|---|
 | B-AND | Lots 1–5 Android | Toute écriture dans `apps/mobile-android` exige une **autorisation explicite** ultérieure | Utilisateur |
-| B-FEED | Lot 4 invité | `GET /feed/*` Bearer obligatoire ; trending n’a pas besoin du `sub` mais le middleware l’exige | Backend + sécu |
-| B-LEGAL | Contenu opposable | Pas de TOS/privacy dans le dépôt ; écrans = indisponible jusqu’à validation | Juridique (Q-03) |
+| B-FEED | Lot 4 invité | **Décision ADR-0019 acceptée** (trending Opt + 60/min IP). Code `services/feed` **pas encore** modifié. G1 interdit tant que les tests 200/401/429 ne sont pas verts | Backend |
+| B-LEGAL | Contenu opposable | Brouillons dans `docs/legal/` ; écrans Android = indisponible jusqu’au visa | Juridique (Q-03) |
 | B-SMS | Tests réels OTP | Africa’s Talking / Sender ID non confirmés (ADR-0004) | Exploitation |
 | B-FCM | Lot 5 push | Pas de projet Firebase | Mobile + ops (Q-21) |
 
@@ -18,8 +18,8 @@ Sans B-AND, cette phase s’arrête à la documentation — **c’est l’état 
 
 | ID | Question | Impact | Reco spec |
 |---|---|---|---|
-| Q-03 | Textes légaux 4 pays | Lot 3 contenu | Livrer URL ou markdown versionné ; sinon rester « indisponible » |
-| Q-02b | Autoriser **trending public** + quota IP ? | Débloque lot 4 | Oui, For You/Following restent privés |
+| Q-03 | Textes légaux 4 pays | Lot 3 contenu | **Markdown local livré** (`docs/legal/`, v0.1-draft). Visa + identité éditeur encore requis. |
+| Q-02b | Autoriser **trending public** + quota IP ? | Débloque lot 4 | **Oui** — ADR-0019. For You/Following restent privés. Implémentation séparée. |
 | Q-04 | Sens de « Devenir créateur » | Copie profil | Badge seulement ; ne pas laisser croire à un droit de publication |
 | Q-10 | Charte finale | Tokens | Garder `#FF6A00` |
 | Q-11 | UI EN Nigeria | Légal + SMS | FR app v1 |

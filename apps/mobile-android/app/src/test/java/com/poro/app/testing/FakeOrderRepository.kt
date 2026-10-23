@@ -3,6 +3,7 @@ package com.poro.app.testing
 import com.poro.app.core.network.ApiResult
 import com.poro.app.core.network.PageDto
 import com.poro.app.data.order.AddressDto
+import com.poro.app.data.order.AddressInput
 import com.poro.app.data.order.CartDto
 import com.poro.app.data.order.OrderDto
 import com.poro.app.data.order.OrderRepository
@@ -30,9 +31,32 @@ class FakeOrderRepository : OrderRepository {
 
     override suspend fun removeItem(variantId: String) = cart.also { calls += "removeItem:$variantId" }
 
+    override suspend fun clearCart() = cart.also { calls += "clearCart" }
+
     override suspend fun prefill() = prefill.also { calls += "prefill" }
 
     override suspend fun addresses() = addresses.also { calls += "addresses" }
+
+    override suspend fun saveAddress(input: AddressInput, addressId: String?): ApiResult<AddressDto> {
+        calls += "saveAddress:${addressId ?: "new"}:${input.label}"
+        return ApiResult.Success(
+            AddressDto(
+                addressId = addressId ?: "a-new",
+                label = input.label,
+                isDefault = input.isDefault,
+                fullName = input.fullName,
+                phone = input.phone,
+                city = input.city,
+                address = input.address,
+                landmark = input.landmark,
+            ),
+        )
+    }
+
+    override suspend fun setDefaultAddress(addressId: String): ApiResult<AddressDto> {
+        calls += "setDefaultAddress:$addressId"
+        return ApiResult.Success(AddressDto(addressId, isDefault = true, fullName = "Awa", phone = "+2250701020304", city = "Abidjan"))
+    }
 
     override suspend fun deleteAddress(addressId: String): ApiResult<Unit> = ApiResult.Success(Unit).also { calls += "deleteAddress:$addressId" }
 

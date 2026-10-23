@@ -121,6 +121,11 @@ class MyShopViewModel(
         }
     }
 
+    fun removeLogo() {
+        if (_state.value.shop?.logoUrl == null) return
+        act { shops.deleteLogo() }
+    }
+
     private fun act(call: suspend () -> ApiResult<ShopDto>) {
         if (_state.value.working) return
         _state.update { it.copy(working = true, error = null) }

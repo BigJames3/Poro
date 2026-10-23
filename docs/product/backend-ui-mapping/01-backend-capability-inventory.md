@@ -71,7 +71,7 @@ Identifiants `CAP-*` stables pour cette série. Les `AUTH-001` etc. de [mobile-u
 |---|---|---|---|
 | CAP-FEED-FY | `GET /feed/for-you` | Auth | Session Redis, jamais ses vidéos |
 | CAP-FEED-FO | `GET /feed/following` | Auth | |
-| CAP-FEED-TR | `GET /feed/trending` | Auth **aujourd’hui** | Algo sans `sub` — B-FEED pour visiteur |
+| CAP-FEED-TR | `GET /feed/trending` | Opt (ADR-0019) | 60/min IP ; Bearer invalide → 401 |
 
 ### SOCIAL
 

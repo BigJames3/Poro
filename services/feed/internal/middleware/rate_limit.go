@@ -15,8 +15,11 @@ import (
 	"github.com/poro/feed/internal/config"
 )
 
-// generalLimit is the per-user number of feed requests per minute.
+// generalLimit is the per-user number of authenticated feed requests per minute.
 const generalLimit = 120
+
+// trendingLimit is the per-account or per-IP cap on GET /feed/trending (ADR-0019).
+const trendingLimit = 60
 
 // NewRedisStorage opens the Redis backend shared by the rate limiter, the
 // For You sessions and the page cache.
@@ -46,6 +49,25 @@ func GeneralLimit(store fiber.Storage) fiber.Handler {
 				return "feed:rl:" + claims.UserID.String()
 			}
 			return "feed:rl:" + c.IP()
+		},
+		LimitReached: func(*fiber.Ctx) error {
+			return fiber.NewError(fiber.StatusTooManyRequests, "too many requests")
+		},
+	})
+}
+
+// TrendingLimit is 60 requests per minute, per user when a token was verified,
+// per IP otherwise. Same 429 shape as GeneralLimit.
+func TrendingLimit(store fiber.Storage) fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:        trendingLimit,
+		Expiration: time.Minute,
+		Storage:    store,
+		KeyGenerator: func(c *fiber.Ctx) string {
+			if claims, ok := jwtauth.ClaimsFrom(c); ok {
+				return "feed:tr:" + claims.UserID.String()
+			}
+			return "feed:tr:" + c.IP()
 		},
 		LimitReached: func(*fiber.Ctx) error {
 			return fiber.NewError(fiber.StatusTooManyRequests, "too many requests")

@@ -36,3 +36,23 @@ object AccountRules {
     /** 3 à 30 caractères parmi a-z, 0-9, « . » et « _ » (le serveur juge aussi les pseudos réservés). */
     fun isValidUsername(input: String): Boolean = USERNAME.matches(normalizeUsername(input))
 }
+
+/**
+ * Compte et coupe en runes Unicode (points de code), comme le backend
+ * (`utf8.RuneCountInString`) : un emoji compte pour 1, pas pour 2 unités UTF-16.
+ */
+object TextLimits {
+    fun runeCount(value: String): Int = value.codePointCount(0, value.length)
+
+    fun takeRunes(value: String, max: Int): String {
+        if (max <= 0 || value.isEmpty()) return ""
+        if (runeCount(value) <= max) return value
+        var end = 0
+        var count = 0
+        while (end < value.length && count < max) {
+            end += Character.charCount(value.codePointAt(end))
+            count++
+        }
+        return value.substring(0, end)
+    }
+}

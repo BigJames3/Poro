@@ -18,4 +18,8 @@ class FakeMediaReader : LocalMediaReader {
         val bytes = files.getValue(uri).second
         return bytes.copyOfRange(offset.toInt(), minOf(bytes.size, offset.toInt() + length))
     }
+
+    override suspend fun copyTo(uri: String, destination: java.io.File) {
+        destination.writeBytes(files.getValue(uri).second)
+    }
 }

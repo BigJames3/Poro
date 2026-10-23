@@ -60,6 +60,13 @@ data class VideoRoute(val videoId: String)
 @Serializable
 data class PublicProfileRoute(val userId: String, val username: String? = null)
 
+/** [kind] : `followers` ou `following`. */
+@Serializable
+data class FollowListRoute(val userId: String, val kind: String)
+
+@Serializable
+data object AddressesRoute
+
 @Serializable
 data object ProfileRoute
 

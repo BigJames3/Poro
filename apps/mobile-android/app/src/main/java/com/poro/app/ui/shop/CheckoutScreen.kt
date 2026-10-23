@@ -120,7 +120,7 @@ private fun DeliveryFields(
 }
 
 @Composable
-private fun DeliveryField(
+internal fun DeliveryField(
     value: String,
     label: Int,
     keyboardType: KeyboardType,

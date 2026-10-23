@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.poro.app.R
+import com.poro.app.core.account.TextLimits
 import com.poro.app.core.format.Formats
 import com.poro.app.data.video.UploadState
 import com.poro.app.data.video.VideoDto
@@ -96,7 +97,12 @@ fun UploadScreen(
             value = form.description,
             onValueChange = onDescriptionChange,
             label = { Text(stringResource(R.string.upload_video_description)) },
-            supportingText = { Text(stringResource(R.string.upload_hashtags_hint)) },
+            supportingText = {
+                Text(
+                    stringResource(R.string.upload_hashtags_hint) + " · " +
+                        stringResource(R.string.upload_description_counter, TextLimits.runeCount(form.description), UploadFormState.DESCRIPTION_MAX),
+                )
+            },
             minLines = 3,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             modifier = Modifier.fillMaxWidth(),

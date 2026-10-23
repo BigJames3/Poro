@@ -18,10 +18,11 @@ porte les tâches suivantes en commits séparés. Aucune PR n'est ouverte sans d
 | 4 | PORO-009 observabilité | TERMINÉE (routage des alertes : action humaine) | prérequis d'une exploitation de staging |
 | 5 | PORO-010/012 staging, CD, sauvegardes | TERMINÉE côté code ; mise en service BLOQUÉE (hébergeur, secrets) | dépend de 3 et 4 ; accès hébergeur absents |
 | 6 | PORO-013 Android et connexion API | DÉPASSÉE en partie | le guide backend reste valable ; l'app n'est plus un gabarit (voir §6) |
-| 7 | UX mobile lots 1–3 (boutique, signalement, légal) | VALIDÉE (conception / code) ; QA appareil encore ouverte | validé le 21 oct. 2026 ; textes juridiques Q-03 ouverts |
-| 8 | Médias, import et enregistrement (conception) | VALIDÉE | spec `docs/product/mobile-media/` ; pas de Kotlin |
-| 9 | Mode visiteur (conception) | VALIDÉE | spec `docs/product/guest-mode/` ; implémentation bloquée par B-FEED |
+| 7 | UX mobile lots 1–3 (boutique, signalement, légal) | VALIDÉE (conception / code) ; QA gateway partielle | shop + reports verts ; checkout à rejouer après Snappy ; appareil non faite |
+| 8 | Médias, import et enregistrement (conception) | VALIDÉE | spec `docs/product/mobile-media/` ; Q-MED-01 reste non |
+| 9 | Mode visiteur (conception) | VALIDÉE ; B-FEED **implémenté** (backend) | ADR-0019 dans `services/feed` ; pas de Kotlin guest |
 | 10 | Mapping backend → UI (audit) | VALIDÉE | `docs/product/backend-ui-mapping/` ; 107 endpoints |
+| 11 | QA + TOS + B-FEED + Snappy | PARTIELLE | Snappy order + B-FEED verts sur gateway ; visa avocat non émis ; G1 interdit |
 
 ## 0. Intégration des branches en attente — TERMINÉE
 
@@ -330,12 +331,11 @@ Livré dans `apps/mobile-android` après autorisation explicite. Lot 4 (invité)
 - **Tests** : `testDebugUnitTest` vert (ViewModels panier, checkout, report, légal, messages
   d'erreur).
 - **Reste à valider (humain / appareil / juridique)** :
-  - AC-MX et AC-MOD sur gateway réelle (dont confirm COD, 10e photo, 11e report / h) ;
-  - AC-LEG-03 sur appareil (Phone → légal, pas de bounce login) ;
-  - NR-01 à 06 sur le fil réel ;
-  - textes TOS / confidentialité / mentions (Q-03).
+  - AC-MOD + boutique (10 photos, `image_required`) **verts** sur gateway locale ;
+  - checkout COD **bloqué** : catalogue order sourd (Snappy KafkaJS) ;
+  - AC-LEG-03 / NR-01…06 **non faits** sur appareil ;
+  - textes TOS : brouillons `docs/legal/` ; app toujours « indisponible ».
 - **Validé le 21 octobre 2026** (propriétaire produit) : le code des lots 1–3 est accepté.
-  QA appareil + gateway et textes Q-03 restent à faire.
 - **Non fait** : PR, mode invité, Firebase.
 
 ## 8. Médias, import et enregistrement — conception VALIDÉE
@@ -378,10 +378,13 @@ Pack : `docs/product/guest-mode/`. **Aucun** Kotlin, service, OpenAPI, commit, p
 - **Cible UX** : 5 onglets conservés ; boutons like/comment/share/⋮ visibles ;
   prompt non agressif ; replay like/follow seulement ; jamais checkout auto ;
   cloche → login, pas de notif fictive ni FCM visiteur.
-- **Décision humaine** : accepter B-FEED ou garder l’auth-wall. Ne pas coder G1
-  avant trending 200 sans header.
+- **Décision humaine (21 oct. 2026)** : B-FEED **accepté**
+  ([ADR-0019](architecture/adr/0019-feed-trending-public.md)). For You /
+  Following restent Auth. G1 et posts image **non autorisés**.
 
-Validé le 21 octobre 2026. B-FEED n’est **pas** implémenté : décision backend encore requise avant G1.
+Validé le 21 octobre 2026. Backend B-FEED **implémenté** (trending Opt, 60/min
+IP, OpenAPI). G1 Android **non autorisé**. Vérifier 200 sans header sur la
+gateway après rebuild du service feed.
 
 ## 10. Mapping backend → UI — audit VALIDÉ
 
@@ -395,6 +398,21 @@ commit, push.
 - Staff : cases / admin shop **hors app**.
 - **Validé le 21 octobre 2026.**
 
+## 11. Autorisation du 21 octobre 2026 — QA, Q-03, B-FEED
+
+Autorisé explicitement : QA appareil/gateway ; textes TOS (Q-03) ; **décision**
+B-FEED. Interdit : Kotlin guest, post image social, toucher
+`apps/mobile-android` depuis Cursor.
+
+- **QA gateway** : rapport [lots-1-3-rapport.md](product/qa/lots-1-3-rapport.md).
+  Contrat isolé : **133 routes + comportement verts**. Shop + moderation verts.
+  Checkout : codec Snappy ajouté aux consommateurs KafkaJS (order, shop, user,
+  notification). À rejouer après rebuild. Search 503. QA appareil non exécutée.
+- **Q-03** : brouillons + [dossier de visa](legal/04-dossier-visa.md). **Aucun
+  visa avocat émis** (identité éditeur absente ; un LLM ne vise pas). Android
+  inchangé.
+- **B-FEED** : implémenté dans `services/feed` + OpenAPI (ADR-0019). G1 interdit.
+
 ## Interventions humaines requises (cumul)
 
 - Lancer `infra/media-worker/check_sandbox.sh` sur le vrai conteneur après reconstruction.
@@ -407,8 +425,9 @@ commit, push.
 - Juridique : durée de conservation des commandes d'un compte effacé (ADR-0018).
 - Équipe mobile : brancher FCM (Firebase et `google-services.json` absents) ; l'application
   Compose `com.poro.app` existe déjà. Décider si le build Android réel doit bloquer la CI.
-- **Validé (21 oct. 2026)** : specs médias, visiteur, mapping backend→UI ; code lots 1–3.
-  Encore ouvert : QA appareil/gateway ; textes TOS (Q-03) ; décision B-FEED avant tout Kotlin guest.
+- **Validé (21 oct. 2026)** : specs ; lots 1–3 ; B-FEED backend ; brouillons TOS.
+  Encore ouvert : visa avocat humain (Q-03) ; identité éditeur ; QA appareil ; G1
+  seulement après trending 200 sur gateway.
 - Revue et fusion de `feat/socle-essentiel` dans `main` (aucune PR ouverte sans demande).
 - Après la première publication : rendre les paquets GHCR privés ou publics selon la politique
   du projet (GHCR crée les paquets privés par défaut).

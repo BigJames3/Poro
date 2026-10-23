@@ -1,6 +1,6 @@
 # Axe C — Spécification des écrans légaux
 
-**Aucun texte juridique n’existe dans le dépôt** (recherche `privacy`, `terms`, `cgu`, `legal` : 0 fichier produit). ADR-0004 cite les lois CI / SN / CM / NG sans fournir de clauses. Tout contenu ci-dessous est un **placeholder marqué « À valider »**, pas une politique publiable.
+Des **brouillons produit** existent dans `docs/legal/` (Q-03, 21 oct. 2026). Ils ne sont **pas opposables**. ADR-0004 cite les pays CI / SN / CM / NG. L’app Android continue d’afficher l’indisponibilité jusqu’au visa juridique et à l’identité éditeur.
 
 ## 1. Objectif
 
@@ -10,9 +10,9 @@ Permettre la consultation in-app des documents exigés par les stores et les loi
 
 | ID | Document | Source actuelle | Version / date d’effet |
 |---|---|---|---|
-| LEG-TOS | Conditions d’utilisation | Absente | Absentes |
-| LEG-PRIVACY | Politique de confidentialité | Absente | Absentes |
-| LEG-MENTIONS | Mentions légales / éditeur | Absentes | Absentes |
+| LEG-TOS | Conditions d’utilisation | `docs/legal/01-conditions-utilisation.md` | 0.1-draft — **non opposable** |
+| LEG-PRIVACY | Politique de confidentialité | `docs/legal/02-politique-confidentialite.md` | 0.1-draft — **non opposable** |
+| LEG-MENTIONS | Mentions légales / éditeur | `docs/legal/03-mentions-legales.md` | 0.1-draft — identité éditeur **à compléter** |
 
 Pas de consentement cookies / tracking dans le code (pas de SDK pub). **Ne pas inventer une case RGPD** tant que le juridique ne l’exige pas (Q-03).
 

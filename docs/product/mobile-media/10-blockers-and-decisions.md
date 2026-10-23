@@ -10,14 +10,14 @@
 | B-BG | Téléchargement / envoi après kill | Pas de WorkManager. `UploadManager` le documente déjà. | Garder « Gardez l’application ouverte ». Lot 5 phase 2 inchangé. |
 | B-FILE-SHARE | Partager le fichier média | Share = `text/plain` (+ URL si `SHARE_BASE_URL`). | Ne pas ajouter `video/*` / `image/*` à l’Intent. |
 | B-AND | Tout Kotlin | Autorisation explicite absente pour **cette** phase | Spec seulement |
-| B-LEGAL | Activer Enregistrer une photo (Q-MED-01) | TOS / droits d’auteur non validés (Q-03) | Défaut : ne pas livrer M3 |
+| B-LEGAL | Activer Enregistrer une photo (Q-MED-01) | Brouillon TOS (Q-03) **n’accorde pas** ce droit | Défaut : ne pas livrer M3 |
 
 ## 2. Décisions à trancher
 
 | ID | Question | Impact | Reco spec |
 |---|---|---|---|
-| Q-MED-01 | Permettre d’enregistrer une **photo produit** publique dans la galerie ? | Lot M3 | **Non** tant que Q-03 / Q-MED-02 ouverts. Techniquement oui (GET WebP). |
-| Q-MED-02 | L’enregistrement d’un média public est-il autorisé par les TOS ? | M3, copies | Juridique. L’API n’a pas de flag ; le bucket public le permet déjà via navigateur. |
+| Q-MED-01 | Permettre d’enregistrer une **photo produit** publique dans la galerie ? | Lot M3 | **Non.** Brouillon TOS §5 n’accorde pas l’action. |
+| Q-MED-02 | L’enregistrement d’un média public est-il autorisé par les TOS ? | M3, copies | **Non dans le brouillon.** Réutilisation commerciale interdite ; copie navigateur ≠ droit. Visa avocat encore requis. |
 | Q-MED-03 | Faut-il un MP4 public pour les clips ? | M4, bande passante, stockage | **Non pour le MVP social.** HLS suffit à la lecture. Un MP4 = nouvel objet, politique de cache, peut-être CDN (PORO-029). |
 | Q-MED-04 | Accepter HEIC un jour ? | Photos iPhone | **Non** sans sharp/heif côté shop **et** enum OpenAPI. Aujourd’hui : message format. |
 | Q-MED-05 | Caméra in-app pour Publier / produit ? | Permissions CAMERA / MICRO | **Non.** Photo Picker / galerie seulement. |
@@ -37,7 +37,7 @@
 
 ## 4. Informations manquantes (ne pas inventer)
 
-- Décision juridique Q-MED-02 / textes TOS (Q-03).
+- Visa avocat des brouillons `docs/legal/` (Q-03) ; identité éditeur. Q-MED-01 reste non.
 - `SHARE_BASE_URL` public (partage lien, pas fichier).
 - CDN devant `poro-videos` (PORO-029) : change les hôtes, pas le modèle HLS.
 - Spike remux HLS : **non réalisé**. Tant qu’il n’existe pas, B-VID-SAVE tient même si Q-MED-03 = « on verra côté client ».

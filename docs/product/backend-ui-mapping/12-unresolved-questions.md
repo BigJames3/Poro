@@ -5,8 +5,8 @@ Ne pas traiter une question comme tranchée. Les Q-01…25 de [ux-audit/12](../m
 | ID | Question | Impact mapping | Reco |
 |---|---|---|---|
 | Q-01 | Boutique au lancement ? | Phase 2 : **visible** | Garder COD |
-| Q-02 / B-FEED | Fil visiteur ? | Accueil sans compte | Trending public + quota IP **ou** wall |
-| Q-03 | Textes légaux | Écran présent, corps vide | Juridique |
+| Q-02 / B-FEED | Fil visiteur ? | **Tranché** : trending public ([ADR-0019](../../../architecture/adr/0019-feed-trending-public.md)). Code feed pas encore modifié. | Implémenter B-FEED puis G1 |
+| Q-03 | Textes légaux | Brouillons `docs/legal/` ; app toujours indisponible | Visa avocat + identité éditeur |
 | Q-04 | Sens « créateur » | Chip vs droit | Badge seulement |
 | Q-09 | Afficher l’IP sessions ? | Settings | Décision PII |
 | Q-12 | SHARE_BASE_URL | Share sans lien | Configurer avant App Links |
@@ -15,7 +15,7 @@ Ne pas traiter une question comme tranchée. Les Q-01…25 de [ux-audit/12](../m
 | Q-21 | Firebase | devices + switch | Labelliser ou brancher |
 | Q-22 | full_name jeté | Register | Backend ou retirer le champ |
 | Q-23 | Limites OpenAPI vs code | 422 surprise | Aligner UI sur le **code** |
-| Q-MED-01/02 | Enregistrer une photo | M3 | Non tant que TOS |
+| Q-MED-01/02 | Enregistrer une photo | M3 | **Non** (brouillon TOS §5) |
 | Q-MED-06 | Post image social | Fil mixte | Contrat + ADR |
 | Q-19 | Conservation commandes | Copie delete account | ADR-0018 juridique |
 

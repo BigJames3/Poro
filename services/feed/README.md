@@ -8,13 +8,13 @@ port **8084**, base `poro_feed`, Redis DB 4).
 - Décisions : [ADR-0009](../../docs/architecture/adr/0009-feed-v1.md) (algorithmes,
   seuil de bascule du fan-out), [ADR-0008](../../docs/architecture/adr/0008-services-separes.md)
 
-## Endpoints (JWT obligatoire)
+## Endpoints
 
-| Route | Contenu |
-|---|---|
-| `GET /api/v1/feed/following` | Vidéos des comptes suivis, plus récentes d'abord (page 1 en cache 60 s par utilisateur) |
-| `GET /api/v1/feed/trending` | Score `(likes + 2·comments + 3·shares) / (âge_h + 2)^1.5` sur 72 h (page 1 en cache 60 s) |
-| `GET /api/v1/feed/for-you` | Session de 200 vidéos : 60 % abonnements, 30 % tendances, 10 % découverte ; démarrage à froid 70/30 |
+| Route | Auth | Contenu |
+|---|---|---|
+| `GET /api/v1/feed/following` | JWT | Vidéos des comptes suivis, plus récentes d'abord (page 1 en cache 60 s par utilisateur) |
+| `GET /api/v1/feed/trending` | Optionnel (ADR-0019) | Score `(likes + 2·comments + 3·shares) / (âge_h + 2)^1.5` sur 72 h ; 60 req/min/IP ; Bearer invalide → 401 |
+| `GET /api/v1/feed/for-you` | JWT | Session de 200 vidéos : 60 % abonnements, 30 % tendances, 10 % découverte ; démarrage à froid 70/30 |
 
 `?cursor=` (opaque) et `?limit=` (10 par défaut, 30 au plus). Sondes :
 `/health`, `/health/live`, `/health/ready` (aussi sous `/api/v1`), `/metrics`.

@@ -8,6 +8,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import com.poro.app.R
+import com.poro.app.ui.AddressesRoute
 import com.poro.app.ui.AppNav
 import com.poro.app.ui.CartRoute
 import com.poro.app.ui.CheckoutRoute
@@ -92,6 +93,30 @@ fun NavGraphBuilder.shopGraph(nav: AppNav) {
             onQuantityChange = vm::setQuantity,
             onRemove = vm::remove,
             onCheckout = { nav.controller.navigate(CheckoutRoute) },
+            onClear = vm::clear,
+        )
+    }
+    composable<AddressesRoute> {
+        val vm = poroViewModel { AddressesViewModel(container.orderRepository) }
+        val state by vm.state.collectAsStateWithLifecycle()
+        CollectEvents(vm.events) { event ->
+            when (event) {
+                AddressesEvent.Saved -> nav.showMessage(R.string.addresses_saved)
+                AddressesEvent.Deleted -> nav.showMessage(R.string.addresses_deleted)
+            }
+        }
+        AddressesScreen(
+            state = state,
+            onBack = nav::back,
+            onRetry = vm::load,
+            onAdd = vm::startCreate,
+            onEdit = vm::startEdit,
+            onFormChange = vm::onFormChange,
+            onLabelChange = vm::onLabelChange,
+            onSave = vm::save,
+            onCancel = vm::cancelForm,
+            onSetDefault = vm::setDefault,
+            onDelete = vm::delete,
         )
     }
     composable<CheckoutRoute> {
@@ -163,6 +188,7 @@ fun NavGraphBuilder.shopGraph(nav: AppNav) {
                 onSaveDetails = vm::saveDetails,
                 onSetOpen = vm::setOpen,
                 onLogoPicked = vm::onLogoPicked,
+                onRemoveLogo = vm::removeLogo,
                 onLoadMoreProducts = { vm.loadProducts() },
                 onNewProduct = { state.shop?.let { nav.controller.navigate(ProductEditorRoute(currency = it.currency)) } },
                 onEditProduct = { product -> nav.controller.navigate(ProductEditorRoute(product.productId, product.currency)) },

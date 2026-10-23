@@ -19,4 +19,8 @@ interface LocalMediaReader {
     /** Lit au plus [length] octets à partir de [offset]. */
     @Throws(IOException::class)
     suspend fun read(uri: String, offset: Long, length: Int): ByteArray
+
+    /** Copie le fichier vers [destination] (reprise d'envoi après arrêt du processus). */
+    @Throws(IOException::class)
+    suspend fun copyTo(uri: String, destination: java.io.File)
 }

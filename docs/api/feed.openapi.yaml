@@ -3,13 +3,16 @@ info:
   title: PORO Feed API
   version: 1.0.0
   description: |
-    Following, trending and For You feeds of ready videos. All feed routes need
-    a token. Every JSON response uses `{data, error, meta}`.
+    Following, trending and For You feeds of ready videos. For You and
+    Following need a token. Trending is optionally authenticated (ADR-0019):
+    no Authorization header is allowed; a malformed or invalid Bearer is 401.
+    Every JSON response uses `{data, error, meta}`.
 
     Items are compact for slow mobile networks: no description (read it from
     the video API) and no `liked_by_me` in v1 (read it from social stats).
     Counters are the feed's projection of social events and may lag by a few
-    seconds. 120 requests per user per minute, then `429 rate_limited`.
+    seconds. Authenticated feed routes: 120 requests per user per minute.
+    Trending: 60 requests per account or IP per minute. Then `429 rate_limited`.
 servers:
   - url: http://localhost:8084
     description: Local development
@@ -67,10 +70,16 @@ paths:
   /api/v1/feed/trending:
     get:
       tags: [feed]
+      security:
+        - {}
+        - bearerAuth: []
       summary: Trending videos of the last 72 hours
       description: |
         Score = (likes + 2·comments + 3·shares) / (age_hours + 2)^1.5. There
         is no view or watch-time signal yet. Page 1 is cached for 60 seconds.
+        Anonymous callers are allowed (ADR-0019). A missing Authorization
+        header yields 200 (the page may be empty). A malformed or invalid
+        Bearer token is 401. 60 requests per IP or account per minute.
       parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
       responses:
         "200": { $ref: "#/components/responses/Page" }

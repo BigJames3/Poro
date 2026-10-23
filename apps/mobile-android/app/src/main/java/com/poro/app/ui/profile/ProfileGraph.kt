@@ -8,6 +8,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.poro.app.R
 import com.poro.app.core.format.Formats
+import com.poro.app.ui.AddressesRoute
 import com.poro.app.ui.AppNav
 import com.poro.app.ui.CollectEvents
 import com.poro.app.ui.ConsumeResult
@@ -76,6 +77,7 @@ fun NavGraphBuilder.profileGraph(nav: AppNav, profileExtra: @Composable (MyAccou
             onRevoke = vm::revoke,
             onRevokeOthers = vm::revokeOthers,
             onNotifications = { nav.controller.navigate(NotificationPreferencesRoute) },
+            onAddresses = { nav.controller.navigate(AddressesRoute) },
             onLegal = { id -> nav.controller.navigate(LegalDocumentRoute(id)) },
             onDeleteAccount = { nav.controller.navigate(DeleteAccountRoute) },
             onLogout = vm::logout,

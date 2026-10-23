@@ -18,6 +18,7 @@ import com.poro.app.data.social.ShareChannel
 import com.poro.app.data.social.VideoStatsDto
 import com.poro.app.ui.AppNav
 import com.poro.app.ui.CollectEvents
+import com.poro.app.ui.FollowListRoute
 import com.poro.app.ui.PublicProfileRoute
 import com.poro.app.ui.moderation.ReportHost
 import com.poro.app.ui.poroViewModel
@@ -31,10 +32,30 @@ fun NavGraphBuilder.socialGraph(nav: AppNav) {
         }
         val state by vm.state.collectAsStateWithLifecycle()
         var showReport by rememberSaveable { mutableStateOf(false) }
-        PublicProfileScreen(state = state, onBack = nav::back, onToggleFollow = vm::toggleFollow, onReport = { showReport = true })
+        PublicProfileScreen(
+            state = state,
+            onBack = nav::back,
+            onToggleFollow = vm::toggleFollow,
+            onReport = { showReport = true },
+            onOpenFollowers = { nav.controller.navigate(FollowListRoute(route.userId, FollowListKind.Followers.name.lowercase())) },
+            onOpenFollowing = { nav.controller.navigate(FollowListRoute(route.userId, FollowListKind.Following.name.lowercase())) },
+        )
         if (showReport) {
             ReportHost(nav, ReportTargets.USER, route.userId, onDismiss = { showReport = false })
         }
+    }
+    composable<FollowListRoute> { entry ->
+        val route = entry.toRoute<FollowListRoute>()
+        val kind = if (route.kind == FollowListKind.Following.name.lowercase()) FollowListKind.Following else FollowListKind.Followers
+        val vm = poroViewModel { FollowListViewModel(route.userId, kind, nav.container.socialRepository) }
+        val state by vm.state.collectAsStateWithLifecycle()
+        FollowListScreen(
+            kind = kind,
+            state = state,
+            onBack = nav::back,
+            onRetry = vm::loadMore,
+            onOpen = { nav.controller.navigate(PublicProfileRoute(it.userId)) },
+        )
     }
 }
 
@@ -117,6 +138,10 @@ private fun CommentsHost(nav: AppNav, videoId: String, onCountChanged: (Int) -> 
             onDraftChange = vm::onDraftChange,
             onPost = vm::post,
             onLike = vm::toggleLike,
+            onEdit = vm::startEdit,
+            onEditDraftChange = vm::onEditDraftChange,
+            onSaveEdit = vm::saveEdit,
+            onCancelEdit = vm::cancelEdit,
             onDelete = vm::delete,
             onReport = { comment -> reportCommentId = comment.id },
         ),
@@ -132,5 +157,11 @@ private fun CommentsHost(nav: AppNav, videoId: String, onCountChanged: (Int) -> 
 fun MyFollowCounts(nav: AppNav, userId: String) {
     val vm = poroViewModel(key = "stats-$userId") { UserStatsViewModel(userId, nav.container.socialRepository) }
     val stats by vm.stats.collectAsStateWithLifecycle()
-    stats?.let { FollowCounts(it) }
+    stats?.let {
+        FollowCounts(
+            it,
+            onFollowers = { nav.controller.navigate(FollowListRoute(userId, FollowListKind.Followers.name.lowercase())) },
+            onFollowing = { nav.controller.navigate(FollowListRoute(userId, FollowListKind.Following.name.lowercase())) },
+        )
+    }
 }

@@ -29,14 +29,15 @@ sealed interface UploadState {
 }
 
 /**
- * Publication de vidéos, à l'échelle de l'application : on peut quitter l'écran pendant l'envoi.
- * Limite connue : l'envoi ne survit pas à l'arrêt du processus (pas encore de WorkManager).
+ * Publication de vidéos, à l'échelle de l'application. Avec [durability] (WorkManager),
+ * l'envoi est relancé après un arrêt du processus ; sans elle (tests), il reste en mémoire.
  */
 class UploadManager(
     private val client: VideoUploadClient,
     private val videos: VideoRepository,
     private val scope: CoroutineScope,
     private val pollDelaysMs: List<Long> = listOf(5_000L, 10_000L, 20_000L, 30_000L) + List(26) { 60_000L },
+    private val durability: UploadDurability? = null,
 ) {
     private val _state = MutableStateFlow<UploadState>(UploadState.Idle)
     val state: StateFlow<UploadState> = _state.asStateFlow()
@@ -48,6 +49,20 @@ class UploadManager(
     /** Démarre l'envoi ; refusé (false) si un autre envoi est en cours. */
     fun start(file: LocalMedia, title: String, description: String?): Boolean {
         if (isBusy) return false
+        _state.value = UploadState.Uploading(title, 0, file.sizeBytes)
+        if (durability != null) {
+            durability.enqueue(file, title, description)
+            return true
+        }
+        return execute(file, title, description)
+    }
+
+    /**
+     * Exécute l'envoi dans le processus courant. Appelé par WorkManager, ou directement
+     * quand [durability] est absent.
+     */
+    fun execute(file: LocalMedia, title: String, description: String?): Boolean {
+        if (job?.isActive == true) return false
         job?.cancel()
         _state.value = UploadState.Uploading(title, 0, file.sizeBytes)
         job = scope.launch {
@@ -63,9 +78,10 @@ class UploadManager(
         return true
     }
 
-    /** Abandonne l'envoi en cours (les parties envoyées sont annulées côté serveur). */
+    /** Abandonne l'envoi en cours (les parties déjà envoyées sont annulées côté serveur). */
     fun cancel() {
         job?.cancel()
+        durability?.cancel()
         _state.value = UploadState.Idle
     }
 

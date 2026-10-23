@@ -38,6 +38,7 @@ class UploadViewModelTest {
     private val reader = object : LocalMediaReader {
         override suspend fun describe(uri: String) = files[uri]
         override suspend fun read(uri: String, offset: Long, length: Int) = ByteArray(length)
+        override suspend fun copyTo(uri: String, destination: java.io.File) = destination.writeBytes(ByteArray(0))
     }
     private val videos = object : VideoRepository {
         override suspend fun video(id: String) = ApiResult.Success(VideoDto(id))
@@ -81,5 +82,12 @@ class UploadViewModelTest {
         assertNull(vm.form.value.file)
         assertEquals("", vm.form.value.title)
         assertTrue(vm.upload.value is UploadState.Processing)
+    }
+
+    @Test
+    fun `a description longer than 500 runes is truncated`() = runTest(main.dispatcher) {
+        val vm = viewModel()
+        vm.onDescriptionChange("é".repeat(501))
+        assertEquals(500, vm.form.value.description.length)
     }
 }

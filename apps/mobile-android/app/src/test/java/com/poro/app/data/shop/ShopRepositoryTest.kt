@@ -56,6 +56,15 @@ class ShopRepositoryTest {
     }
 
     @Test
+    fun `deleting the logo hits DELETE shops me logo`() = runTest {
+        server.enqueue(json("""{"data":{"shop_id":"s1","handle":"kofi.store","name":"Kofi","currency":"XOF"},"error":null,"meta":{}}"""))
+        repo.deleteLogo()
+        val request = server.takeRequest()
+        assertEquals("DELETE", request.method)
+        assertEquals("/api/v1/shops/me/logo", request.path)
+    }
+
+    @Test
     fun `updating a product sends the initial stock of new variants only and clears an empty description`() = runTest {
         server.enqueue(json(PRODUCT))
 

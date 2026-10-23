@@ -25,7 +25,7 @@ Cette promesse **ne contourne pas** le serveur. Une route Bearer reste Bearer. U
 | Posts **image** dans le fil | **Non** — B-IMG-POST ([mobile-media/04](../mobile-media/04-social-media-spec.md)) |
 | Favoris, FCM push, recherche catalogue | Absents — ne pas les inventer |
 
-**Livrer le mode visiteur « fil d’abord » est bloqué par B-FEED** (trending public + quota IP + ADR) **et** par le mur Android (B-AND-START). Une app qui ouvre Accueil sans ces deux levées affiche une erreur réseau. Interdit.
+**Livrer le mode visiteur « fil d’abord » est bloqué par l’implémentation B-FEED** (décision [ADR-0019](../../architecture/adr/0019-feed-trending-public.md) **acceptée**, code feed pas encore modifié) **et** par le mur Android (B-AND-START). Une app qui ouvre Accueil sans ces deux levées affiche une erreur réseau. Interdit. G1 n’est pas autorisé.
 
 Détail : [02](02-public-api-audit.md), [09](09-backend-dependencies.md).
 

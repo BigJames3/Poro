@@ -1,5 +1,6 @@
 package com.poro.app.ui.social
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
@@ -38,7 +40,14 @@ import com.poro.app.ui.moderation.OverflowAction
 import com.poro.app.ui.moderation.OverflowMenu
 
 @Composable
-fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggleFollow: () -> Unit, onReport: () -> Unit) {
+fun PublicProfileScreen(
+    state: PublicProfileUiState,
+    onBack: () -> Unit,
+    onToggleFollow: () -> Unit,
+    onReport: () -> Unit,
+    onOpenFollowers: () -> Unit = {},
+    onOpenFollowing: () -> Unit = {},
+) {
     val profile = state.profile
     val name = displayNameOf(profile?.displayName, profile?.username)
     Scaffold(
@@ -62,7 +71,7 @@ fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggl
             profile?.username?.let { Text("@$it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             if (profile?.isCreator == true) CreatorBadge()
             profile?.bio?.takeIf { it.isNotBlank() }?.let { Text(it, textAlign = TextAlign.Center) }
-            state.stats?.let { FollowCounts(it) }
+            state.stats?.let { FollowCounts(it, onFollowers = onOpenFollowers, onFollowing = onOpenFollowing) }
             if (!state.isMe) {
                 val follow = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 if (state.following) {
@@ -82,14 +91,28 @@ fun PublicProfileScreen(state: PublicProfileUiState, onBack: () -> Unit, onToggl
 
 /** « 1,2 k abonnés · 85 abonnements », lu d'une traite par TalkBack. */
 @Composable
-fun FollowCounts(stats: UserStatsDto, modifier: Modifier = Modifier) {
+fun FollowCounts(
+    stats: UserStatsDto,
+    modifier: Modifier = Modifier,
+    onFollowers: (() -> Unit)? = null,
+    onFollowing: (() -> Unit)? = null,
+) {
     val followers = stringResource(R.string.profile_followers, Formats.count(stats.followers))
     val following = stringResource(R.string.profile_following, Formats.count(stats.following))
+    val clickable = onFollowers != null || onFollowing != null
     Row(
-        modifier.clearAndSetSemantics { contentDescription = "$followers, $following" },
+        modifier = if (clickable) modifier else modifier.clearAndSetSemantics { contentDescription = "$followers, $following" },
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(followers, style = MaterialTheme.typography.titleSmall)
-        Text(following, style = MaterialTheme.typography.titleSmall)
+        Text(
+            followers,
+            style = MaterialTheme.typography.titleSmall,
+            modifier = if (onFollowers != null) Modifier.clickable(role = Role.Button, onClick = onFollowers) else Modifier,
+        )
+        Text(
+            following,
+            style = MaterialTheme.typography.titleSmall,
+            modifier = if (onFollowing != null) Modifier.clickable(role = Role.Button, onClick = onFollowing) else Modifier,
+        )
     }
 }

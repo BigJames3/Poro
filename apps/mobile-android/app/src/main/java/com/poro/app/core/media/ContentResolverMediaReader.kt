@@ -35,7 +35,12 @@ class ContentResolverMediaReader(context: Context) : LocalMediaReader {
     }
 
     override suspend fun read(uri: String, offset: Long, length: Int): ByteArray = withContext(Dispatchers.IO) {
-        val stream = resolver.openInputStream(Uri.parse(uri)) ?: throw IOException("unreadable media")
+        val parsed = Uri.parse(uri)
+        val stream = if (parsed.scheme == "file") {
+            java.io.File(parsed.path ?: throw IOException("unreadable media")).inputStream()
+        } else {
+            resolver.openInputStream(parsed) ?: throw IOException("unreadable media")
+        }
         stream.use { input ->
             var skipped = 0L
             while (skipped < offset) {
@@ -51,6 +56,16 @@ class ContentResolverMediaReader(context: Context) : LocalMediaReader {
                 read += n
             }
             if (read == length) buffer else buffer.copyOf(read)
+        }
+    }
+
+    override suspend fun copyTo(uri: String, destination: java.io.File) = withContext(Dispatchers.IO) {
+        val stream = resolver.openInputStream(Uri.parse(uri)) ?: throw IOException("unreadable media")
+        stream.use { input ->
+            destination.outputStream().use { output ->
+                input.copyTo(output)
+                Unit
+            }
         }
     }
 }

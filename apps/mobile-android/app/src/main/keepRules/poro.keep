@@ -17,6 +17,9 @@
 }
 -keepclasseswithmembers class com.poro.app.**$$serializer { *; }
 
+# WorkManager retrouve le worker par son nom de classe.
+-keep class com.poro.app.data.video.VideoUploadWorker { <init>(...); }
+
 # Traces de plantage lisibles une fois désobscurcies (mapping.txt conservé par la CI).
 -keepattributes SourceFile, LineNumberTable
 -renamesourcefileattribute SourceFile
