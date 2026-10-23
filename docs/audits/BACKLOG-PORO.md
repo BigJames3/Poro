@@ -290,6 +290,9 @@ Les identifiants `PORO-xxx` sont stables : une tâche terminée garde le sien, e
   - `allowBackup=true`, aucune minification, aucune signature.
 - **Critères d'acceptation** :
   - La CI lance `./gradlew lint test assembleRelease` et produit un AAB signé avec un secret CI.
+    Fait : le job `mobile-build` lance les tests et le build debug ; le workflow
+    `android-release.yml` produit et vérifie l'AAB et l'APK signés. **BLOQUÉ** tant que le keystore
+    et `PORO_API_BASE_URL` ne sont pas fournis (le job le signale et ne construit rien).
   - `allowBackup` est désactivé ou des règles d'exclusion sont définies.
 - **Risques** : gestion du keystore.
 

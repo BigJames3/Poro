@@ -1,0 +1,126 @@
+name: Android release
+
+# Builds the signed Android App Bundle (Play Store) and APK, checks their
+# signature and keeps them as workflow artifacts with the R8 mapping.
+#
+# Inputs, never committed (apps/mobile-android/README.md):
+# - repository variable PORO_API_BASE_URL: HTTPS API URL ending with /
+# - repository variable PORO_SHARE_BASE_URL (optional): base of share links
+# - secrets PORO_KEYSTORE_BASE64 (base64 of the .jks), PORO_KEYSTORE_PASSWORD,
+#   PORO_KEY_ALIAS, PORO_KEY_PASSWORD
+# Without them the job reports what is missing and stops without failing:
+# no unsigned or placeholder build is ever published.
+#
+# A pull request touching this file only runs the configuration check, so the
+# keystore never meets code that is not on main or a release tag.
+
+on:
+  push:
+    tags: ["android-v*"]
+  workflow_dispatch:
+  pull_request:
+    paths: [".github/workflows/android-release.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check the release configuration
+        id: config
+        env:
+          API_BASE_URL: ${{ vars.PORO_API_BASE_URL }}
+          KEYSTORE_BASE64: ${{ secrets.PORO_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.PORO_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PORO_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.PORO_KEY_PASSWORD }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          missing=()
+          [ -n "$API_BASE_URL" ] || missing+=("variable PORO_API_BASE_URL")
+          [ -n "$KEYSTORE_BASE64" ] || missing+=("secret PORO_KEYSTORE_BASE64")
+          [ -n "$KEYSTORE_PASSWORD" ] || missing+=("secret PORO_KEYSTORE_PASSWORD")
+          [ -n "$KEY_ALIAS" ] || missing+=("secret PORO_KEY_ALIAS")
+          [ -n "$KEY_PASSWORD" ] || missing+=("secret PORO_KEY_PASSWORD")
+          if [ -n "$API_BASE_URL" ] && ! [[ "$API_BASE_URL" =~ ^https://.+/$ ]]; then
+            missing+=("variable PORO_API_BASE_URL : URL https:// terminée par /")
+          fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            {
+              echo "### Release Android : BLOQUÉ"
+              echo
+              echo "Aucun build de publication n'est produit. Valeurs manquantes ou invalides :"
+              for m in "${missing[@]}"; do echo "- $m"; done
+              echo
+              echo "Voir apps/mobile-android/README.md, section « Build de publication »."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=Release Android bloquée::${#missing[@]} valeur(s) manquante(s), voir le résumé du job"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT" = "pull_request" ]; then
+            echo "### Release Android : configuration complète (build sur tag android-v* ou lancement manuel)" >> "$GITHUB_STEP_SUMMARY"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.config.outputs.ready == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - if: steps.config.outputs.ready == 'true'
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with: { distribution: "temurin", java-version: "17" }
+
+      - name: Restore the keystore
+        if: steps.config.outputs.ready == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PORO_KEYSTORE_BASE64 }}
+        run: |
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/poro-release.jks"
+
+      - name: Build the signed bundle and APK
+        if: steps.config.outputs.ready == 'true'
+        working-directory: apps/mobile-android
+        env:
+          PORO_API_BASE_URL: ${{ vars.PORO_API_BASE_URL }}
+          PORO_SHARE_BASE_URL: ${{ vars.PORO_SHARE_BASE_URL }}
+          PORO_KEYSTORE_FILE: ${{ runner.temp }}/poro-release.jks
+          PORO_KEYSTORE_PASSWORD: ${{ secrets.PORO_KEYSTORE_PASSWORD }}
+          PORO_KEY_ALIAS: ${{ secrets.PORO_KEY_ALIAS }}
+          PORO_KEY_PASSWORD: ${{ secrets.PORO_KEY_PASSWORD }}
+          # Strictly increasing across runs, as the Play Store requires.
+          PORO_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          # android-v1.2.0 publishes version 1.2.0; a manual run keeps the default name.
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then export PORO_VERSION_NAME="${GITHUB_REF_NAME#android-v}"; fi
+          # The wrapper is committed without the executable bit: run it through bash.
+          bash ./gradlew --no-daemon bundleRelease assembleRelease
+
+      - name: Check the signatures
+        if: steps.config.outputs.ready == 'true'
+        working-directory: apps/mobile-android/app/build/outputs
+        run: |
+          apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          "$apksigner" verify --verbose --print-certs apk/release/app-release.apk
+          jarsigner -verify -strict bundle/release/app-release.aab | tee "$RUNNER_TEMP/aab-verify.txt"
+          grep -q "jar verified" "$RUNNER_TEMP/aab-verify.txt"
+
+      - name: Remove the keystore
+        if: always() && steps.config.outputs.ready == 'true'
+        run: rm -f "$RUNNER_TEMP/poro-release.jks"
+
+      - if: steps.config.outputs.ready == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: poro-android-${{ github.run_number }}
+          path: |
+            apps/mobile-android/app/build/outputs/bundle/release/app-release.aab
+            apps/mobile-android/app/build/outputs/apk/release/app-release.apk
+            apps/mobile-android/app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
+          retention-days: 90

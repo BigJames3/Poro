@@ -106,11 +106,26 @@ android {
 
 // Garde-fou de publication : sans URL d'API réelle, la release pointerait sur api.poro.invalid.
 // Seules les tâches qui produisent un APK/AAB de release échouent ; debug et tests ne changent pas.
+// Un keystore sans ses mots de passe ou son alias donnerait une erreur de signature obscure :
+// on nomme ce qui manque.
 val releaseApiUrlProvided = buildValue("poro.apiBaseUrl", "PORO_API_BASE_URL") != null
+val missingSigningValues = releaseKeystore?.let { keystore ->
+    listOf(
+        "poro.keystorePassword" to "PORO_KEYSTORE_PASSWORD",
+        "poro.keyAlias" to "PORO_KEY_ALIAS",
+        "poro.keyPassword" to "PORO_KEY_PASSWORD",
+    ).filter { (property, env) -> buildValue(property, env) == null }.map { it.second } +
+        listOfNotNull("PORO_KEYSTORE_FILE (fichier introuvable)".takeUnless { file(keystore).isFile })
+}.orEmpty()
 tasks.configureEach {
-    if (!releaseApiUrlProvided && Regex("^(assemble|bundle|package)Release$").matches(name)) {
+    if (Regex("^(assemble|bundle|package)Release$").matches(name)) {
         doFirst {
-            throw GradleException("Release sans URL d'API : fournir poro.apiBaseUrl ou PORO_API_BASE_URL (voir README).")
+            if (!releaseApiUrlProvided) {
+                throw GradleException("Release sans URL d'API : fournir poro.apiBaseUrl ou PORO_API_BASE_URL (voir README).")
+            }
+            if (missingSigningValues.isNotEmpty()) {
+                throw GradleException("Signature incomplète, manque : ${missingSigningValues.joinToString()} (voir README).")
+            }
         }
     }
 }
