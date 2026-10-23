@@ -6,6 +6,14 @@ const (
 	TypeVideos   = "videos"
 	TypeUsers    = "users"
 	TypeHashtags = "hashtags"
+	TypeProducts = "products"
+	TypeShops    = "shops"
+)
+
+// Countries and currencies of the launch (CountryCodes[i] uses Currencies[i]).
+var (
+	CountryCodes = []string{"CI", "SN", "CM", "NG"}
+	Currencies   = []string{"XOF", "XAF", "NGN"}
 )
 
 // Query and paging bounds.

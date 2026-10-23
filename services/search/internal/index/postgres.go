@@ -102,6 +102,70 @@ func (p *Postgres) Hashtags(ctx context.Context, query string, offset, limit int
 	return page(hits, limit), nil
 }
 
+// Products: active products of active shops, by relevance (text rank plus the
+// best word match in the title, which tolerates typos); products in stock first.
+func (p *Postgres) Products(ctx context.Context, query string, f CatalogFilter, offset, limit int) (Page[ProductHit], error) {
+	rows, err := p.pool.Query(ctx, `
+		WITH q AS (SELECT websearch_to_tsquery('search_fr', $1) AS tsq, search_fold($1) AS folded)
+		SELECT pr.product_id, pr.title, pr.image_url, pr.min_price, pr.currency, pr.in_stock,
+			s.shop_id, s.name, s.handle, s.logo_url, s.country_code
+		FROM products pr JOIN shops s ON s.shop_id = pr.shop_id CROSS JOIN q
+		WHERE pr.status = 'active' AND s.status = 'active'
+			AND (pr.document @@ q.tsq OR q.folded <% search_fold(pr.title))
+			AND ($4::text IS NULL OR s.country_code = $4)
+			AND ($5::text IS NULL OR pr.currency = $5)
+			AND ($6::bigint IS NULL OR pr.min_price >= $6)
+			AND ($7::bigint IS NULL OR pr.min_price <= $7)
+		ORDER BY pr.in_stock DESC,
+			ts_rank_cd(pr.document, q.tsq, 32) + word_similarity(q.folded, search_fold(pr.title)) DESC,
+			pr.product_id DESC
+		OFFSET $2 LIMIT $3`, query, offset, limit+1, f.CountryCode, f.Currency, f.MinPrice, f.MaxPrice)
+	if err != nil {
+		return Page[ProductHit]{}, fmt.Errorf("search products: %w", err)
+	}
+	hits, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ProductHit, error) {
+		var h ProductHit
+		err := row.Scan(&h.ProductID, &h.Title, &h.ImageURL, &h.MinPrice, &h.Currency, &h.InStock,
+			&h.Shop.ShopID, &h.Shop.Name, &h.Shop.Handle, &h.Shop.LogoURL, &h.Shop.CountryCode)
+		return h, err
+	})
+	if err != nil {
+		return Page[ProductHit]{}, fmt.Errorf("scan products: %w", err)
+	}
+	return page(hits, limit), nil
+}
+
+// Shops: active shops, an exact handle first (with or without @), then relevance.
+func (p *Postgres) Shops(ctx context.Context, query string, f CatalogFilter, offset, limit int) (Page[ShopHit], error) {
+	rows, err := p.pool.Query(ctx, `
+		WITH q AS (
+			SELECT websearch_to_tsquery('search_fr', $1) || websearch_to_tsquery('simple', search_fold($1)) AS tsq,
+				search_fold($1) AS folded, lower(ltrim(btrim($1), '@')) AS handle)
+		SELECT s.shop_id, s.name, s.handle, s.logo_url, s.country_code, s.currency
+		FROM shops s CROSS JOIN q
+		WHERE s.status = 'active'
+			AND (s.document @@ q.tsq OR q.folded <% search_fold(s.name || ' ' || s.handle)
+				OR lower(s.handle) LIKE `+likePrefix("q.handle")+`)
+			AND ($4::text IS NULL OR s.country_code = $4)
+			AND ($5::text IS NULL OR s.currency = $5)
+		ORDER BY (lower(s.handle) = q.handle) DESC,
+			ts_rank_cd(s.document, q.tsq, 32) + word_similarity(q.folded, search_fold(s.name || ' ' || s.handle)) DESC,
+			s.shop_id DESC
+		OFFSET $2 LIMIT $3`, query, offset, limit+1, f.CountryCode, f.Currency)
+	if err != nil {
+		return Page[ShopHit]{}, fmt.Errorf("search shops: %w", err)
+	}
+	hits, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ShopHit, error) {
+		var h ShopHit
+		err := row.Scan(&h.ShopID, &h.Name, &h.Handle, &h.LogoURL, &h.CountryCode, &h.Currency)
+		return h, err
+	})
+	if err != nil {
+		return Page[ShopHit]{}, fmt.Errorf("scan shops: %w", err)
+	}
+	return page(hits, limit), nil
+}
+
 // Suggest completes a username or a hashtag from its first characters.
 func (p *Postgres) Suggest(ctx context.Context, prefix string, perKind int) (Suggestions, error) {
 	clean := strings.ToLower(strings.TrimLeft(strings.TrimSpace(prefix), "@#"))

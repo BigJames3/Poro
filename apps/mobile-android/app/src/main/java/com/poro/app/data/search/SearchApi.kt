@@ -9,7 +9,7 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 
 /**
- * Recherche de vidéos, comptes et hashtags (docs/api/search.openapi.yaml). La même route renvoie
+ * Recherche de vidéos, comptes, hashtags, produits et boutiques (docs/api/search.openapi.yaml). La même route renvoie
  * des éléments différents selon `type` : une méthode typée par sorte de résultat.
  */
 interface SearchApi {
@@ -33,6 +33,20 @@ interface SearchApi {
         @Query("cursor") cursor: String?,
         @Query("limit") limit: Int,
     ): Response<ApiEnvelope<SearchPage<HashtagHit>>>
+
+    @GET("api/v1/search?type=products")
+    suspend fun products(
+        @Query("q") q: String,
+        @Query("cursor") cursor: String?,
+        @Query("limit") limit: Int,
+    ): Response<ApiEnvelope<SearchPage<ProductHit>>>
+
+    @GET("api/v1/search?type=shops")
+    suspend fun shops(
+        @Query("q") q: String,
+        @Query("cursor") cursor: String?,
+        @Query("limit") limit: Int,
+    ): Response<ApiEnvelope<SearchPage<ShopHit>>>
 
     @GET("api/v1/search/suggest")
     suspend fun suggest(@Query("q") q: String): Response<ApiEnvelope<Suggestions>>
@@ -79,3 +93,35 @@ data class HashtagHit(val tag: String, @SerialName("videos_count") val videosCou
 
 @Serializable
 data class Suggestions(val users: List<UserHit> = emptyList(), val hashtags: List<HashtagHit> = emptyList())
+
+/** Boutique d'un produit trouvé ; seules les boutiques actives sont renvoyées. */
+@Serializable
+data class ShopRefHit(
+    @SerialName("shop_id") val shopId: String = "",
+    val name: String = "",
+    val handle: String = "",
+    @SerialName("logo_url") val logoUrl: String? = null,
+    @SerialName("country_code") val countryCode: String = "",
+)
+
+/** Produit actif d'une boutique active ; [minPrice] en unités mineures de [currency]. */
+@Serializable
+data class ProductHit(
+    @SerialName("product_id") val productId: String,
+    val title: String = "",
+    @SerialName("image_url") val imageUrl: String? = null,
+    @SerialName("min_price") val minPrice: Long? = null,
+    val currency: String = "",
+    @SerialName("in_stock") val inStock: Boolean = false,
+    val shop: ShopRefHit = ShopRefHit(),
+)
+
+@Serializable
+data class ShopHit(
+    @SerialName("shop_id") val shopId: String,
+    val name: String = "",
+    val handle: String = "",
+    @SerialName("logo_url") val logoUrl: String? = null,
+    @SerialName("country_code") val countryCode: String = "",
+    val currency: String = "",
+)

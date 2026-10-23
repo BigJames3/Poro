@@ -32,6 +32,7 @@ var Topics = []string{
 	events.TypeSocialCommentCreated, events.TypeSocialCommentDeleted,
 	events.TypeSocialShareCreated,
 	events.TypeSocialFollowCreated, events.TypeSocialFollowDeleted,
+	events.TypeShopShopUpdated, events.TypeShopProductUpdated, events.TypeShopProductDeleted,
 }
 
 type applyFunc func(context.Context, pgx.Tx) error
@@ -132,6 +133,22 @@ func decode(env events.Envelope) (applyFunc, error) {
 	case events.TypeSocialLikeCreated, events.TypeSocialLikeDeleted, events.TypeSocialCommentCreated,
 		events.TypeSocialCommentDeleted, events.TypeSocialShareCreated:
 		return decodeStat(env)
+	case events.TypeShopShopUpdated:
+		return decodeShop(env)
+	case events.TypeShopProductUpdated:
+		return decodeProduct(env)
+	case events.TypeShopProductDeleted:
+		var d events.ShopProductDeletedV1
+		if err := env.DecodeData(&d); err != nil {
+			return nil, err
+		}
+		ids, err := parseIDs(d.ProductID, d.ShopID, d.OwnerID)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, tx pgx.Tx) error {
+			return repository.DeleteProduct(ctx, tx, ids[0], ids[1], ids[2], orNow(d.DeletedAt))
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported event %s", env.Type)
 	}
@@ -158,6 +175,66 @@ func decodeReady(env events.Envelope) (applyFunc, error) {
 		ThumbnailKey: d.ThumbnailKey, DurationMs: d.DurationMs, PublishedAt: published,
 	}
 	return func(ctx context.Context, tx pgx.Tx) error { return repository.UpsertReadyVideo(ctx, tx, v) }, nil
+}
+
+func decodeShop(env events.Envelope) (applyFunc, error) {
+	var d events.ShopShopUpdatedV1
+	if err := env.DecodeData(&d); err != nil {
+		return nil, err
+	}
+	ids, err := parseIDs(d.ShopID, d.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case d.UpdatedAt.IsZero():
+		return nil, errors.New("updated_at is required")
+	case d.Name == "" || d.Handle == "":
+		return nil, errors.New("name and handle are required")
+	case len(d.CountryCode) != 2 || len(d.Currency) != 3:
+		return nil, errors.New("country_code and currency are required")
+	case d.Status == "":
+		return nil, errors.New("status is required")
+	}
+	s := repository.Shop{ShopID: ids[0], OwnerID: ids[1], Name: d.Name, Handle: d.Handle,
+		Description: d.Description, LogoURL: d.LogoURL, CountryCode: d.CountryCode, Currency: d.Currency,
+		Status: d.Status, UpdatedAt: d.UpdatedAt}
+	return func(ctx context.Context, tx pgx.Tx) error { return repository.UpsertShop(ctx, tx, s) }, nil
+}
+
+// decodeProduct keeps what a result shows: the first image, the lowest
+// variant price and whether any variant is in stock.
+func decodeProduct(env events.Envelope) (applyFunc, error) {
+	var d events.ShopProductUpdatedV1
+	if err := env.DecodeData(&d); err != nil {
+		return nil, err
+	}
+	ids, err := parseIDs(d.ProductID, d.ShopID, d.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case d.UpdatedAt.IsZero():
+		return nil, errors.New("updated_at is required")
+	case d.Title == "" || len(d.Currency) != 3 || d.Status == "":
+		return nil, errors.New("title, currency and status are required")
+	}
+	p := repository.Product{ProductID: ids[0], ShopID: ids[1], OwnerID: ids[2], Title: d.Title,
+		Description: d.Description, Currency: d.Currency, Status: d.Status, UpdatedAt: d.UpdatedAt}
+	if len(d.ImageURLs) > 0 {
+		p.ImageURL = &d.ImageURLs[0]
+	}
+	for _, v := range d.Variants {
+		if v.Price < 0 {
+			return nil, errors.New("variant prices must not be negative")
+		}
+		if p.MinPrice == nil || v.Price < *p.MinPrice {
+			price := v.Price
+			p.MinPrice = &price
+		}
+		p.InStock = p.InStock || v.InStock
+	}
+	return func(ctx context.Context, tx pgx.Tx) error { return repository.UpsertProduct(ctx, tx, p) }, nil
 }
 
 // decodeModeration hides removed videos and shows restored ones. Comments are

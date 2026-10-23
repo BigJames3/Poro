@@ -51,5 +51,23 @@ class SearchRepositoryTest {
         assertEquals("/api/v1/search?type=hashtags&q=fo&cursor=abc&limit=20", server.takeRequest().path)
     }
 
+    @Test
+    fun `products and shops are decoded with their shop`() = runTest {
+        server.enqueue(json("""{"data":{"type":"products","items":[{"product_id":"p1","title":"Pagne wax","image_url":null,
+            "min_price":9000,"currency":"XOF","in_stock":false,"shop":{"shop_id":"s1","name":"Pagnes Awa","handle":"pagnes.awa",
+            "logo_url":null,"country_code":"CI"}}],"next_cursor":null},"error":null,"meta":{}}"""))
+        server.enqueue(json("""{"data":{"type":"shops","items":[{"shop_id":"s1","name":"Pagnes Awa","handle":"pagnes.awa",
+            "logo_url":null,"country_code":"CI","currency":"XOF"}],"next_cursor":null},"error":null,"meta":{}}"""))
+
+        val product = (repo.products("pagne", null) as ApiResult.Success).data.items.single()
+        val shop = (repo.shops("awa", null) as ApiResult.Success).data.items.single()
+
+        assertEquals(9000L, product.minPrice)
+        assertEquals("pagnes.awa", product.shop.handle)
+        assertEquals("XOF", shop.currency)
+        assertEquals("/api/v1/search?type=products&q=pagne&limit=20", server.takeRequest().path)
+        assertEquals("/api/v1/search?type=shops&q=awa&limit=20", server.takeRequest().path)
+    }
+
     private fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)
 }

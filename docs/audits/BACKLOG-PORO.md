@@ -395,6 +395,7 @@ Les identifiants `PORO-xxx` sont stables : une tâche terminée garde le sien, e
 
 - **Domaine** : Recherche. **Priorité** : P1. **Estimation** : 4 j.
 - **Critères d'acceptation** : `GET /api/v1/search?type=products` trouve un produit actif et ne trouve pas un produit archivé ou une boutique suspendue.
+- **État (2026-10-22)** : **terminé** (sous réserve de la CI). Le service search indexe `poro.shop.shop.updated`, `poro.shop.product.updated` et `poro.shop.product.deleted` (migration `000003_catalog`). Types `products` et `shops`, filtres `country`, `currency`, `min_price`, `max_price`. Un produit supprimé ne revient jamais ; l'effacement d'un compte retire son catalogue. Dans l'app : onglets Produits et Boutiques de la recherche, ouverts depuis l'onglet Boutique. Limite : un produit inchangé depuis plus longtemps que la rétention de Redpanda n'est indexé qu'à sa prochaine modification.
 
 ### PORO-027 — Commissions et journal des montants dus
 
