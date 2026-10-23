@@ -46,6 +46,15 @@ Les records DLQ gardent la **même clé** et le **même JSON**. En-têtes :
 
 Un replay aveugle d'un poison pill (JSON illisible) le renverra en DLQ.
 
+## Consommateur NestJS bloqué : `Snappy compression not implemented`
+
+KafkaJS (services user, shop, order, notification) ne lit pas les lots compressés en Snappy,
+le codec par défaut de franz-go. Les relais et les DLQ publient désormais sans compression
+(`packages/shared-go/kafka`). Un topic qui contient encore des lots Snappy, écrits avant ce
+changement, bloque le consommateur à chaque redémarrage : en dev, `docker compose down -v` ;
+ailleurs, déplacer l'offset du groupe après ces lots (`rpk group seek <groupe> --to end`),
+après avoir vérifié qu'aucun événement en attente ne sera perdu.
+
 ## Rétention outbox
 
 Les lignes **publiées** de plus de 72 h sont effacées par le relais. Les

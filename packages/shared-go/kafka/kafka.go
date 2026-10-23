@@ -26,6 +26,11 @@ const (
 	HeaderConsumerGroup     = "x-poro-consumer-group"
 )
 
+// noCompression keeps batches readable by every consumer: KafkaJS, used by the
+// NestJS services, cannot decode Snappy, franz-go's default. Events are small
+// JSON documents, so compression saves little.
+var noCompression = kgo.ProducerBatchCompression(kgo.NoCompression())
+
 // Producer publishes with acks=all and idempotence, so a retried batch is not duplicated by the broker.
 type Producer struct {
 	client *kgo.Client
@@ -36,6 +41,7 @@ func NewProducer(brokers []string) (*Producer, error) {
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(brokers...),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
+		noCompression,
 		kgo.ProducerLinger(5*time.Millisecond),
 		kgo.RecordDeliveryTimeout(30*time.Second),
 	)
@@ -153,6 +159,7 @@ func NewConsumer(cfg ConsumerConfig, handler Handler, log *zap.Logger) (*Consume
 		kgo.DisableAutoCommit(),
 		kgo.BlockRebalanceOnPoll(),
 		kgo.RequiredAcks(kgo.AllISRAcks()),
+		noCompression, // dead-letter records
 	)
 	if err != nil {
 		return nil, fmt.Errorf("kafka consumer: %w", err)

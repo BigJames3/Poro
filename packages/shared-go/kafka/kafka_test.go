@@ -3,6 +3,7 @@ package kafka_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -30,6 +31,31 @@ func TestKafka(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(producer.Close)
 	require.NoError(t, producer.Ping(ctx))
+
+	// KafkaJS (NestJS services) cannot read Snappy, franz-go's default codec.
+	t.Run("batches are not compressed", func(t *testing.T) {
+		topic := testinfra.Topic(t, broker, "plain")
+		// A batch that compresses well, like real outbox batches: franz-go keeps
+		// the codec only when it shrinks the batch.
+		value := []byte(`{"type":"poro.social.like.created","data":"` + strings.Repeat("abcdef", 200) + `"}`)
+		msgs := make([]outbox.Message, 10)
+		for i := range msgs {
+			msgs[i] = outbox.Message{Topic: topic, Key: []byte("same-key"), Value: value}
+		}
+		require.NoError(t, producer.Publish(ctx, msgs))
+		client, err := kgo.NewClient(kgo.SeedBrokers(broker), kgo.ConsumeTopics(topic), kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()))
+		require.NoError(t, err)
+		defer client.Close()
+		fetchCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		fetches := client.PollFetches(fetchCtx)
+		require.NoError(t, fetches.Err())
+		records := fetches.Records()
+		require.NotEmpty(t, records)
+		for _, r := range records {
+			require.Equal(t, uint8(0), r.Attrs.CompressionType(), "codec of the produced batch")
+		}
+	})
 
 	t.Run("outbox to idempotent consumer", func(t *testing.T) {
 		topic := testinfra.Topic(t, broker, "created")

@@ -105,7 +105,10 @@ services:
   seaweedfs:
     image: chrislusf/seaweedfs:4.45@sha256:fc9f76fa993ad69966ffeb2f65d0318fcae39c6f8e20cf68ef7b3a5cb97769e5
     container_name: poro-seaweedfs
-    command: server -s3 -dir=/data -master.volumeSizeLimitMB=1024
+    # -volume.max: the default (8) leaves no slot once the filer configuration
+    # has grown its 7 volumes, and every upload then fails with 500 (E-01).
+    # Volume files grow as data arrives: 100 slots reserve no disk.
+    command: server -s3 -dir=/data -master.volumeSizeLimitMB=1024 -volume.max=100
     ports:
       - "127.0.0.1:9000:8333"   # S3 API
       - "127.0.0.1:9001:9333"   # Master UI

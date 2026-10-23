@@ -121,6 +121,7 @@ aws --endpoint-url http://127.0.0.1:9000 s3 ls s3://poro-video-sources/videos/ -
 | Un upload d'avatar ou de photo échoue juste après la mise à jour | Original supprimé par le nettoyage d'`init.sh` | Recommencer l'upload |
 | Un upload vidéo commencé avant la mise à jour échoue à `complete` | Son upload multipart est resté dans `poro-videos` | Recommencer l'upload ; l'ancien multipart est annulé par `seaweedfs-janitor` après 24 h |
 | `video-storage-migrate` échoue | SeaweedFS indisponible ou identifiant vidéo refusé | Lire ses logs, corriger, relancer `docker compose up -d` (idempotent) |
+| Tout envoi (avatar, logo, photo, vidéo) renvoie `500 InternalError` ; logs SeaweedFS : `No writable volumes and no free volumes left` | Plus d'emplacement de volume libre : `-volume.max` par défaut (8) épuisé dès la configuration du filer (écart E-01) | `-volume.max=100` dans `docker-compose.yml` (fait) ; sur une pile existante, `docker compose up -d seaweedfs` suffit, les données sont gardées |
 
 ## Tests
 
