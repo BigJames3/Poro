@@ -3,6 +3,8 @@ package service
 
 import (
 	"context"
+	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -20,10 +22,22 @@ import (
 var (
 	errQuery = httpx.NewAPIError(fiber.StatusBadRequest, "invalid_query",
 		"q must be 1 to 100 characters without control characters")
-	errType     = httpx.NewAPIError(fiber.StatusBadRequest, "invalid_type", "type must be videos, users or hashtags")
+	errType = httpx.NewAPIError(fiber.StatusBadRequest, "invalid_type",
+		"type must be videos, users, hashtags, products or shops")
+	errFilter = httpx.NewAPIError(fiber.StatusBadRequest, "invalid_filter",
+		"country and currency apply to products and shops, min_price and max_price to products; "+
+			"prices are whole minor units with min_price <= max_price")
 	errCursor   = httpx.NewAPIError(fiber.StatusBadRequest, "invalid_cursor", "invalid cursor")
 	errInternal = httpx.NewAPIError(fiber.StatusInternalServerError, "internal_error", "internal server error")
 )
+
+// Filters are the raw catalogue filters of a search; empty means unset.
+type Filters struct {
+	Country  string
+	Currency string
+	MinPrice string
+	MaxPrice string
+}
 
 // Search is the application service of the search API.
 type Search struct {
@@ -37,13 +51,17 @@ func New(idx index.Index, publicURL func(string) string) *Search {
 }
 
 // Search returns one ranked page of kind for query.
-func (s *Search) Search(ctx context.Context, query, kind, rawCursor string, limit int) (*dto.Results, error) {
+func (s *Search) Search(ctx context.Context, query, kind, rawCursor string, limit int, raw Filters) (*dto.Results, error) {
 	q, err := cleanQuery(query)
 	if err != nil {
 		return nil, err
 	}
 	if kind == "" {
 		kind = model.TypeVideos
+	}
+	filter, err := catalogFilter(kind, raw)
+	if err != nil {
+		return nil, err
 	}
 	offset, err := cursor.Decode(rawCursor, model.MaxResults)
 	if err != nil {
@@ -75,6 +93,18 @@ func (s *Search) Search(ctx context.Context, query, kind, rawCursor string, limi
 			return nil, errInternal.WithCause(err)
 		}
 		out.Items, more = hashtags(page.Items), page.More
+	case model.TypeProducts:
+		page, err := s.idx.Products(ctx, q, filter, offset, limit)
+		if err != nil {
+			return nil, errInternal.WithCause(err)
+		}
+		out.Items, more = products(page.Items), page.More
+	case model.TypeShops:
+		page, err := s.idx.Shops(ctx, q, filter, offset, limit)
+		if err != nil {
+			return nil, errInternal.WithCause(err)
+		}
+		out.Items, more = shops(page.Items), page.More
 	default:
 		return nil, errType
 	}
@@ -96,6 +126,50 @@ func (s *Search) Suggest(ctx context.Context, prefix string) (*dto.Suggestions, 
 		return nil, errInternal.WithCause(err)
 	}
 	return &dto.Suggestions{Users: users(got.Users), Hashtags: hashtags(got.Hashtags)}, nil
+}
+
+// catalogFilter parses the filters; any filter the kind cannot apply is an
+// error rather than silently ignored.
+func catalogFilter(kind string, raw Filters) (index.CatalogFilter, error) {
+	var f index.CatalogFilter
+	catalog := kind == model.TypeProducts || kind == model.TypeShops
+	if !catalog && raw != (Filters{}) {
+		return f, errFilter
+	}
+	if kind != model.TypeProducts && (raw.MinPrice != "" || raw.MaxPrice != "") {
+		return f, errFilter
+	}
+	if raw.Country != "" {
+		c := strings.ToUpper(raw.Country)
+		if !slices.Contains(model.CountryCodes, c) {
+			return f, errFilter
+		}
+		f.CountryCode = &c
+	}
+	if raw.Currency != "" {
+		c := strings.ToUpper(raw.Currency)
+		if !slices.Contains(model.Currencies, c) {
+			return f, errFilter
+		}
+		f.Currency = &c
+	}
+	for _, p := range []struct {
+		raw string
+		dst **int64
+	}{{raw.MinPrice, &f.MinPrice}, {raw.MaxPrice, &f.MaxPrice}} {
+		if p.raw == "" {
+			continue
+		}
+		v, err := strconv.ParseInt(p.raw, 10, 64)
+		if err != nil || v < 0 {
+			return f, errFilter
+		}
+		*p.dst = &v
+	}
+	if f.MinPrice != nil && f.MaxPrice != nil && *f.MinPrice > *f.MaxPrice {
+		return f, errFilter
+	}
+	return f, nil
 }
 
 func cleanQuery(raw string) (string, error) {
@@ -144,4 +218,26 @@ func hashtags(hits []index.HashtagHit) []dto.Hashtag {
 		out = append(out, dto.Hashtag{Tag: h.Tag, VideosCount: h.VideosCount})
 	}
 	return out
+}
+
+func products(hits []index.ProductHit) []dto.Product {
+	out := make([]dto.Product, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, dto.Product{ProductID: h.ProductID.String(), Title: h.Title, ImageURL: h.ImageURL,
+			MinPrice: h.MinPrice, Currency: h.Currency, InStock: h.InStock, Shop: shopRef(h.Shop)})
+	}
+	return out
+}
+
+func shops(hits []index.ShopHit) []dto.Shop {
+	out := make([]dto.Shop, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, dto.Shop{ShopRef: shopRef(h.ShopRef), Currency: h.Currency})
+	}
+	return out
+}
+
+func shopRef(r index.ShopRef) dto.ShopRef {
+	return dto.ShopRef{ShopID: r.ShopID.String(), Name: r.Name, Handle: r.Handle, LogoURL: r.LogoURL,
+		CountryCode: r.CountryCode}
 }

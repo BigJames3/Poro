@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -39,6 +40,7 @@ fun ShopHomeScreen(
     onCart: () -> Unit,
     onOrders: () -> Unit,
     onMyShop: () -> Unit,
+    onSearchCatalog: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -53,6 +55,10 @@ fun ShopHomeScreen(
         }
         OutlinedButton(onClick = onOrders, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(stringResource(R.string.orders_title))
+        }
+        OutlinedButton(onClick = onSearchCatalog, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+            Icon(Icons.Filled.Search, contentDescription = null)
+            Text(stringResource(R.string.shop_search_catalog), modifier = Modifier.padding(start = 12.dp))
         }
         Text(stringResource(R.string.shop_find_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         Text(stringResource(R.string.shop_find_hint), style = MaterialTheme.typography.bodyMedium)

@@ -158,6 +158,10 @@
     <string name="search_tab_videos">Vidéos</string>
     <string name="search_tab_users">Comptes</string>
     <string name="search_tab_hashtags">Hashtags</string>
+    <string name="search_tab_products">Produits</string>
+    <string name="search_tab_shops">Boutiques</string>
+    <string name="search_price_from">À partir de %1$s</string>
+    <string name="search_out_of_stock">en rupture</string>
     <string name="search_no_results">Aucun résultat.</string>
     <string name="search_likes">%1$s j’aime</string>
     <string name="search_hashtag_videos">%1$s vidéos</string>
@@ -298,6 +302,7 @@
     <string name="price_from">À partir de %1$s</string>
     <string name="shop_home_title">Boutique</string>
     <string name="shop_title">Boutique</string>
+    <string name="shop_search_catalog">Rechercher un produit ou une boutique</string>
     <string name="shop_find_title">Trouver une boutique</string>
     <string name="shop_find_hint">Saisissez l\'identifiant que le vendeur vous a communiqué.</string>
     <string name="shop_find_action">Ouvrir la boutique</string>

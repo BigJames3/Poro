@@ -51,6 +51,17 @@ paths:
           bonus for creators.
         - `hashtags`: tags of at least one searchable video, prefix matches
           first, then similar tags, then the most used.
+        - `products`: active products of active shops whose title or
+          description match, products in stock first, then relevance.
+          Filters: `country`, `currency`, `min_price`, `max_price` (on the
+          lowest variant price, in minor units).
+        - `shops`: active shops whose name, handle or description match, an
+          exact handle (with or without `@`) first. Filters: `country`,
+          `currency`.
+
+        A filter the type cannot apply is refused with 400 `invalid_filter`.
+        Suspended or closed shops and draft, archived or deleted products are
+        never returned (PORO-026).
 
         At most 500 results per query. Pages use an offset: a ranking that
         changes between two pages can repeat or skip a result.
@@ -58,7 +69,23 @@ paths:
         - { $ref: "#/components/parameters/Query" }
         - name: type
           in: query
-          schema: { type: string, enum: [videos, users, hashtags], default: videos }
+          schema: { type: string, enum: [videos, users, hashtags, products, shops], default: videos }
+        - name: country
+          in: query
+          description: Shop country (`products`, `shops`)
+          schema: { type: string, enum: [CI, SN, CM, NG] }
+        - name: currency
+          in: query
+          description: "`products`, `shops`"
+          schema: { type: string, enum: [XOF, XAF, NGN] }
+        - name: min_price
+          in: query
+          description: Lowest variant price at least this, in minor units (`products`)
+          schema: { type: integer, minimum: 0 }
+        - name: max_price
+          in: query
+          description: Lowest variant price at most this, in minor units (`products`); not below `min_price`
+          schema: { type: integer, minimum: 0 }
         - name: cursor
           in: query
           description: Opaque `next_cursor` of the previous page of the same query and type; omit for page 1.
@@ -79,7 +106,7 @@ paths:
                     type: object
                     required: [type, items, next_cursor]
                     properties:
-                      type: { type: string, enum: [videos, users, hashtags] }
+                      type: { type: string, enum: [videos, users, hashtags, products, shops] }
                       items:
                         type: array
                         items:
@@ -87,6 +114,8 @@ paths:
                             - { $ref: "#/components/schemas/Video" }
                             - { $ref: "#/components/schemas/User" }
                             - { $ref: "#/components/schemas/Hashtag" }
+                            - { $ref: "#/components/schemas/Product" }
+                            - { $ref: "#/components/schemas/Shop" }
                       next_cursor: { type: ["string", "null"] }
                   error: { type: "null" }
                   meta: { $ref: "#/components/schemas/Meta" }
@@ -195,3 +224,27 @@ components:
       properties:
         tag: { type: string }
         videos_count: { type: integer }
+    ShopRef:
+      type: object
+      properties:
+        shop_id: { type: string, format: uuid }
+        name: { type: string }
+        handle: { type: string }
+        logo_url: { type: ["string", "null"] }
+        country_code: { type: string, enum: [CI, SN, CM, NG] }
+    Product:
+      type: object
+      properties:
+        product_id: { type: string, format: uuid }
+        title: { type: string }
+        image_url: { type: ["string", "null"], description: First photo }
+        min_price: { type: ["integer", "null"], description: Lowest variant price in minor units }
+        currency: { type: string, enum: [XOF, XAF, NGN] }
+        in_stock: { type: boolean, description: "A hint: the stock reservation decides" }
+        shop: { $ref: "#/components/schemas/ShopRef" }
+    Shop:
+      allOf:
+        - $ref: "#/components/schemas/ShopRef"
+        - type: object
+          properties:
+            currency: { type: string, enum: [XOF, XAF, NGN] }
