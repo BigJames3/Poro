@@ -26,7 +26,11 @@ Application Android de Poro (Kotlin, Jetpack Compose), module unique `:app`.
 
 ```bash
 ./gradlew testDebugUnitTest assembleDebug
+./gradlew connectedDebugAndroidTest   # tests instrumentés, émulateur ou appareil branché
 ```
+
+Les tests instrumentés (`app/src/androidTest`) tournent aussi en CI sur un émulateur API 34
+(job `mobile-instrumented`). Ils n'ont pas besoin du backend.
 
 ## Build de publication
 

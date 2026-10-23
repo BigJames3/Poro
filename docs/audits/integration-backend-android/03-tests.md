@@ -13,7 +13,7 @@ ces outils ne sont **pas** comptés comme exécutés.
 | `./gradlew testDebugUnitTest assembleDebug` (CI `mobile-build`) | **Vert** sur `884b652` (2026-10-22 08:33 UTC) | Dernier commit poussé. **Les corrections de ce rapport ne sont pas commitées : la CI ne les a pas compilées** |
 | Garde-fou release (sonde Gradle, mêmes fonctions que `app/build.gradle.kts`) | `assembleDebug` et `testDebugUnitTest` passent ; `assembleRelease` **échoue** sans URL (« Release sans URL d'API… ») ; `bundleRelease` passe avec `PORO_API_BASE_URL=https://api.example.com/` | AGP non chargé : la logique Gradle est vérifiée, pas la release réelle |
 | `assembleRelease` / `bundleRelease` réels | **Non exécuté** | Pas de SDK Android ni de keystore |
-| Tests instrumentés (`androidTest`) | **Aucun dans le dépôt** | — |
+| Tests instrumentés (`androidTest`) | 3 classes, job CI `mobile-instrumented` (émulateur API 34) | Configuration réseau de debug lue par Android, émojis composés avec l'ICU de l'appareil, démarrage invité puis connexion et retour ; sans backend |
 | Parcours réels sur émulateur | **Partiels**, journaux du propriétaire du 2026-10-21 | 24 endpoints observés avec la réponse attendue (VERT dans la matrice) ; échecs : envoi d'images (E-01), sessions 404 et statistiques 503 (environnement) |
 | Envoi présigné de l'app contre SeaweedFS | 2026-10-23, SeaweedFS 4.45 local, formulaire du service user | `PresignedUploader` : `Success` (ETag) en direct et avec la réécriture `localhost` de l'émulateur ; l'écart E-01 ne vient pas du code de l'app |
 
