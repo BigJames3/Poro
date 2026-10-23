@@ -6,7 +6,10 @@ Application Android de Poro (Kotlin, Jetpack Compose), module unique `:app`.
 
 - Android Studio récent (AGP 9.4), SDK Platform 37 ; le JDK est téléchargé par Gradle.
 - Backend local : `docker compose up` à la racine du monorepo, gateway sur `127.0.0.1:8000`.
-- Émulateur : l'application de debug appelle `http://10.0.2.2:8000/`.
+- Émulateur : l'application de debug appelle `http://10.0.2.2:8000/`. Le backend local signe les
+  URL de médias sur `localhost:9000` ; l'app de debug les envoie à l'hôte de l'API en gardant
+  l'hôte signé (`LoopbackRewriteInterceptor`). Sur `10.0.2.2`, aucun tunnel n'est nécessaire ; ne
+  pas remplacer `S3_PUBLIC_ENDPOINT` par une autre adresse que `localhost` ou `127.0.0.1`.
 - Téléphone physique, ou émulateur qui ne joint pas l'hôte (`SocketTimeoutException` vers
   `10.0.2.2` dans Logcat) : passer par le tunnel adb, à relancer après chaque redémarrage de
   l'appareil, puis rebuild.
@@ -17,6 +20,9 @@ Application Android de Poro (Kotlin, Jetpack Compose), module unique `:app`.
   ```
 
   et dans `local.properties` (non versionné) : `poro.debugApiBaseUrl=http://127.0.0.1:8000/`.
+  Les deux tunnels sont alors obligatoires : sans celui du port 9000, l'API répond mais l'envoi
+  d'un avatar, d'un logo ou d'une photo échoue (« Pas de connexion »), et Logcat montre
+  `PoroMedia … -> ConnectException`.
 
 ```bash
 ./gradlew testDebugUnitTest assembleDebug

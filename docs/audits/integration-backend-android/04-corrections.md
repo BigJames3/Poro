@@ -34,7 +34,7 @@ Aucun secret, aucune infrastructure ni donnée de production modifiés. Aucun co
 
 | Priorité | Tâche | Statut |
 |---|---|---|
-| P0 | E-01 Envoi d'images (avatar, logo, photo produit) | **BLOQUÉ** : il faut la ligne `PoroMedia` du Logcat. Code et serveur vérifiés ; hypothèse : `adb reverse tcp:9000 tcp:9000` absent après redémarrage de l'émulateur |
+| P0 | E-01 Envoi d'images (avatar, logo, photo produit) | **Diagnostiqué côté app** (chantier 7) : envoi de l'app accepté par SeaweedFS 4.45, avec la réécriture de l'émulateur. Cause restante : port 9000 injoignable depuis l'appareil. À confirmer avec la ligne `PoroMedia` du Logcat |
 | P0 | Configuration de production (URL d'API, keystore, Firebase) | **BLOQUÉ** : valeurs à fournir par le propriétaire. Garde-fou release en place (E-06) |
 | P1 | Fiabilité de l'envoi vidéo (doublons, orphelins) | TERMINÉ (E-05, B-01 vidéo) ; CI Android et Postgres requises |
 | P1 | Limites de validation (vidéo, profil, boutique, commande) | TERMINÉ (E-02 à E-04, E-08, E-11, B-03) |
@@ -80,7 +80,7 @@ dans les titres vidéo (U+200D entre deux émojis seulement) ; Wave seul paiemen
 | 3 | PORO-026 : recherche dans le catalogue des boutiques | TERMINÉ (PR #64 fusionnée) |
 | 4 | Émojis composés dans les titres et descriptions vidéo | TERMINÉ (PR #65 fusionnée) |
 | 5 | Mode invité en lecture seule | TERMINÉ (PR #66 fusionnée) |
-| 6 | Build de release signé dans la CI | EN COURS : PR ouverte (workflow `android-release.yml`) ; BLOQUÉ pour la signature réelle (keystore, URL de production) |
-| 7 | Tests instrumentés Android et parcours de bout en bout | À FAIRE |
+| 6 | Build de release signé dans la CI | TERMINÉ (PR #67 fusionnée, workflow `android-release.yml`) ; BLOQUÉ pour la signature réelle (keystore, URL de production) |
+| 7 | Tests instrumentés Android et parcours de bout en bout | EN COURS : 7a diagnostic E-01 (PR #68 fusionnée) ; 7b tests instrumentés ; 7c parcours de bout en bout |
 | 8 | PORO-015 : service de paiement Wave | À FAIRE ; BLOQUÉ pour la mise en service (clés de bac à sable, secret de webhook) |
 | 9 | Notifications push (FCM) | À FAIRE ; BLOQUÉ pour la mise en service (projet Firebase) |

@@ -15,6 +15,7 @@ ces outils ne sont **pas** comptés comme exécutés.
 | `assembleRelease` / `bundleRelease` réels | **Non exécuté** | Pas de SDK Android ni de keystore |
 | Tests instrumentés (`androidTest`) | **Aucun dans le dépôt** | — |
 | Parcours réels sur émulateur | **Partiels**, journaux du propriétaire du 2026-10-21 | 24 endpoints observés avec la réponse attendue (VERT dans la matrice) ; échecs : envoi d'images (E-01), sessions 404 et statistiques 503 (environnement) |
+| Envoi présigné de l'app contre SeaweedFS | 2026-10-23, SeaweedFS 4.45 local, formulaire du service user | `PresignedUploader` : `Success` (ETag) en direct et avec la réécriture `localhost` de l'émulateur ; l'écart E-01 ne vient pas du code de l'app |
 
 ## Backend
 
