@@ -66,4 +66,13 @@ class FeedRepositoryTest {
         assertEquals("/api/v1/feed/following?cursor=abc&limit=10", server.takeRequest().path)
         assertEquals("/api/v1/feed/trending?limit=10", server.takeRequest().path)
     }
+
+    @Test
+    fun `the guest feed reads the public trending route`() = runTest {
+        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"data":{"items":[],"next_cursor":null},"error":null,"meta":{}}"""))
+
+        repo.page(FeedKind.Guest, cursor = "abc")
+
+        assertEquals("/api/v1/feed/public/trending?cursor=abc&limit=10", server.takeRequest().path)
+    }
 }

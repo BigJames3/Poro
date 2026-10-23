@@ -54,6 +54,8 @@ http:
       entryPoints: [web]
       rule: "Path(`/api/v1/comments`) || PathPrefix(`/api/v1/comments/`)"
       service: social
+    # Includes the token-free /api/v1/feed/public/trending (guest mode); the
+    # feed service checks the token on every other path.
     feed:
       entryPoints: [web]
       rule: "Path(`/api/v1/feed`) || PathPrefix(`/api/v1/feed/`)"

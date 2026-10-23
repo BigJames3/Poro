@@ -16,6 +16,11 @@ import (
 // generalLimit is the per-user number of feed requests per minute.
 const generalLimit = 120
 
+// publicLimit is the per-IP number of guest feed requests per minute. Lower
+// than generalLimit: many guests can share one carrier IP, but an anonymous
+// client must not page the whole catalogue quickly.
+const publicLimit = 60
+
 // NewRedisStorage opens the Redis backend shared by the rate limiter, the
 // For You sessions and the page cache.
 func NewRedisStorage(cfg *config.Config) (*redisstore.Storage, error) {
@@ -45,4 +50,10 @@ func NewLimiter(store *redisstore.Storage) *ratelimit.Limiter {
 // failure gets 503.
 func GeneralLimit(l *ratelimit.Limiter) fiber.Handler {
 	return l.Handler("general", generalLimit, ratelimit.ByUserOrIP)
+}
+
+// PublicLimit counts guest requests per IP, apart from the authenticated
+// counter.
+func PublicLimit(l *ratelimit.Limiter) fiber.Handler {
+	return l.Handler("public", publicLimit, ratelimit.ByIP)
 }

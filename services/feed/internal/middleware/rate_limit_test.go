@@ -30,3 +30,25 @@ func TestGeneralLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, fiber.StatusTooManyRequests, res.StatusCode)
 }
+
+func TestPublicLimitCountsPerIPApartFromGeneral(t *testing.T) {
+	limiter, _ := ratelimittest.New(t)
+	app := fiber.New()
+	ok := func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) }
+	app.Get("/public", PublicLimit(limiter), ok)
+	app.Get("/general", GeneralLimit(limiter), ok)
+	for range publicLimit {
+		res, err := app.Test(httptest.NewRequest("GET", "/public", nil))
+		require.NoError(t, err)
+		require.Equal(t, fiber.StatusNoContent, res.StatusCode)
+	}
+	res, err := app.Test(httptest.NewRequest("GET", "/public", nil))
+	require.NoError(t, err)
+	require.Equal(t, fiber.StatusTooManyRequests, res.StatusCode)
+	require.NotEmpty(t, res.Header.Get("Retry-After"))
+
+	// Guests running out of requests leave the signed-in counter untouched.
+	res, err = app.Test(httptest.NewRequest("GET", "/general", nil))
+	require.NoError(t, err)
+	require.Equal(t, fiber.StatusNoContent, res.StatusCode)
+}

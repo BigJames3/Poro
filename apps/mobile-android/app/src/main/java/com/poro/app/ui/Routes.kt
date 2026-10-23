@@ -25,6 +25,10 @@ data class ForgotPasswordRoute(val email: String = "")
 @Serializable
 data class ResetPasswordRoute(val email: String)
 
+/** Fil public d'un invité, lecture seule : toute action ouvre la connexion. */
+@Serializable
+data object GuestFeedRoute
+
 // Session ouverte.
 
 /** Onglet d'accueil : le fil de vidéos. */

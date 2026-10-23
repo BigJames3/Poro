@@ -52,6 +52,7 @@ import com.poro.app.ui.shop.shopGraph
 import com.poro.app.ui.social.MyFollowCounts
 import com.poro.app.ui.social.PrefetchVideoStats
 import com.poro.app.ui.social.SocialVideoActions
+import com.poro.app.ui.social.VideoActions
 import com.poro.app.ui.social.socialGraph
 import com.poro.app.ui.upload.MyVideos
 import com.poro.app.ui.upload.uploadGraph
@@ -89,7 +90,8 @@ private fun PoroNavGraph(
 ) {
     val navController = rememberNavController()
     // Figée à la première composition : changer de destination de départ réinitialiserait la pile.
-    val start: Any = remember { if (startSignedIn) HomeRoute else PhoneRoute }
+    // Sans session : le fil public en lecture seule (mode invité).
+    val start: Any = remember { if (startSignedIn) HomeRoute else GuestFeedRoute }
     val scope = rememberCoroutineScope()
     val resources = LocalContext.current.resources
     val nav = remember(navController) { AppNav(navController, container, snackbar, scope, resources) }
@@ -148,6 +150,14 @@ private fun PoroNavGraph(
                 },
                 videoActions = { video -> SocialVideoActions(nav, video.id, video.title, VideoStatsDto(video.id), ownerId = video.userId.ifEmpty { null }) },
                 feedTopEnd = { FeedNotificationBell(nav) },
+                guestActions = { item ->
+                    VideoActions(
+                        VideoStatsDto(item.videoId, item.stats.likes, item.stats.comments, item.stats.shares),
+                        onLike = nav::signInPrompt,
+                        onComments = nav::signInPrompt,
+                        onShare = nav::signInPrompt,
+                    )
+                },
                 onFeedItems = { items -> PrefetchVideoStats(nav, items.map { it.videoId }) },
             )
             searchGraph(nav)
