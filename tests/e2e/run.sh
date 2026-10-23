@@ -58,6 +58,29 @@ for entry in $services gateway:8000; do
   fi
 done
 
+# Traefik checks each backend every 10 s: wait until it routes to every
+# service (any answer but 502, 503 or 504 means the route works).
+for path in /api/v1/auth/me /api/v1/users/me /api/v1/videos /api/v1/feed/public/trending \
+  /api/v1/comments/x/replies /api/v1/notifications /api/v1/moderation/cases \
+  /api/v1/search/suggest /api/v1/shops/me /api/v1/cart; do
+  routed=false
+  for _ in $(seq 1 60); do
+    code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8000${path}" || true)
+    case "$code" in
+      502 | 503 | 504 | 000) sleep 1 ;;
+      *)
+        routed=true
+        break
+        ;;
+    esac
+  done
+  if [ "$routed" != true ]; then
+    echo "the gateway never routed ${path} (last status ${code})"
+    dump
+    exit 1
+  fi
+done
+
 if ! python3 "$root/tests/e2e/e2e.py"; then
   dump
   exit 1
