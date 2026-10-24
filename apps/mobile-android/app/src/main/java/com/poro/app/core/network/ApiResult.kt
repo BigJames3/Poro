@@ -131,6 +131,9 @@ object ApiErrorCodes {
     /** Le stockage a refusé un envoi direct (fichier trop gros, URL expirée) : propre au client. */
     const val UPLOAD_REJECTED = "upload_rejected"
 
+    /** Le fichier choisi n'est plus lisible (supprimé, autorisation perdue) : propre au client. */
+    const val MEDIA_UNREADABLE = "media_unreadable"
+
     /** Réponse d'erreur illisible (pas d'enveloppe) : propre au client. */
     const val UNEXPECTED_RESPONSE = "unexpected_response"
 

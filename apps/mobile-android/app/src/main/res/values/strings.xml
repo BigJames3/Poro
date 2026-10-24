@@ -137,6 +137,10 @@
     <string name="upload_sending">Envoi de « %1$s » : %2$d %%</string>
     <string name="upload_keep_open">Gardez l’application ouverte jusqu’à la fin de l’envoi.</string>
     <string name="upload_new">Publier une autre vidéo</string>
+    <string name="upload_error_unreadable">La vidéo n’est plus accessible (supprimée ou autorisation perdue). Choisissez-la à nouveau : le titre et la description sont conservés.</string>
+    <string name="upload_repick">Choisir à nouveau la vidéo</string>
+    <string name="upload_edit">Modifier la publication</string>
+    <string name="upload_preview">Aperçu de la vidéo choisie</string>
     <string name="upload_ready">Votre vidéo est en ligne !</string>
     <string name="upload_watch">Voir la vidéo</string>
     <string name="upload_error_format">Format non pris en charge. Choisissez une vidéo MP4, MOV ou WebM.</string>

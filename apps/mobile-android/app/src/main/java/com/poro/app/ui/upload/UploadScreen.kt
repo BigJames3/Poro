@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -25,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -36,6 +38,7 @@ import com.poro.app.data.video.UploadState
 import com.poro.app.data.video.VideoDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.toErrorMessage
+import com.poro.app.ui.player.LocalVideoPreview
 import com.poro.app.ui.theme.brandButtonColors
 
 @Composable
@@ -46,6 +49,7 @@ fun UploadScreen(
     onTitleChange: (String) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onPublish: () -> Unit,
+    onRetry: () -> Unit,
     onCancelUpload: () -> Unit,
     onDismissResult: () -> Unit,
     onOpenVideo: (String) -> Unit,
@@ -53,6 +57,7 @@ fun UploadScreen(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { onVideoPicked(it.toString()) }
     }
+    val pickVideo = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -62,12 +67,23 @@ fun UploadScreen(
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.semantics { heading() },
         )
-        UploadStatusCard(upload, onCancelUpload, onDismissResult, onOpenVideo)
+        UploadStatusCard(
+            upload = upload,
+            onCancel = onCancelUpload,
+            onDismiss = onDismissResult,
+            onOpenVideo = onOpenVideo,
+            // « Réessayer » seulement si l'envoi peut être relancé tel quel (vidéo toujours lisible).
+            onRetry = onRetry.takeIf { upload is UploadState.Failed && upload.canRetry() && form.canPublish },
+            onRepick = {
+                onDismissResult()
+                pickVideo()
+            },
+        )
         if (upload is UploadState.Uploading) return@Column
 
         Text(stringResource(R.string.upload_rules), style = MaterialTheme.typography.bodyMedium)
         OutlinedButton(
-            onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) },
+            onClick = pickVideo,
             enabled = !form.checkingFile,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
         ) {
@@ -76,6 +92,11 @@ fun UploadScreen(
         if (form.checkingFile) CircularProgressIndicator()
         form.fileError?.let { ErrorMessageText(it) }
         form.file?.let { file ->
+            val preview = stringResource(R.string.upload_preview)
+            LocalVideoPreview(
+                uri = file.uri,
+                modifier = Modifier.fillMaxWidth().height(320.dp).semantics { contentDescription = preview },
+            )
             Text(
                 listOfNotNull(
                     Formats.megabytes(file.sizeBytes),
@@ -127,6 +148,8 @@ private fun UploadStatusCard(
     onCancel: () -> Unit,
     onDismiss: () -> Unit,
     onOpenVideo: (String) -> Unit,
+    onRetry: (() -> Unit)?,
+    onRepick: () -> Unit,
 ) {
     if (upload == UploadState.Idle) return
     Card(Modifier.fillMaxWidth()) {
@@ -155,7 +178,12 @@ private fun UploadStatusCard(
                 }
                 is UploadState.Failed -> {
                     upload.failure.toErrorMessage()?.let { ErrorMessageText(it) }
-                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_retry)) }
+                    when {
+                        upload.mediaLost -> TextButton(onClick = onRepick) { Text(stringResource(R.string.upload_repick)) }
+                        onRetry != null -> TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
+                    }
+                    // Retour au formulaire, conservé, pour corriger le titre, la description ou la vidéo.
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.upload_edit)) }
                 }
                 UploadState.Idle -> Unit
             }

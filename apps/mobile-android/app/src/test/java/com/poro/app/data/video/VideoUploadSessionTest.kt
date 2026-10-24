@@ -1,6 +1,7 @@
 package com.poro.app.data.video
 
 import com.poro.app.core.media.LocalMedia
+import com.poro.app.core.network.ApiErrorCodes
 import com.poro.app.core.network.ApiResult
 import com.poro.app.core.network.PoroJson
 import com.poro.app.core.network.PresignedUploader
@@ -10,6 +11,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -136,4 +138,75 @@ class VideoUploadSessionTest {
         assertTrue(result is ApiResult.Failure)
         assertNull("envoi annulé côté serveur, rien à reprendre", store.session)
     }
+
+    @Test
+    fun `a lost answer to complete keeps the session and the retry does not publish twice`() = runTest {
+        api.enqueue(init("v1"))
+        storage.enqueue(MockResponse().setResponseCode(200).setHeader("ETag", "\"e1\""))
+        // Le serveur a traité « complete », mais la connexion tombe avant la réponse. OkHttp peut
+        // rejouer la requête : le serveur répond alors 409 (la vidéo n'est plus `uploading`).
+        api.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST))
+        api.enqueue(json(409, """{"data":null,"error":{"code":"conflict","message":"not uploading"},"meta":{}}"""))
+
+        val first = uploader.upload(file, "Match", null) { _, _ -> }
+
+        assertTrue(first.toString(), first !is ApiResult.Success)
+        assertEquals("issue inconnue : rien d'annulé, session gardée", "v1", store.session?.videoId)
+        val firstRequests = (1..api.requestCount).map { api.takeRequest().let { r -> "${r.method} ${r.path}" } }
+        assertTrue(firstRequests.toString(), firstRequests.none { it.startsWith("DELETE") })
+
+        // Nouvel essai (WorkManager ou « Réessayer ») : la vidéo est relue, pas republiée.
+        val before = api.requestCount
+        api.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest) =
+                if (request.method == "GET" && request.path == "/api/v1/videos/v1") video("v1", VideoDto.STATUS_PROCESSING) else MockResponse().setResponseCode(500)
+        }
+        val second = uploader.upload(file, "Match", null) { _, _ -> }
+
+        assertEquals("v1", (second as ApiResult.Success).data.id)
+        assertEquals("GET /api/v1/videos/v1", api.takeRequest().let { "${it.method} ${it.path}" })
+        assertEquals("aucun second envoi", before + 1, api.requestCount)
+        assertNull(store.session)
+    }
+
+    @Test
+    fun `when complete never reached the server the retry aborts it and starts again`() = runTest {
+        api.enqueue(init("v1"))
+        storage.enqueue(MockResponse().setResponseCode(200).setHeader("ETag", "\"e1\""))
+        api.enqueue(MockResponse().setResponseCode(503))
+        uploader.upload(file, "Match", null) { _, _ -> }
+        repeat(api.requestCount) { api.takeRequest() }
+        assertEquals("v1", store.session?.videoId)
+
+        api.enqueue(video("v1", VideoDto.STATUS_UPLOADING))
+        api.enqueue(MockResponse().setResponseCode(204))
+        api.enqueue(init("v2"))
+        storage.enqueue(MockResponse().setResponseCode(200).setHeader("ETag", "\"e2\""))
+        api.enqueue(video("v2", VideoDto.STATUS_PROCESSING))
+        val retry = uploader.upload(file, "Match", null) { _, _ -> }
+
+        assertEquals("v2", (retry as ApiResult.Success).data.id)
+        assertEquals("GET /api/v1/videos/v1", api.takeRequest().let { "${it.method} ${it.path}" })
+        assertEquals("DELETE /api/v1/videos/uploads/v1", api.takeRequest().let { "${it.method} ${it.path}" })
+        assertEquals("POST /api/v1/videos/uploads", api.takeRequest().let { "${it.method} ${it.path}" })
+    }
+
+    @Test
+    fun `a video no longer readable stops with a clear code and aborts the upload`() = runTest {
+        for (lose in listOf<(String) -> Unit>({ media.revoked += it }, { media.deleted += it })) {
+            media.revoked.clear()
+            media.deleted.clear()
+            lose(file.uri)
+            api.enqueue(init("v1"))
+            api.enqueue(MockResponse().setResponseCode(204))
+
+            val result = uploader.upload(file, "Match", null) { _, _ -> }
+
+            assertEquals(ApiErrorCodes.MEDIA_UNREADABLE, (result as ApiResult.Failure).code)
+            assertEquals("POST /api/v1/videos/uploads", api.takeRequest().let { "${it.method} ${it.path}" })
+            assertEquals("DELETE /api/v1/videos/uploads/v1", api.takeRequest().let { "${it.method} ${it.path}" })
+            assertNull(store.session)
+        }
+    }
 }
+

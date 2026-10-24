@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.poro.app.R
 import com.poro.app.core.media.LocalMedia
 import com.poro.app.core.media.LocalMediaReader
+import com.poro.app.core.network.ApiErrorCodes
+import com.poro.app.core.network.ApiResult
 import com.poro.app.core.text.Runes
 import com.poro.app.data.video.UploadManager
 import com.poro.app.data.video.UploadState
@@ -44,8 +46,25 @@ data class UploadFormState(
 }
 
 /**
+ * Échec que « Réessayer » relance tel quel sans risque de doublon : réseau, refus du stockage
+ * (URL expirée, signature) ou erreur serveur. Un refus de contenu (titre, taille…) ou un fichier
+ * devenu illisible demande d'abord une correction.
+ */
+fun UploadState.Failed.canRetry(): Boolean = when (val failure = failure) {
+    is ApiResult.NetworkError -> true
+    is ApiResult.Failure -> failure.code == ApiErrorCodes.UPLOAD_REJECTED || failure.httpStatus >= 500
+    is ApiResult.Success -> false
+}
+
+/** Le fichier choisi n'est plus lisible : il faut le choisir à nouveau. */
+val UploadState.Failed.mediaLost: Boolean
+    get() = (failure as? ApiResult.Failure)?.code == ApiErrorCodes.MEDIA_UNREADABLE
+
+/**
  * Formulaire de publication. Le fichier est contrôlé ici (ADR-0007 : MP4, MOV ou WebM, 256 Mo,
  * 3 minutes) : refuser avant l'envoi épargne le forfait de données de l'utilisateur.
+ * Vidéo, titre et description sont gardés jusqu'à la confirmation du serveur : un échec se
+ * corrige ou se relance sans tout ressaisir.
  */
 class UploadViewModel(
     private val manager: UploadManager,
@@ -62,12 +81,43 @@ class UploadViewModel(
 
     init {
         savedState.get<String>(KEY_URI)?.let(::onVideoPicked)
+        viewModelScope.launch { manager.state.collect(::onUploadState) }
+    }
+
+    private fun onUploadState(state: UploadState) {
+        when (state) {
+            // Le serveur a accepté la vidéo : le formulaire repart à vide, une seule fois par vidéo.
+            is UploadState.Processing -> onPublished(state.video.id)
+            is UploadState.Finished -> onPublished(state.video.id)
+            // Fichier illisible : on l'oublie, le titre et la description restent.
+            is UploadState.Failed -> if (state.mediaLost) {
+                savedState[KEY_URI] = null
+                _form.update { it.copy(file = null, fileError = ErrorMessage(R.string.upload_error_unreadable)) }
+            }
+            else -> Unit
+        }
+    }
+
+    private fun onPublished(videoId: String) {
+        if (savedState.get<String>(KEY_PUBLISHED) == videoId) return
+        savedState[KEY_PUBLISHED] = videoId
+        savedState[KEY_URI] = null
+        onTitleChange("")
+        onDescriptionChange("")
+        _form.update { it.copy(file = null, fileError = null) }
     }
 
     fun onVideoPicked(uri: String) {
         _form.update { it.copy(checkingFile = true, fileError = null, file = null) }
         viewModelScope.launch {
-            val file = media.describe(uri)
+            val file = try {
+                media.describe(uri)
+            } catch (e: SecurityException) {
+                // Vidéo restaurée après un arrêt de l'app, sans autorisation durable.
+                savedState[KEY_URI] = null
+                _form.update { it.copy(checkingFile = false, fileError = ErrorMessage(R.string.upload_error_unreadable)) }
+                return@launch
+            }
             val error = when {
                 file == null || file.mimeType !in ACCEPTED_TYPES -> R.string.upload_error_format
                 file.sizeBytes > MAX_BYTES -> R.string.upload_error_size
@@ -93,17 +143,26 @@ class UploadViewModel(
         _form.update { it.copy(description = description) }
     }
 
+    /**
+     * Lance l'envoi ; sans effet si un envoi est déjà en cours (double appui). Le formulaire n'est
+     * vidé qu'à la confirmation du serveur ([onUploadState]).
+     */
     fun publish() {
         val form = _form.value
         val file = form.file ?: return
         if (!form.canPublish) return
-        if (manager.start(file, form.title.trim(), form.description.trim().ifEmpty { null })) {
-            // Le formulaire repart à vide : l'envoi continue même si l'on quitte l'écran.
-            savedState[KEY_URI] = null
-            onTitleChange("")
-            onDescriptionChange("")
-            _form.update { it.copy(file = null) }
-        }
+        manager.start(file, form.title.trim(), form.description.trim().ifEmpty { null })
+    }
+
+    /**
+     * Relance le même envoi après un échec réseau ou serveur. Le précédent a été annulé, ou reste
+     * mémorisé si son issue est inconnue : le nouvel essai le relit avant tout (pas de doublon).
+     */
+    fun retry() {
+        val failed = upload.value as? UploadState.Failed ?: return
+        if (!failed.canRetry() || !_form.value.canPublish) return
+        manager.dismiss()
+        publish()
     }
 
     fun cancelUpload() = manager.cancel()
@@ -114,6 +173,7 @@ class UploadViewModel(
         const val KEY_URI = "uri"
         const val KEY_TITLE = "title"
         const val KEY_DESCRIPTION = "description"
+        const val KEY_PUBLISHED = "published_video"
         const val MAX_BYTES = 256L * 1024 * 1024
         const val MAX_DURATION_MS = 3 * 60 * 1000L
         val ACCEPTED_TYPES = setOf("video/mp4", "video/quicktime", "video/webm")

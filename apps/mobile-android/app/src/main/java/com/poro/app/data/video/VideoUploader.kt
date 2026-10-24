@@ -7,6 +7,7 @@ import com.poro.app.core.network.ApiResult
 import com.poro.app.core.network.PresignedUploader
 import com.poro.app.core.network.UploadResult
 import com.poro.app.core.network.apiCall
+import java.io.FileNotFoundException
 import java.io.IOException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -83,6 +84,9 @@ class VideoUploader(
         }
         sessions?.save(UploadSession(session.videoId, fingerprint))
         var completed = false
+        // Réponse à « complete » perdue : le serveur a peut-être publié. On garde la trace pour que
+        // le prochain essai relise la vidéo au lieu d'annuler puis de publier une seconde fois.
+        var outcomeUnknown = false
         try {
             val etags = ArrayList<CompletedPart>(session.parts.size)
             var sent = 0L
@@ -92,6 +96,12 @@ class VideoUploader(
                 if (length <= 0) break
                 val bytes = try {
                     media.read(file.uri, offset, length)
+                } catch (e: SecurityException) {
+                    // Autorisation de lecture perdue (processus arrêté, accès non durable).
+                    return mediaUnreadable()
+                } catch (e: FileNotFoundException) {
+                    // Fichier supprimé ou déplacé depuis sa sélection : réessayer n'y changera rien.
+                    return mediaUnreadable()
                 } catch (e: IOException) {
                     return ApiResult.NetworkError(e)
                 }
@@ -104,14 +114,23 @@ class VideoUploader(
                 sent += bytes.size
                 onProgress(sent, file.sizeBytes)
             }
+            outcomeUnknown = true
             val done = apiCall { api.completeUpload(session.videoId, CompleteUpload(etags)) }
             completed = done is ApiResult.Success
+            // 409 : la vidéo n'est plus `uploading`, un premier « complete » (rejoué par OkHttp
+            // après une coupure) a pu aboutir ; 5xx et réseau : on ne sait pas.
+            outcomeUnknown = done is ApiResult.NetworkError ||
+                (done is ApiResult.Failure && (done.httpStatus >= 500 || done.httpStatus == 409))
             return done
         } finally {
-            // Échec, annulation ou refus : les parties déjà envoyées ne doivent pas rester en suspens.
             withContext(NonCancellable) {
-                if (!completed) apiCall(ifEmpty = {}) { api.abortUpload(session.videoId) }
-                sessions?.clear()
+                if (outcomeUnknown) {
+                    // Session gardée, rien d'annulé : le prochain essai la règle (settle).
+                } else {
+                    // Échec, annulation ou refus : les parties déjà envoyées ne doivent pas rester en suspens.
+                    if (!completed) apiCall(ifEmpty = {}) { api.abortUpload(session.videoId) }
+                    sessions?.clear()
+                }
             }
         }
     }
@@ -145,6 +164,9 @@ class VideoUploader(
             else -> null
         }
     }
+
+    private fun mediaUnreadable(): ApiResult.Failure =
+        ApiResult.Failure(0, ApiErrorCodes.MEDIA_UNREADABLE, "local media no longer readable", null, null)
 
     private fun uploadFailed(httpStatus: Int = 0): ApiResult.Failure =
         ApiResult.Failure(httpStatus, ApiErrorCodes.UPLOAD_REJECTED, "storage refused a part", null, null)
