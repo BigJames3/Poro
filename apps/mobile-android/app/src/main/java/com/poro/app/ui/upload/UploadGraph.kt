@@ -25,6 +25,7 @@ fun NavGraphBuilder.uploadGraph(nav: AppNav) {
             onTitleChange = vm::onTitleChange,
             onDescriptionChange = vm::onDescriptionChange,
             onPublish = vm::publish,
+            onRetry = vm::retry,
             onCancelUpload = vm::cancelUpload,
             onDismissResult = vm::dismissResult,
             onOpenVideo = { nav.controller.navigate(VideoRoute(it)) },

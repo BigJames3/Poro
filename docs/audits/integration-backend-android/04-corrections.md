@@ -85,3 +85,21 @@ dans les titres vidéo (U+200D entre deux émojis seulement) ; Wave seul paiemen
 | 7d | Portage de la sauvegarde, lot A (marketplace) : carnet d'adresses, vider le panier, retirer le logo | EN COURS : branche locale `claude/lot-a-marketplace`, en attente d'autorisation de pousser |
 | 8 | PORO-015 : service de paiement Wave | À FAIRE ; BLOQUÉ pour la mise en service (clés de bac à sable, secret de webhook) |
 | 9 | Notifications push (FCM) | À FAIRE ; BLOQUÉ pour la mise en service (projet Firebase) |
+
+## Module « Publier », phase 1 : défauts de l'envoi vidéo
+
+Diagnostic du 2026-10-24 (parcours vidéo réel de bout en bout ; publication d'images absente du
+backend, traitée dans les phases suivantes). Quatre défauts corrigés :
+
+- **« Réessayer » ne réessayait pas** : le bouton fermait seulement l'erreur, et le formulaire était
+  vidé dès la mise en file. Désormais la vidéo, le titre et la description restent jusqu'à la
+  confirmation du serveur ; « Réessayer » relance le même envoi après une erreur réseau, un refus
+  du stockage ou une erreur serveur, jamais après un refus de contenu (« Modifier la publication »).
+- **Doublon possible à la reprise** : si la réponse à `complete` se perdait, l'app annulait puis
+  publiait une seconde fois. Vérifié sur la pile réelle : un `complete` rejoué reçoit 409 et la
+  vidéo est déjà `processing`. Sur réseau, 5xx ou 409, la session est gardée sans rien annuler ;
+  l'essai suivant relit la vidéo au lieu de la republier.
+- **Aucun aperçu** : la vidéo choisie est maintenant lisible dans l'écran (Media3, contrôles standard).
+- **Accès au fichier perdu** : autorisation retirée ou fichier supprimé donnent un message
+  explicite (« Choisissez-la à nouveau ») et le bouton « Choisir à nouveau la vidéo » ; le titre et
+  la description sont conservés. Avant : plantage du worker et erreur générique.
