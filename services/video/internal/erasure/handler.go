@@ -111,6 +111,19 @@ func (h *Handler) purge(ctx context.Context, userID uuid.UUID) error {
 				return err
 			}
 		}
+		if row.MediaType == model.MediaTypePhoto {
+			// A photo post has one source per image, often with GPS data.
+			images, err := h.repo.Images(ctx, row.ID)
+			if err != nil {
+				return err
+			}
+			for _, img := range images {
+				if err := h.store.DeleteSource(ctx, img.SourceKey); err != nil {
+					return err
+				}
+			}
+			continue
+		}
 		if err := h.store.DeleteSource(ctx, row.SourceKey); err != nil {
 			return err
 		}

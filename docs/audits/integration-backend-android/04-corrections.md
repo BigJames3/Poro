@@ -103,3 +103,15 @@ backend, traitée dans les phases suivantes). Quatre défauts corrigés :
 - **Accès au fichier perdu** : autorisation retirée ou fichier supprimé donnent un message
   explicite (« Choisissez-la à nouveau ») et le bouton « Choisir à nouveau la vidéo » ; le titre et
   la description sont conservés. Avant : plantage du worker et erreur générique.
+
+## Module « Publier », étape 2b : publications photo dans le service vidéo (ADR-0020)
+
+Backend seul : aucune modification Android, du fil ni du worker de traitement (étapes 2c à 4).
+
+- Migration `000003_photo_posts` : `videos.media_type` (`video` par défaut, rien n'est réécrit) et table `video_images`. Testée sur des vidéos de chaque état (`TestPhotoPostsMigration`) et sur la base locale réelle (33 vidéos, empreinte identique avant et après). Le retour arrière refuse de s'exécuter tant qu'une photo existe.
+- Routes `POST /api/v1/videos/photo-uploads` et `…/{id}/complete` : URL PUT présignées à taille et type signés (refus vérifié sur SeaweedFS 4.45), contenu réel vérifié à la finalisation (octets magiques JPEG, PNG, WebP ; HEIC refusé), aucune publication partielle, `complete` rejoué en 409, panne du stockage distinguée d'une image manquante.
+- Filtre de capacité : sans `Poro-Capabilities: photo-posts`, `GET /api/v1/videos` et `GET /api/v1/videos/{id}` ne renvoient jamais de photo, même à son auteur.
+- Routes photo **fermées par défaut** (`PHOTO_POSTS_ENABLED=false`) : 404 `photo_posts_disabled` avant toute authentification, routes vidéo inchangées. Elles ne s'ouvriront qu'après validation de l'étape 2c.
+- En défense en profondeur, le worker laisse une photo en `processing` et envoie son événement en DLQ (30 jours, rejeu sous conditions décrites dans l'ADR-0020) ; l'étape 2c devra revalider le contenu au traitement.
+- Originaux photo supprimés à l'annulation, au refus, à la suppression, au balayage et à l'effacement du compte.
+

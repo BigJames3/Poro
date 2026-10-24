@@ -57,7 +57,7 @@ func TestVideosCRUD(t *testing.T) {
 	require.Equal(t, 1500, *got.DurationMs)
 	require.Equal(t, "360p", got.Renditions[0].Name)
 
-	listed, err := repo.ListByUser(ctx, user, nil, nil, 10)
+	listed, err := repo.ListByUser(ctx, user, []string{model.MediaTypeVideo, model.MediaTypePhoto}, nil, nil, 10)
 	require.NoError(t, err)
 	require.Len(t, listed, 1)
 

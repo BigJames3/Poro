@@ -246,3 +246,31 @@ func TestBadEventsArePermanent(t *testing.T) {
 	require.Nil(t, row.DeletedAt)
 	require.True(t, f.mem.HasSource(row.SourceKey))
 }
+
+func TestErasureDeletesThePhotoSources(t *testing.T) {
+	ctx := context.Background()
+	f := setup(t)
+	post := uuid.Must(uuid.NewV7())
+	now := time.Now().UTC()
+	keys := []string{model.ImageSourceKey(f.user.String(), post.String(), 1), model.ImageSourceKey(f.user.String(), post.String(), 2)}
+	require.NoError(t, f.repo.CreatePhoto(ctx, &model.Video{
+		ID: post.String(), UserID: f.user.String(), Description: "lieu exact dans l'EXIF", Status: model.StatusUploading,
+		ContentType: model.PhotoContentType, SizeBytes: 2, SourceKey: model.MediaPrefix(f.user.String(), post.String()),
+		CreatedAt: now, UpdatedAt: now,
+	}, []model.Image{
+		{Position: 1, ContentType: "image/jpeg", SizeBytes: 1, SourceKey: keys[0]},
+		{Position: 2, ContentType: "image/png", SizeBytes: 1, SourceKey: keys[1]},
+	}))
+	for _, key := range keys {
+		f.mem.PutSource(key, []byte("x"))
+	}
+	require.NoError(t, f.h.Handle(ctx, deletedEnvelope(t, f.user.String())))
+
+	row, err := f.repo.GetAny(ctx, post)
+	require.NoError(t, err)
+	require.NotNil(t, row.DeletedAt)
+	require.Empty(t, row.Description, "the caption is erased")
+	for _, key := range keys {
+		require.False(t, f.mem.HasSource(key), "the original %s (GPS) is deleted", key)
+	}
+}

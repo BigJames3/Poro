@@ -112,6 +112,12 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 	if row.Status != model.StatusProcessing {
 		return kafka.Permanent(fmt.Errorf("unexpected status %s", row.Status))
 	}
+	// Photo posts are processed from step 2c (ADR-0020). Until then the
+	// event goes to the dead-letter topic untouched, for a replay, and the
+	// post stays `processing`: it is never transcoded nor marked failed.
+	if row.MediaType == model.MediaTypePhoto || data.MediaType == model.MediaTypePhoto {
+		return kafka.Permanent(fmt.Errorf("photo post %s: image processing not available yet", videoID))
+	}
 
 	work, err := os.MkdirTemp("", "poro-video-")
 	if err != nil {

@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/poro/shared-go/events"
+	"github.com/poro/shared-go/kafka"
 
 	"github.com/poro/video/internal/model"
 	"github.com/poro/video/internal/repository"
@@ -280,4 +281,44 @@ func TestHandlerFailsAfterBoundedStorageRetries(t *testing.T) {
 			require.Equal(t, tc.code, *got.FailureCode)
 		})
 	}
+}
+
+// ffCalled fails the test if the transcoder runs.
+type ffCalled struct{ t *testing.T }
+
+func (f ffCalled) Transcode(context.Context, string, string, string, string) (*transcode.Output, error) {
+	f.t.Fatal("a photo post must never be transcoded")
+	return nil, nil
+}
+
+func TestPhotoPostIsNeverTranscodedNorFailed(t *testing.T) {
+	ctx := context.Background()
+	testdb.Available(t)
+	user, id := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	repo := repository.New(testdb.Pool)
+	now := time.Now().UTC()
+	require.NoError(t, repo.CreatePhoto(ctx, &model.Video{
+		ID: id.String(), UserID: user.String(), Status: model.StatusUploading, ContentType: model.PhotoContentType,
+		SizeBytes: 3, SourceKey: model.MediaPrefix(user.String(), id.String()), CreatedAt: now, UpdatedAt: now,
+	}, []model.Image{{Position: 1, ContentType: "image/jpeg", SizeBytes: 3, SourceKey: model.ImageSourceKey(user.String(), id.String(), 1)}}))
+	tx, err := testdb.Pool.Begin(ctx)
+	require.NoError(t, err)
+	require.NoError(t, repo.MarkProcessing(ctx, tx, id, 3))
+	require.NoError(t, tx.Commit(ctx))
+	mem := storage.NewMemory()
+	mem.PutSource(model.ImageSourceKey(user.String(), id.String(), 1), []byte{0xFF, 0xD8, 0xFF})
+
+	env, err := events.New(events.TypeVideoUploaded, 1, "video", id.String(), events.VideoUploadedV1{
+		VideoID: id.String(), UserID: user.String(), SourceKey: model.MediaPrefix(user.String(), id.String()),
+		ContentType: model.PhotoContentType, SizeBytes: 3, UploadedAt: now, MediaType: model.MediaTypePhoto,
+	}, now)
+	require.NoError(t, err)
+	err = worker.New(testdb.Pool, repo, mem, ffCalled{t}, zap.NewNop()).Handle(ctx, env)
+	require.Error(t, err)
+	require.True(t, kafka.IsPermanent(err), "the event goes to the dead-letter topic, kept for step 2c")
+
+	got, err := repo.Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, model.StatusProcessing, got.Status, "the post is neither failed nor ready")
+	require.True(t, mem.HasSource(model.ImageSourceKey(user.String(), id.String(), 1)), "its source is kept")
 }

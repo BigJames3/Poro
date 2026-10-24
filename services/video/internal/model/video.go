@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +16,19 @@ const (
 
 	ModerationApproved = "approved"
 	ModerationRemoved  = "removed"
+
+	// MediaTypeVideo and MediaTypePhoto tell a video from a photo post
+	// (ADR-0020). Rows written before photo posts are videos.
+	MediaTypeVideo = "video"
+	MediaTypePhoto = "photo"
+
+	// MaxImages and MaxImageBytes bound a photo post: 1 to 10 images of at
+	// most 10 MiB each before processing.
+	MaxImages     = 10
+	MaxImageBytes = 10 << 20
+	// PhotoContentType is stored in videos.content_type for a photo post;
+	// each image keeps its own type in video_images.
+	PhotoContentType = "image/*"
 
 	MaxBytes            = 256 << 20
 	MaxDurationSeconds  = 180
@@ -39,6 +53,27 @@ var AllowedContentTypes = map[string]string{
 	"video/mp4":       "mp4",
 	"video/quicktime": "mov",
 	"video/webm":      "webm",
+}
+
+// AllowedImageTypes are the image types a photo post accepts, checked again
+// on the stored bytes (DetectImageType). HEIC/HEIF is refused.
+var AllowedImageTypes = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/webp": true,
+}
+
+// Image is one picture of a photo post. ImageKey, ThumbnailKey, Width and
+// Height are set by the media-worker once the post is processed.
+type Image struct {
+	Position     int
+	ContentType  string
+	SizeBytes    int64
+	SourceKey    string
+	ImageKey     *string
+	ThumbnailKey *string
+	Width        *int
+	Height       *int
 }
 
 // Rendition is one HLS ladder rung stored on the video row.
@@ -76,6 +111,8 @@ type Video struct {
 	// its owner only, without media.
 	ModerationStatus string
 	ModeratedAt      *time.Time
+	// MediaType is MediaTypeVideo or MediaTypePhoto.
+	MediaType string
 }
 
 // PartLength is the exact length of part (1-based) of an upload of size
@@ -125,6 +162,13 @@ func IsSourceKey(key string) bool {
 // HLSDir is the prefix of transcoded HLS objects.
 func HLSDir(userID, videoID string) string {
 	return MediaRoot + userID + "/" + videoID + "/hls"
+}
+
+// ImageSourceKey is the private source object of image position (1-based) of
+// a photo post. It sits under MediaPrefix like every object of the post, but
+// never matches IsSourceKey, which only names video sources.
+func ImageSourceKey(userID, videoID string, position int) string {
+	return MediaRoot + userID + "/" + videoID + "/source-" + strconv.Itoa(position)
 }
 
 // MediaPrefix holds every object of a video: source, HLS and thumbnail.
