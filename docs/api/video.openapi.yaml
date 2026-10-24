@@ -151,6 +151,8 @@ paths:
         aborted and its sources deleted. The caption (`description`) is
         optional, 0–500 runes, with the same character rules as a video
         description. HEIC/HEIF is refused. Counts against the `init` rate limit.
+        Switched off by default: until PHOTO_POSTS_ENABLED, both photo routes
+        answer 404 `photo_posts_disabled`.
         Signed storage refuses a body of another length or another
         `Content-Type` with 403 (checked against SeaweedFS). A refused or
         failed PUT can be repeated with the same URL until it expires.
@@ -190,6 +192,7 @@ paths:
                       data: { $ref: "#/components/schemas/InitPhotoUpload" }
         "400": { $ref: "#/components/responses/InvalidRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/PhotoPostsDisabled" }
         "413":
           description: "`payload_too_large`: an image declared over 10 MiB (or a JSON body over 64 KiB)"
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
@@ -232,7 +235,9 @@ paths:
           description: "`upload_incomplete` (an image is missing) or `invalid_request`"
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "404": { $ref: "#/components/responses/NotFound" }
+        "404":
+          description: "`not_found` (another account's post, a video, or none), or `photo_posts_disabled`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "409":
           description: "`conflict` (not uploading, including a replayed complete)"
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
@@ -461,6 +466,9 @@ components:
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
     NotFound:
       description: "`not_found`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    PhotoPostsDisabled:
+      description: "`photo_posts_disabled`: photo posts are switched off on this server (PHOTO_POSTS_ENABLED=false, the default until image processing ships); answered before authentication"
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
     RateLimited:
       description: "`rate_limited`"

@@ -258,7 +258,17 @@ ready ──► modération : removed (quarantaine) / restored (Reveal)
 ## État de l'étape 2b (service `video`)
 
 - Migration `000003_photo_posts`, routes `POST /api/v1/videos/photo-uploads` et `…/{id}/complete`, PUT présigné, annulation, balayage, effacement de compte et filtre de capacité sur `GET /api/v1/videos` et `GET /api/v1/videos/{id}`.
-- **Garde-fou du worker jusqu'à l'étape 2c** : un `poro.video.uploaded` de photo n'est ni transcodé ni marqué `failed`. Il part dans `poro.video.uploaded.dlq` (rétention 30 jours) pour être rejoué une fois le traitement des images livré, et la publication reste `processing`. Une publication photo ne devient donc jamais `ready` avant l'étape 2c.
+- **Routes photo fermées par défaut** : `PHOTO_POSTS_ENABLED` (service `video`, défaut `false`, `docker-compose.yml` et `.env.example`). Fermées, `POST /api/v1/videos/photo-uploads` et `…/{id}/complete` répondent 404 `photo_posts_disabled` avant toute authentification ou limite de débit, et n'acceptent rien. Les routes vidéo n'en dépendent pas. L'annulation (`DELETE /uploads/{id}`), la lecture et la suppression restent ouvertes, pour qu'aucun objet déjà stocké ne reste bloqué. Une publication laissée `uploading` quand la route se ferme est balayée après 24 h avec ses sources. **Ne passer à `true` qu'après la validation de l'étape 2c.**
+- **Garde-fou du worker, en défense en profondeur** : si des photos étaient acceptées avant l'étape 2c (drapeau activé par erreur, ou en développement), un `poro.video.uploaded` de photo n'est ni transcodé ni marqué `failed`, et la publication reste `processing`. L'événement part dans `poro.video.uploaded.dlq`, **sans être marqué traité** (`processed_events`). La file de rejet n'est pas un traitement : une photo ne devient jamais `ready` avant l'étape 2c.
+  - **Rétention** : 30 jours (`retention.ms=2592000000`, 1 partition, créée par `redpanda-init` dans Compose). La rétention en production sera à fixer avec l'infrastructure (PORO-010).
+  - **Récupération** : aucun outil de rejeu n'existe encore (PORO-018). Inspection : `rpk topic consume poro.video.uploaded.dlq -o start`.
+  - **Conditions de rejeu**, jamais en aveugle :
+    1. l'étape 2c est déployée, avec la revalidation du contenu décrite plus bas ;
+    2. seuls les événements dont `data.media_type` vaut `photo` sont rejoués, avec leur **identifiant d'origine**, vers `poro.video.uploaded` ;
+    3. la publication est encore `processing` et non supprimée. Sinon le worker l'ignore (`claimOnly`), et le rejeu ne fait rien.
+
+    Le rejeu est idempotent : le worker marque chaque identifiant d'événement traité une seule fois.
+- **Exigence de l'étape 2c : revalider le contenu au traitement.** L'URL PUT reste valide 1 h après sa signature. Son titulaire peut donc remplacer une image après `complete` par un autre fichier de même taille et de même type déclaré. La vérification de `complete` ne suffit pas. Le worker doit relire chaque source, revérifier taille et octets magiques, puis décoder sous les limites (40 Mpx), **avant** tout ré-encodage, toute écriture publique et tout passage à `ready`. Une image qui ne passe pas fait échouer toute la publication.
 - Les originaux photo sont supprimés à l'annulation, au refus, à la suppression et à l'effacement du compte. Leur suppression après traitement viendra avec le worker (2c).
 - Le fil, social, search et notification ne reçoivent encore aucun événement photo : aucun `poro.video.ready` de photo n'est publié avant 2c. Leur filtrage viendra avec l'étape 2d.
 

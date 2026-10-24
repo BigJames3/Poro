@@ -130,3 +130,25 @@ func TestLoadStorageNeedsOnlyStorageSettings(t *testing.T) {
 	_, err = Load()
 	require.Equal(t, 1, strings.Count(err.Error(), "APP_ENV is required"), "reported once")
 }
+
+func TestPhotoPostsAreOffUnlessEnabled(t *testing.T) {
+	t.Chdir(t.TempDir())
+	setRequired := func() {
+		t.Setenv("APP_ENV", "dev")
+		t.Setenv("POSTGRES_PASSWORD", "secret")
+		t.Setenv("S3_ACCESS_KEY_ID", "k")
+		t.Setenv("S3_SECRET_ACCESS_KEY", "s")
+		t.Setenv("JWKS_URL", "http://auth/.well-known/jwks.json")
+	}
+	setRequired()
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.False(t, cfg.PhotoPostsEnabled, "photo posts are off by default")
+
+	for value, want := range map[string]bool{"true": true, "false": false, "1": true, "0": false} {
+		t.Setenv("PHOTO_POSTS_ENABLED", value)
+		cfg, err := Load()
+		require.NoError(t, err)
+		require.Equal(t, want, cfg.PhotoPostsEnabled, value)
+	}
+}

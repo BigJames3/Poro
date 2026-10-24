@@ -294,9 +294,23 @@ def put_image(upload, raw, content_type=None):
     return status
 
 
+def photo_posts_closed(seller):
+    """By default (PHOTO_POSTS_ENABLED=false) photo posts accept nothing, before
+    authentication, and the video routes are untouched (ADR-0020)."""
+    body = {"images": [{"content_type": "image/jpeg", "size_bytes": len(JPEG)}]}
+    for client in (seller, Client("anonymous")):
+        for path in ("/api/v1/videos/photo-uploads", f"/api/v1/videos/photo-uploads/{uuid.uuid4()}/complete"):
+            status, raw, _ = http("POST", BASE + path, body, {"Authorization": f"Bearer {client.token}"} if client.token else {})
+            code = json.loads(raw or b"{}").get("error", {}).get("code")
+            check(status == 404 and code == "photo_posts_disabled", f"{path} while disabled: {status} {raw[:200]}")
+    plain = seller.call("GET", "/api/v1/videos", query={"limit": 50}, headers=PHOTOS)
+    check(all(v["media_type"] == "video" for v in plain["items"]), "a photo post exists while photo posts are disabled")
+
+
 def photo_posts(seller):
-    """Photo posts in the video service (step 2b): signed PUTs to the real storage,
-    content checked at complete, no photo for a client without the capability."""
+    """Photo posts in the video service (step 2b), with PHOTO_POSTS_ENABLED=true:
+    signed PUTs to the real storage, content checked at complete, no photo for a
+    client without the capability."""
     images = [("image/jpeg", JPEG), ("image/png", PNG), ("image/webp", WEBP)]
     init = photo_post(seller, images, "Marché de Treichville")
     pid = init["video_id"]
@@ -589,7 +603,10 @@ def main():
     step("avatar upload", avatar, seller)
     seller.call("POST", "/api/v1/users/me/creator", expect=(200, 201))
     video_id = step("video upload and processing", videos, seller)
-    step("photo posts (step 2b)", photo_posts, seller)
+    if os.environ.get("E2E_PHOTO_POSTS") == "1":
+        step("photo posts (step 2b, enabled)", photo_posts, seller)
+    else:
+        step("photo posts closed by default", photo_posts_closed, seller)
     comment, reply = step("likes, comments, follows", social, seller, buyer, video_id)
     step("feeds", feeds, buyer, video_id)
     step("search", search, buyer, seller_name, f"Danse e2e {RUN}")
