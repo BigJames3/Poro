@@ -63,8 +63,9 @@ type Config struct {
 	S3ForcePathStyle   bool
 
 	// PhotoPostsEnabled opens the photo post upload routes (ADR-0020). Off by
-	// default: photo posts are accepted only once the media-worker processes
-	// them (step 2c). Video routes never depend on it.
+	// default: it stays off until the feed, search, social and notification
+	// services keep photo posts away from clients without the photo-posts
+	// capability (step 2d). Video routes never depend on it.
 	PhotoPostsEnabled bool
 
 	FFmpegBin  string

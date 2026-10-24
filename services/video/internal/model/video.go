@@ -171,6 +171,17 @@ func ImageSourceKey(userID, videoID string, position int) string {
 	return MediaRoot + userID + "/" + videoID + "/source-" + strconv.Itoa(position)
 }
 
+// ImageKey and ImageThumbKey are the public JPEG and thumbnail of image
+// position (1-based) of a photo post, under MediaPrefix like the rest.
+func ImageKey(userID, videoID string, position int) string {
+	return MediaRoot + userID + "/" + videoID + "/image-" + strconv.Itoa(position) + ".jpg"
+}
+
+// ImageThumbKey is the thumbnail of image position of a photo post.
+func ImageThumbKey(userID, videoID string, position int) string {
+	return MediaRoot + userID + "/" + videoID + "/thumb-" + strconv.Itoa(position) + ".jpg"
+}
+
 // MediaPrefix holds every object of a video: source, HLS and thumbnail.
 func MediaPrefix(userID, videoID string) string {
 	return MediaRoot + userID + "/" + videoID + "/"
