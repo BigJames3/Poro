@@ -35,6 +35,9 @@ func Register(app *fiber.App, deps Dependencies) {
 	v.Get("/", auth, limit, deps.Videos.List)
 	v.Post("/uploads", auth, limit, middleware.InitLimit(deps.Limiter), deps.Videos.Init)
 	v.Post("/uploads/:id/complete", auth, limit, middleware.CompleteLimit(deps.Limiter), deps.Videos.Complete)
+	// Photo posts (ADR-0020) count against the same init and complete limits.
+	v.Post("/photo-uploads", auth, limit, middleware.InitLimit(deps.Limiter), deps.Videos.InitPhoto)
+	v.Post("/photo-uploads/:id/complete", auth, limit, middleware.CompleteLimit(deps.Limiter), deps.Videos.CompletePhoto)
 	v.Delete("/uploads/:id", auth, limit, deps.Videos.Abort)
 	v.Get("/:id", opt, limit, deps.Videos.Get)
 	v.Delete("/:id", auth, limit, deps.Videos.Delete)

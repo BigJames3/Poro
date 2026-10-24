@@ -79,7 +79,7 @@ class Client:
         self.refresh_token = None
         self.user = None
 
-    def call(self, method, template, path=None, body=None, query=None, expect=(200,), auth=True):
+    def call(self, method, template, path=None, body=None, query=None, expect=(200,), auth=True, headers=None):
         """Calls the API. template is the route as the app declares it; path fills it."""
         url = BASE + (path or template.split("?")[0])
         params = dict(query or {})
@@ -87,7 +87,9 @@ class Client:
             params.update(urllib.parse.parse_qsl(template.split("?", 1)[1]))
         if params:
             url += "?" + urllib.parse.urlencode(params)
-        headers = {"Authorization": f"Bearer {self.token}"} if auth and self.token else {}
+        headers = dict(headers or {})
+        if auth and self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
         status, raw, _ = http(method, url, body, headers)
         try:
             envelope = json.loads(raw) if raw else {}
@@ -265,6 +267,78 @@ def upload_video(client, title, description):
     client.call("POST", "/api/v1/videos/uploads/{id}/complete", f"/api/v1/videos/uploads/{init['video_id']}/complete",
                 body={"parts": etags}, expect=(200, 202))
     return init["video_id"]
+
+
+PHOTOS = {"Poro-Capabilities": "photo-posts"}
+# Magic bytes are all step 2b checks (ADR-0020); decoding comes with step 2c.
+JPEG = bytes([0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10]) + b"JFIF" + bytes(50)
+PNG = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + bytes(50)
+WEBP = b"RIFF\x24\x00\x00\x00WEBPVP8 " + bytes(50)
+HEIC = b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic" + bytes(50)
+
+
+def photo_post(client, images, caption=None):
+    """Creates a photo post and returns it with its signed PUTs."""
+    body = {"images": [{"content_type": ct, "size_bytes": len(raw)} for ct, raw in images]}
+    if caption is not None:
+        body["description"] = caption
+    return client.call("POST", "/api/v1/videos/photo-uploads", body=body, expect=201)
+
+
+def put_image(upload, raw, content_type=None):
+    headers = dict(upload["headers"])
+    headers.pop("Content-Length", None)  # urllib sends the body's own length
+    if content_type is not None:
+        headers["Content-Type"] = content_type
+    status, _, _ = http("PUT", upload["url"], raw, headers, raw=True)
+    return status
+
+
+def photo_posts(seller):
+    """Photo posts in the video service (step 2b): signed PUTs to the real storage,
+    content checked at complete, no photo for a client without the capability."""
+    images = [("image/jpeg", JPEG), ("image/png", PNG), ("image/webp", WEBP)]
+    init = photo_post(seller, images, "Marché de Treichville")
+    pid = init["video_id"]
+    check(len(init["images"]) == 3 and init["expires_in"] == 3600, f"photo upload session: {init}")
+    first = init["images"][0]
+    check(put_image(first, JPEG, "image/png") == 403, "storage accepted another Content-Type than signed")
+    check(put_image(first, JPEG + b"\x00") == 403, "storage accepted another length than signed")
+    for upload, (_, raw) in zip(init["images"][:2], images):
+        check(put_image(upload, raw) == 200, "storage refused the signed PUT")
+    complete = ("POST", "/api/v1/videos/photo-uploads/{id}/complete", f"/api/v1/videos/photo-uploads/{pid}/complete")
+    seller.call(*complete, expect=400)  # third image missing: nothing deleted
+    check(put_image(init["images"][2], WEBP) == 200, "storage refused the third image")
+    post = seller.call(*complete)
+    check(post["media_type"] == "photo" and post["status"] == "processing", f"completed photo post: {post}")
+    seller.call(*complete, expect=409)  # a replayed complete changes nothing
+
+    get = ("GET", "/api/v1/videos/{id}", f"/api/v1/videos/{pid}")
+    seller.call(*get, expect=404)  # no capability: not even its owner sees it
+    check(seller.call(*get, headers=PHOTOS)["media_type"] == "photo", "photo post not returned with the capability")
+    plain = seller.call("GET", "/api/v1/videos", query={"limit": 50})
+    check(all(v["media_type"] == "video" for v in plain["items"]), "a photo post leaked to a client without the capability")
+    mine = seller.call("GET", "/api/v1/videos", query={"limit": 50}, headers=PHOTOS)
+    check(any(v["id"] == pid for v in mine["items"]), "photo post missing with the capability")
+
+    bad = photo_post(seller, [("image/jpeg", JPEG), ("image/jpeg", HEIC)])
+    for upload, raw in zip(bad["images"], (JPEG, HEIC)):
+        check(put_image(upload, raw) == 200, "storage refused a signed PUT")
+    seller.call("POST", "/api/v1/videos/photo-uploads/{id}/complete", f"/api/v1/videos/photo-uploads/{bad['video_id']}/complete", expect=422)
+    seller.call("GET", "/api/v1/videos/{id}", f"/api/v1/videos/{bad['video_id']}", headers=PHOTOS, expect=404)  # no partial post
+
+    for body, status in (({"images": []}, 422), ({"images": [{"content_type": "image/jpeg", "size_bytes": 1}] * 11}, 422),
+                         ({"images": [{"content_type": "image/heic", "size_bytes": 10}]}, 422),
+                         ({"images": [{"content_type": "image/jpeg", "size_bytes": 10 * 1024 * 1024 + 1}]}, 413)):
+        seller.call("POST", "/api/v1/videos/photo-uploads", body=body, expect=status)
+
+    left = photo_post(seller, [("image/png", PNG)])
+    seller.call("DELETE", "/api/v1/videos/uploads/{id}", f"/api/v1/videos/uploads/{left['video_id']}", expect=204)
+
+    # Until step 2c the media-worker dead-letters photo posts: never failed, never ready.
+    time.sleep(3)
+    check(seller.call(*get, headers=PHOTOS)["status"] == "processing", "the worker touched a photo post")
+    seller.call("DELETE", "/api/v1/videos/{id}", f"/api/v1/videos/{pid}", expect=204)
 
 
 def videos(seller):
@@ -515,6 +589,7 @@ def main():
     step("avatar upload", avatar, seller)
     seller.call("POST", "/api/v1/users/me/creator", expect=(200, 201))
     video_id = step("video upload and processing", videos, seller)
+    step("photo posts (step 2b)", photo_posts, seller)
     comment, reply = step("likes, comments, follows", social, seller, buyer, video_id)
     step("feeds", feeds, buyer, video_id)
     step("search", search, buyer, seller_name, f"Danse e2e {RUN}")

@@ -15,6 +15,7 @@ import (
 type Memory struct {
 	mu         sync.Mutex
 	sources    map[string][]byte
+	types      map[string]string
 	objects    map[string][]byte
 	quarantine map[string][]byte
 	uploads    map[string]*memUpload
@@ -28,7 +29,7 @@ type memUpload struct {
 
 // NewMemory builds an empty store.
 func NewMemory() *Memory {
-	return &Memory{sources: map[string][]byte{}, objects: map[string][]byte{}, quarantine: map[string][]byte{}, uploads: map[string]*memUpload{}}
+	return &Memory{sources: map[string][]byte{}, types: map[string]string{}, objects: map[string][]byte{}, quarantine: map[string][]byte{}, uploads: map[string]*memUpload{}}
 }
 
 func (m *Memory) CreateMultipart(_ context.Context, key, _ string) (string, error) {
@@ -41,6 +42,23 @@ func (m *Memory) CreateMultipart(_ context.Context, key, _ string) (string, erro
 
 func (m *Memory) PresignPart(_ context.Context, _, uploadID string, part int32, size int64) (string, error) {
 	return fmt.Sprintf("memory://%s/%d?size=%d", uploadID, part, size), nil
+}
+
+func (m *Memory) PresignPut(_ context.Context, key, contentType string, size int64) (string, map[string]string, error) {
+	return fmt.Sprintf("memory://put/%s?size=%d", key, size), map[string]string{
+		"Content-Type": contentType, "Content-Length": fmt.Sprint(size),
+	}, nil
+}
+
+// PutObject stores a source as a presigned PUT would, with its Content-Type
+// (tests simulate the client PUT; unlike real storage, nothing is checked).
+func (m *Memory) PutObject(key, contentType string, body []byte) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make([]byte, len(body))
+	copy(cp, body)
+	m.sources[key] = cp
+	m.types[key] = contentType
 }
 
 // PutPart stores bytes for a presigned part (tests simulate the client PUT).
@@ -94,9 +112,9 @@ func (m *Memory) HeadSource(_ context.Context, key string) (Object, error) {
 	defer m.mu.Unlock()
 	b, ok := m.sources[key]
 	if !ok {
-		return Object{}, fmt.Errorf("not found: %s", key)
+		return Object{}, fmt.Errorf("head %s: %w", key, ErrMissing)
 	}
-	return Object{Size: int64(len(b))}, nil
+	return Object{Size: int64(len(b)), ContentType: m.types[key]}, nil
 }
 
 func (m *Memory) GetSourceRange(_ context.Context, key string, start, end int64) ([]byte, error) {
@@ -146,6 +164,7 @@ func (m *Memory) DeleteSource(_ context.Context, key string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.sources, key)
+	delete(m.types, key)
 	return nil
 }
 

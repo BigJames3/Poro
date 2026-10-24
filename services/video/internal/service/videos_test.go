@@ -65,20 +65,20 @@ func TestInitCompleteAndGet(t *testing.T) {
 		init.VideoID, events.TypeVideoUploaded).Scan(&n))
 	require.Equal(t, 1, n)
 
-	got, err := svc.Get(ctx, vid, &user)
+	got, err := svc.Get(ctx, vid, &user, false)
 	require.NoError(t, err)
 	require.Equal(t, "clip", got.Title)
 
 	other := uuid.Must(uuid.NewV7())
-	_, err = svc.Get(ctx, vid, &other)
+	_, err = svc.Get(ctx, vid, &other, false)
 	require.Error(t, err)
 
-	listed, err := svc.List(ctx, user, "", 20)
+	listed, err := svc.List(ctx, user, "", 20, false)
 	require.NoError(t, err)
 	require.Len(t, listed.Items, 1)
 
 	require.NoError(t, svc.Delete(ctx, user, vid))
-	_, err = svc.Get(ctx, vid, &user)
+	_, err = svc.Get(ctx, vid, &user, false)
 	require.Error(t, err)
 
 	require.NoError(t, testdb.Pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events WHERE event_key = $1 AND topic = $2`,
@@ -121,7 +121,7 @@ func TestAbort(t *testing.T) {
 	init, err := svc.InitUpload(ctx, user, dto.InitRequest{Title: "x", ContentType: "video/mp4", SizeBytes: 10})
 	require.NoError(t, err)
 	require.NoError(t, svc.Abort(ctx, user, uuid.MustParse(init.VideoID)))
-	_, err = svc.Get(ctx, uuid.MustParse(init.VideoID), &user)
+	_, err = svc.Get(ctx, uuid.MustParse(init.VideoID), &user, false)
 	require.Error(t, err)
 
 	var n int
@@ -167,9 +167,9 @@ func TestSweepAbandonedUploads(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, n, 1)
 	require.False(t, mem.HasUpload(abandoned.UploadID), "the multipart upload is aborted")
-	_, err = svc.Get(ctx, uuid.MustParse(abandoned.VideoID), &user)
+	_, err = svc.Get(ctx, uuid.MustParse(abandoned.VideoID), &user, false)
 	require.Error(t, err, "the abandoned upload is gone")
-	got, err := svc.Get(ctx, uuid.MustParse(completed.VideoID), &user)
+	got, err := svc.Get(ctx, uuid.MustParse(completed.VideoID), &user, false)
 	require.NoError(t, err, "a completed upload is never swept")
 	require.Equal(t, model.StatusProcessing, got.Status)
 
@@ -204,7 +204,7 @@ func TestRemovedVideosAreHiddenFromEveryoneButTheOwner(t *testing.T) {
 	require.NoError(t, tx.Commit(ctx))
 
 	stranger := uuid.Must(uuid.NewV7())
-	visible, err := svc.Get(ctx, id, &stranger)
+	visible, err := svc.Get(ctx, id, &stranger, false)
 	require.NoError(t, err)
 	require.Equal(t, model.ModerationApproved, visible.ModerationStatus)
 	require.NotNil(t, visible.HLSURL)
@@ -212,15 +212,15 @@ func TestRemovedVideosAreHiddenFromEveryoneButTheOwner(t *testing.T) {
 	_, err = repo.SetModeration(ctx, id, model.ModerationRemoved, now)
 	require.NoError(t, err)
 	for _, viewer := range []*uuid.UUID{&stranger, nil} {
-		_, err = svc.Get(ctx, id, viewer)
+		_, err = svc.Get(ctx, id, viewer, false)
 		require.Error(t, err)
 	}
-	own, err := svc.Get(ctx, id, &user)
+	own, err := svc.Get(ctx, id, &user, false)
 	require.NoError(t, err)
 	require.Equal(t, model.ModerationRemoved, own.ModerationStatus)
 	require.Nil(t, own.HLSURL, "a removed video exposes no media URL")
 	require.Nil(t, own.ThumbnailURL)
-	listed, err := svc.List(ctx, user, "", 20)
+	listed, err := svc.List(ctx, user, "", 20, false)
 	require.NoError(t, err)
 	require.Equal(t, model.ModerationRemoved, listed.Items[0].ModerationStatus)
 }

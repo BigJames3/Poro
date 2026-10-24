@@ -10,6 +10,9 @@ info:
     Access tokens are verified offline against auth JWKS. A token revoked by
     logout stays accepted here until it expires (15 minutes at most).
     Any authenticated PERSONAL account may upload; CREATOR is not required.
+    A publication is a video or a photo post (`media_type`, ADR-0020). Photo posts
+    are returned only to clients sending `Poro-Capabilities: photo-posts`; without
+    it every route behaves as before and never returns a photo post.
 servers:
   - url: http://localhost:8083
     description: Local development
@@ -136,10 +139,115 @@ paths:
         "422":
           description: "`invalid_media`"
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /api/v1/videos/photo-uploads:
+    post:
+      tags: [videos]
+      summary: Create a photo post upload
+      description: |
+        Creates a photo post in `uploading` with 1 to 10 images and returns one
+        presigned PUT URL per image. Each URL signs the image's exact
+        `size_bytes` and `content_type`: storage refuses any other body with
+        403. URLs expire after 1 h; a post left in `uploading` for 24 h is
+        aborted and its sources deleted. The caption (`description`) is
+        optional, 0–500 runes, with the same character rules as a video
+        description. HEIC/HEIF is refused. Counts against the `init` rate limit.
+        Signed storage refuses a body of another length or another
+        `Content-Type` with 403 (checked against SeaweedFS). A refused or
+        failed PUT can be repeated with the same URL until it expires.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [images]
+              properties:
+                description: { type: string, maxLength: 500 }
+                images:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [content_type, size_bytes]
+                    properties:
+                      content_type:
+                        type: string
+                        enum: [image/jpeg, image/png, image/webp]
+                      size_bytes: { type: integer, minimum: 1, maximum: 10485760 }
+      responses:
+        "201":
+          description: Photo upload session
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/InitPhotoUpload" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "413":
+          description: "`payload_too_large`: an image declared over 10 MiB (or a JSON body over 64 KiB)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: "`image_count_invalid`, `content_type_invalid`, `size_invalid` (size 0 or less) or `description_invalid`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/v1/videos/photo-uploads/{id}/complete:
+    post:
+      tags: [videos]
+      summary: Complete a photo post upload
+      description: |
+        Checks every image (present, exact declared size, JPEG/PNG/WebP magic
+        bytes), sets `processing` and enqueues `poro.video.uploaded`
+        (`media_type: photo`) in the same transaction. The media-worker then
+        fixes EXIF orientation, re-encodes each image to JPEG (long side at
+        most 2048 px, quality 85, no metadata) and publishes `poro.video.ready`;
+        one invalid image fails the whole post (`invalid_media`), never a
+        partial post. An image not sent yet answers 400 `upload_incomplete` and
+        deletes nothing: send it and complete again. A storage failure answers
+        500 and deletes nothing either. Called again once processing, it
+        answers 409 `conflict`: read the post with GET /api/v1/videos/{id}
+        (with the capability) to learn its state. Counts against the
+        `complete` rate limit. Until step 2c ships the image processing, a
+        completed photo post stays `processing`.
+      parameters:
+        - $ref: "#/components/parameters/VideoID"
+      responses:
+        "200":
+          description: Photo post is processing
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/Video" }
+        "400":
+          description: "`upload_incomplete` (an image is missing) or `invalid_request`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`conflict` (not uploading, including a replayed complete)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "413":
+          description: "`payload_too_large`: a stored image is over 10 MiB; the post and its sources are deleted (GET then answers 404)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: "`invalid_media`: an image is empty, differs from its declared size, or is not JPEG, PNG or WebP matching its declared type (HEIC included); the post and its sources are deleted (GET then answers 404)"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/v1/videos/uploads/{id}:
     delete:
       tags: [videos]
       summary: Abort an in-progress upload
+      description: "Aborts a video or a photo post still `uploading`; a photo post's sources are deleted."
       parameters:
         - $ref: "#/components/parameters/VideoID"
       responses:
@@ -151,7 +259,9 @@ paths:
     get:
       tags: [videos]
       summary: List own videos
+      description: "Photo posts are listed only with `Poro-Capabilities: photo-posts`."
       parameters:
+        - $ref: "#/components/parameters/Capabilities"
         - name: cursor
           in: query
           schema: { type: string }
@@ -178,8 +288,10 @@ paths:
       description: |
         Ready videos are public. Other statuses, and videos removed by moderation, are owner-only
         (404 otherwise). The owner of a removed video gets `moderation_status: removed` and no media URL.
+        A photo post is 404 without `Poro-Capabilities: photo-posts`.
       parameters:
         - $ref: "#/components/parameters/VideoID"
+        - $ref: "#/components/parameters/Capabilities"
       responses:
         "200":
           description: Video
@@ -215,6 +327,15 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    Capabilities:
+      name: Poro-Capabilities
+      in: header
+      required: false
+      description: |
+        Comma-separated client capabilities, case-insensitive; unknown tokens
+        are ignored. `photo-posts`: the client displays photo posts. Without
+        it, no photo post is ever returned.
+      schema: { type: string, example: photo-posts }
   schemas:
     Envelope:
       type: object
@@ -258,13 +379,44 @@ components:
             properties:
               part_number: { type: integer }
               url: { type: string, format: uri }
+    InitPhotoUpload:
+      type: object
+      required: [video_id, images, expires_in]
+      properties:
+        video_id: { type: string, format: uuid }
+        expires_in: { type: integer, example: 3600, description: Seconds before the URLs expire }
+        images:
+          type: array
+          items:
+            type: object
+            required: [position, url, headers]
+            properties:
+              position: { type: integer, minimum: 1, maximum: 10 }
+              url: { type: string, format: uri }
+              headers:
+                type: object
+                description: Headers the PUT must send as is (`Content-Type`, `Content-Length`).
+                additionalProperties: { type: string }
+    Image:
+      type: object
+      required: [position, url, thumbnail_url, width, height]
+      properties:
+        position: { type: integer, minimum: 1, maximum: 10 }
+        url: { type: string, format: uri, description: JPEG, long side at most 2048 px }
+        thumbnail_url: { type: string, format: uri, description: JPEG, long side at most 540 px }
+        width: { type: integer }
+        height: { type: integer }
     Video:
       type: object
-      required: [id, user_id, title, description, status, moderation_status, created_at]
+      required: [id, user_id, media_type, title, description, status, moderation_status, created_at]
       properties:
         id: { type: string, format: uuid }
         user_id: { type: string, format: uuid }
-        title: { type: string }
+        media_type:
+          type: string
+          enum: [video, photo]
+          description: "`photo`: no `hls_url`, `duration_ms` or `renditions`; `images` holds the pictures in order."
+        title: { type: string, description: Empty for a photo post }
         description: { type: string }
         status:
           type: string
@@ -277,7 +429,11 @@ components:
         width: { type: integer }
         height: { type: integer }
         hls_url: { type: string, format: uri }
-        thumbnail_url: { type: string, format: uri }
+        thumbnail_url: { type: string, format: uri, description: "For a photo post, the thumbnail of image 1" }
+        images:
+          type: array
+          maxItems: 10
+          items: { $ref: "#/components/schemas/Image" }
         renditions:
           type: array
           items:

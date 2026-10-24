@@ -68,6 +68,7 @@ d'auth (fournisseurs `log` du mode dev).
 | Commandes | Panier, préremplissage, aperçu, confirmation (paiement à la livraison), réservation du stock, expédition puis réception ; annulation par l'acheteur, refus par le vendeur ; panier vidé |
 | Carnet d'adresses | Adresse enregistrée au checkout, ajout, modification, choix par défaut (listée en premier), suppression |
 | Signalement | Signalement d'une vidéo |
+| Publications photo (étape 2b, ADR-0020) | PUT présignés vers le vrai stockage (autre type ou autre taille refusés en 403), `complete` refusé tant qu'une image manque puis accepté, `complete` rejoué en 409, aucune photo sans `Poro-Capabilities: photo-posts` (liste et lecture), HEIC renommé en JPEG refusé sans publication partielle, refus 0 et 11 images, HEIC déclaré, 10 Mo + 1, annulation, publication laissée `processing` par le worker jusqu'à l'étape 2c |
 
 Résultat local du 2026-10-23 (pile complète, services hors conteneur, vraie gateway) : **97 routes
 de l'app sur 97** exercées, 3 exécutions identiques, environ 2 minutes (dont 62 s imposées entre

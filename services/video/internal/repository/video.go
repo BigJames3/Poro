@@ -19,7 +19,7 @@ var ErrNotFound = errors.New("video not found")
 
 const videoColumns = `id, user_id, title, description, status, content_type, size_bytes, source_key, s3_upload_id,
 duration_ms, width, height, hls_key, thumbnail_key, renditions, failure_code, last_error, created_at, updated_at, deleted_at,
-moderation_status, moderated_at`
+moderation_status, moderated_at, media_type`
 
 // Videos persists the VIDEO aggregate.
 type Videos struct {
@@ -51,6 +51,50 @@ func (r *Videos) Create(ctx context.Context, v *model.Video) error {
 	return nil
 }
 
+// CreatePhoto inserts an uploading photo post and its images in one
+// transaction: a post never exists without all of its images.
+func (r *Videos) CreatePhoto(ctx context.Context, v *model.Video, images []model.Image) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `INSERT INTO videos (
+		id, user_id, title, description, status, content_type, size_bytes, source_key, media_type, created_at, updated_at
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		v.ID, v.UserID, v.Title, v.Description, v.Status, v.ContentType, v.SizeBytes, v.SourceKey, model.MediaTypePhoto,
+		v.CreatedAt, v.UpdatedAt); err != nil {
+		return fmt.Errorf("insert photo post: %w", err)
+	}
+	for _, img := range images {
+		if _, err := tx.Exec(ctx, `INSERT INTO video_images (video_id, position, content_type, size_bytes, source_key)
+			VALUES ($1,$2,$3,$4,$5)`, v.ID, img.Position, img.ContentType, img.SizeBytes, img.SourceKey); err != nil {
+			return fmt.Errorf("insert image %d: %w", img.Position, err)
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// Images returns the images of a photo post in display order; none for a video.
+func (r *Videos) Images(ctx context.Context, videoID string) ([]model.Image, error) {
+	rows, err := r.pool.Query(ctx, `SELECT position, content_type, size_bytes, source_key, image_key, thumbnail_key, width, height
+		FROM video_images WHERE video_id = $1 ORDER BY position`, videoID)
+	if err != nil {
+		return nil, fmt.Errorf("list images: %w", err)
+	}
+	defer rows.Close()
+	var out []model.Image
+	for rows.Next() {
+		var img model.Image
+		if err := rows.Scan(&img.Position, &img.ContentType, &img.SizeBytes, &img.SourceKey,
+			&img.ImageKey, &img.ThumbnailKey, &img.Width, &img.Height); err != nil {
+			return nil, fmt.Errorf("scan image: %w", err)
+		}
+		out = append(out, img)
+	}
+	return out, rows.Err()
+}
+
 // Get returns a non-deleted video.
 func (r *Videos) Get(ctx context.Context, id uuid.UUID) (*model.Video, error) {
 	return scanVideo(r.pool.QueryRow(ctx,
@@ -62,19 +106,21 @@ func (r *Videos) GetAny(ctx context.Context, id uuid.UUID) (*model.Video, error)
 	return scanVideo(r.pool.QueryRow(ctx, `SELECT `+videoColumns+` FROM videos WHERE id = $1`, id))
 }
 
-// ListByUser returns the owner's videos newest first.
-func (r *Videos) ListByUser(ctx context.Context, userID uuid.UUID, cursorTime *time.Time, cursorID *uuid.UUID, limit int) ([]model.Video, error) {
+// ListByUser returns the owner's publications of the given media types,
+// newest first. The filter is in the query, so pages stay full and a client
+// that does not display photo posts never receives one.
+func (r *Videos) ListByUser(ctx context.Context, userID uuid.UUID, mediaTypes []string, cursorTime *time.Time, cursorID *uuid.UUID, limit int) ([]model.Video, error) {
 	var rows pgx.Rows
 	var err error
 	if cursorTime == nil {
 		rows, err = r.pool.Query(ctx, `SELECT `+videoColumns+` FROM videos
-			WHERE user_id = $1 AND deleted_at IS NULL
-			ORDER BY created_at DESC, id DESC LIMIT $2`, userID, limit)
+			WHERE user_id = $1 AND deleted_at IS NULL AND media_type = ANY($2)
+			ORDER BY created_at DESC, id DESC LIMIT $3`, userID, mediaTypes, limit)
 	} else {
 		rows, err = r.pool.Query(ctx, `SELECT `+videoColumns+` FROM videos
-			WHERE user_id = $1 AND deleted_at IS NULL
-			  AND (created_at, id) < ($2, $3)
-			ORDER BY created_at DESC, id DESC LIMIT $4`, userID, *cursorTime, *cursorID, limit)
+			WHERE user_id = $1 AND deleted_at IS NULL AND media_type = ANY($2)
+			  AND (created_at, id) < ($3, $4)
+			ORDER BY created_at DESC, id DESC LIMIT $5`, userID, mediaTypes, *cursorTime, *cursorID, limit)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("list videos: %w", err)
@@ -244,7 +290,7 @@ func scanVideo(row scannable) (*model.Video, error) {
 	err := row.Scan(
 		&v.ID, &v.UserID, &v.Title, &v.Description, &v.Status, &v.ContentType, &v.SizeBytes, &v.SourceKey, &v.S3UploadID,
 		&v.DurationMs, &v.Width, &v.Height, &v.HLSKey, &v.ThumbnailKey, &rend, &v.FailureCode, &v.LastError,
-		&v.CreatedAt, &v.UpdatedAt, &v.DeletedAt, &v.ModerationStatus, &v.ModeratedAt,
+		&v.CreatedAt, &v.UpdatedAt, &v.DeletedAt, &v.ModerationStatus, &v.ModeratedAt, &v.MediaType,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound

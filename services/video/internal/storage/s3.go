@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -92,6 +93,24 @@ func (s *S3) PresignPart(ctx context.Context, key, uploadID string, part int32, 
 	return out.URL, nil
 }
 
+func (s *S3) PresignPut(ctx context.Context, key, contentType string, size int64) (string, map[string]string, error) {
+	out, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{
+		Bucket:        aws.String(s.sources),
+		Key:           aws.String(key),
+		ContentLength: aws.Int64(size),
+		ContentType:   aws.String(contentType),
+	}, func(o *s3.PresignOptions) {
+		o.Expires = time.Hour
+	})
+	if err != nil {
+		return "", nil, fmt.Errorf("presign put: %w", err)
+	}
+	return out.URL, map[string]string{
+		"Content-Type":   contentType,
+		"Content-Length": strconv.FormatInt(size, 10),
+	}, nil
+}
+
 func (s *S3) CompleteMultipart(ctx context.Context, key, uploadID string, parts []CompletedPart) error {
 	completed := make([]types.CompletedPart, len(parts))
 	for i, p := range parts {
@@ -133,10 +152,14 @@ func (s *S3) HeadSource(ctx context.Context, key string) (Object, error) {
 		Bucket: aws.String(s.sources),
 		Key:    aws.String(key),
 	})
+	var missing *types.NotFound
+	if errors.As(err, &missing) {
+		return Object{}, fmt.Errorf("head %s: %w", key, ErrMissing)
+	}
 	if err != nil {
 		return Object{}, fmt.Errorf("head %s: %w", key, err)
 	}
-	return Object{Size: aws.ToInt64(out.ContentLength)}, nil
+	return Object{Size: aws.ToInt64(out.ContentLength), ContentType: aws.ToString(out.ContentType)}, nil
 }
 
 func (s *S3) GetSourceRange(ctx context.Context, key string, start, end int64) ([]byte, error) {

@@ -100,3 +100,57 @@ func TestS3AgainstSeaweedFS(t *testing.T) {
 	require.NoError(t, store.AbortMultipart(ctx, pending, abandoned))
 	require.NoError(t, store.AbortMultipart(ctx, pending, abandoned), "aborting an aborted upload succeeds")
 }
+
+// TestS3PresignedPutAgainstSeaweedFS checks what SeaweedFS really enforces on
+// the single-object PUT of a photo post image (ADR-0020): the signed length
+// and Content-Type, and that a missing object reads as ErrMissing.
+func TestS3PresignedPutAgainstSeaweedFS(t *testing.T) {
+	endpoint := os.Getenv("S3_INTEGRATION_ENDPOINT")
+	if endpoint == "" {
+		t.Skip("S3_INTEGRATION_ENDPOINT not set: run infra/storage/tests/run.sh")
+	}
+	ctx := context.Background()
+	store, err := NewS3(ctx, &config.Config{
+		S3Endpoint: endpoint, S3PublicEndpoint: endpoint, S3Region: "us-east-1",
+		S3Bucket: "poro-videos", S3SourceBucket: "poro-video-sources", S3QuarantineBucket: "poro-quarantine",
+		S3AccessKey: os.Getenv("S3_VIDEO_ACCESS_KEY_ID"), S3SecretKey: os.Getenv("S3_VIDEO_SECRET_ACCESS_KEY"),
+		S3ForcePathStyle: true,
+	})
+	require.NoError(t, err)
+	user, post := uuid.Must(uuid.NewV7()).String(), uuid.Must(uuid.NewV7()).String()
+	key := model.ImageSourceKey(user, post, 1)
+	body := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, bytes.Repeat([]byte{7}, 60)...)
+	url, headers, err := store.PresignPut(ctx, key, "image/jpeg", int64(len(body)))
+	require.NoError(t, err)
+	require.Equal(t, "image/jpeg", headers["Content-Type"])
+	client := &http.Client{Timeout: 10 * time.Second}
+	put := func(contentType string, b []byte) int {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(b))
+		require.NoError(t, err)
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		}
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	_, err = store.HeadSource(ctx, key)
+	require.ErrorIs(t, err, ErrMissing, "an image never sent is missing, not a storage failure")
+
+	require.Equal(t, http.StatusForbidden, put("image/jpeg", append(body, 0)), "a longer body than signed is refused")
+	require.Equal(t, http.StatusForbidden, put("image/jpeg", body[:len(body)-1]), "a shorter body than signed is refused")
+	require.Equal(t, http.StatusForbidden, put("image/png", body), "another Content-Type than signed is refused")
+	require.Equal(t, http.StatusForbidden, put("", body), "a missing Content-Type is refused")
+	_, err = store.HeadSource(ctx, key)
+	require.ErrorIs(t, err, ErrMissing, "a refused PUT stores nothing")
+
+	require.Equal(t, http.StatusOK, put("image/jpeg", body), "the PUT the app sends is accepted")
+	require.Equal(t, http.StatusOK, put("image/jpeg", body), "a replayed PUT (retry) is accepted and keeps one object")
+	obj, err := store.HeadSource(ctx, key)
+	require.NoError(t, err)
+	require.Equal(t, int64(len(body)), obj.Size)
+	require.Equal(t, "image/jpeg", obj.ContentType)
+	require.NoError(t, store.DeleteSource(ctx, key))
+}
