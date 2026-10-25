@@ -86,7 +86,7 @@ fun videoStatusText(video: VideoDto): Int = when {
 /** La page de fil sert aussi à une vidéo seule ; son auteur vient de son profil, lu à part. */
 private fun VideoDto.asFeedItem(author: ProfileDto?) = FeedItem(
     videoId = id,
-    title = title,
+    title = headline,
     durationMs = durationMs,
     thumbnailUrl = thumbnailUrl,
     hlsUrl = hlsUrl,

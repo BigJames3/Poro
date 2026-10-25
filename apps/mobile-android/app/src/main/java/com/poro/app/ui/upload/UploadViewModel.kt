@@ -53,7 +53,7 @@ data class UploadFormState(
 
     val canPublish: Boolean
         get() = when (mode) {
-            PublishMode.Video -> file != null && titleLength in 1..TITLE_MAX && descriptionLength <= DESCRIPTION_MAX &&
+            PublishMode.Video -> file != null && titleLength <= TITLE_MAX && descriptionLength <= DESCRIPTION_MAX &&
                 !titleHasForbidden && !descriptionHasForbidden
             PublishMode.Photo -> photos.size in 1..MAX_PHOTOS && captionLength <= DESCRIPTION_MAX &&
                 !captionHasForbidden && !preparing

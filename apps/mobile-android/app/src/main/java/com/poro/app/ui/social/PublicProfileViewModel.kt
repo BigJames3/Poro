@@ -8,6 +8,8 @@ import com.poro.app.data.social.SocialRepository
 import com.poro.app.data.social.UserStatsDto
 import com.poro.app.data.user.ProfileDto
 import com.poro.app.data.user.ProfileRepository
+import com.poro.app.data.video.VideoDto
+import com.poro.app.data.video.VideoRepository
 import com.poro.app.ui.auth.ErrorMessage
 import com.poro.app.ui.auth.toErrorMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,7 +28,16 @@ data class PublicProfileUiState(
     /** Son propre compte : pas de bouton « S'abonner ». */
     val isMe: Boolean = false,
     val error: ErrorMessage? = null,
-)
+    /** Ses publications visibles par tous, plus récentes d'abord. */
+    val videos: List<VideoDto> = emptyList(),
+    val videosCursor: String? = null,
+    val videosLoading: Boolean = false,
+    /** La première page a été demandée : une grille vide veut dire « aucune publication ». */
+    val videosStarted: Boolean = false,
+    val videosError: ErrorMessage? = null,
+) {
+    val canLoadMoreVideos: Boolean get() = videosStarted && !videosLoading && videosCursor != null
+}
 
 /**
  * Profil d'un autre compte. Le service user ne trouve un profil que par pseudo : un auteur sans
@@ -37,6 +48,7 @@ class PublicProfileViewModel(
     private val username: String?,
     private val profiles: ProfileRepository,
     private val social: SocialRepository,
+    private val videos: VideoRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(PublicProfileUiState())
@@ -44,6 +56,22 @@ class PublicProfileViewModel(
 
     init {
         load()
+        loadMoreVideos()
+    }
+
+    /** Page suivante des publications ; rappelée après une erreur, elle réessaie la même page. */
+    fun loadMoreVideos() {
+        val current = _state.value
+        if (current.videosLoading || (current.videosStarted && current.videosCursor == null && current.videosError == null)) return
+        _state.update { it.copy(videosLoading = true, videosStarted = true, videosError = null) }
+        viewModelScope.launch {
+            when (val result = videos.byUser(userId, current.videosCursor)) {
+                is ApiResult.Success -> _state.update {
+                    it.copy(videos = it.videos + result.data.items, videosCursor = result.data.nextCursor, videosLoading = false)
+                }
+                else -> _state.update { it.copy(videosLoading = false, videosError = result.toErrorMessage()) }
+            }
+        }
     }
 
     fun load() {
