@@ -25,6 +25,8 @@ data class FeedList(
     val started: Boolean = false,
     val endReached: Boolean = false,
     val error: ErrorMessage? = null,
+    /** Dernière vidéo affichée : on y revient en rouvrant l'onglet. */
+    val position: Int = 0,
 ) {
     val isEmpty: Boolean get() = started && !loading && items.isEmpty() && error == null
 }
@@ -56,10 +58,22 @@ class FeedViewModel(private val feed: FeedRepository, kinds: List<FeedKind> = SI
         if (!_state.value.lists.getValue(kind).started) loadMore(kind)
     }
 
-    /** La vidéo [index] du fil courant est affichée : on charge la suite un peu avant la fin. */
+    /**
+     * La vidéo [index] du fil courant est affichée : on retient la position et on charge la suite
+     * un peu avant la fin. Une page suivante en échec est retentée au glissement suivant.
+     */
     fun onItemShown(index: Int) {
+        val kind = _state.value.kind
+        updateList(kind) { it.copy(position = index) }
         val list = _state.value.current
-        if (index >= list.items.size - PREFETCH_DISTANCE) loadMore(_state.value.kind)
+        if (index >= list.items.size - PREFETCH_DISTANCE) loadMore(kind)
+    }
+
+    /** « Réessayer » sur une page suivante en échec ; la première page repart de zéro. */
+    fun retry() {
+        val kind = _state.value.kind
+        val list = _state.value.current
+        if (list.items.isEmpty()) refresh(kind) else loadMore(kind)
     }
 
     /** Recharge depuis la première page (tirer pour rafraîchir, erreur). */

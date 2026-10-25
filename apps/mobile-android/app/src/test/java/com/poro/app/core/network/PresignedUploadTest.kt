@@ -1,10 +1,16 @@
 package com.poro.app.core.network
 
 import java.net.InetAddress
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -89,5 +95,19 @@ class PresignedUploadTest {
         val request = storage.takeRequest()
         assertEquals("PUT", request.method)
         assertEquals(2L, request.bodySize)
+    }
+
+    @Test
+    fun `cancelling stops a part being sent at once`() = runBlocking {
+        // Le stockage ne répond jamais : sans annulation, l'envoi attendrait le délai du client.
+        storage.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
+        val url = "http://127.0.0.1:${storage.port}/part"
+        val upload = launch(Dispatchers.IO) { PresignedUploader(OkHttpClient()).putPart(url, ByteArray(1024)) }
+        storage.takeRequest(5, TimeUnit.SECONDS)
+        val started = System.nanoTime()
+        upload.cancelAndJoin()
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+        assertTrue("annulé en $elapsedMs ms", elapsedMs < 2_000)
+        assertTrue(upload.isCancelled)
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.data.feed.Author
 import com.poro.app.data.feed.FeedItem
+import com.poro.app.data.user.ProfileDto
 import com.poro.app.data.video.VideoDto
 import com.poro.app.ui.common.Loadable
 import com.poro.app.ui.common.LoadableContent
@@ -32,18 +33,19 @@ fun VideoScreen(
     player: VideoPlayer,
     onBack: () -> Unit,
     onRetry: () -> Unit,
-    onOpenAuthor: (userId: String) -> Unit,
+    onOpenAuthor: (userId: String, username: String?) -> Unit,
     actions: @Composable (VideoDto) -> Unit = {},
+    author: ProfileDto? = null,
 ) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         LoadableContent(state, onRetry) { video ->
             if (video.isReady && video.hlsUrl != null) {
                 LaunchedEffect(video.hlsUrl) { player.play(video.hlsUrl) }
                 VideoPage(
-                    item = video.asFeedItem(),
+                    item = video.asFeedItem(author),
                     player = player,
                     active = true,
-                    onOpenAuthor = { onOpenAuthor(video.userId) },
+                    onOpenAuthor = { onOpenAuthor(video.userId, author?.username) },
                     actions = { actions(video) },
                     description = video.description,
                 )
@@ -70,12 +72,12 @@ fun videoStatusText(video: VideoDto): Int = when {
     else -> R.string.video_processing
 }
 
-/** La page de fil sert aussi à une vidéo seule ; l'auteur n'est connu que par son identifiant. */
-private fun VideoDto.asFeedItem() = FeedItem(
+/** La page de fil sert aussi à une vidéo seule ; son auteur vient de son profil, lu à part. */
+private fun VideoDto.asFeedItem(author: ProfileDto?) = FeedItem(
     videoId = id,
     title = title,
     durationMs = durationMs,
     thumbnailUrl = thumbnailUrl,
     hlsUrl = hlsUrl,
-    author = Author(id = userId),
+    author = Author(id = userId, username = author?.username, displayName = author?.displayName, avatarUrl = author?.avatarUrl),
 )

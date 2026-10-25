@@ -38,6 +38,25 @@ class MyVideosViewModel(private val videos: VideoRepository) : ViewModel() {
         loadMore()
     }
 
+    /**
+     * Relit la première page sans vider la grille (retour sur le profil, publication terminée) :
+     * une vidéo publiée ou passée en ligne apparaît, sans clignotement.
+     */
+    fun reload() {
+        if (_state.value.loading) return
+        _state.update { it.copy(loading = true, started = true) }
+        viewModelScope.launch {
+            when (val result = videos.mine(null)) {
+                is ApiResult.Success -> _state.value = MyVideosUiState(
+                    videos = result.data.items,
+                    nextCursor = result.data.nextCursor,
+                    started = true,
+                )
+                else -> _state.update { it.copy(loading = false, error = result.toErrorMessage()) }
+            }
+        }
+    }
+
     fun loadMore() {
         val current = _state.value
         if (current.loading || (current.started && current.nextCursor == null)) return

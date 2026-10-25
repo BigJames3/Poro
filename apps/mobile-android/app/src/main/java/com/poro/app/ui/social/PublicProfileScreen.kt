@@ -92,12 +92,13 @@ fun PublicProfileScreen(
             state.stats?.let { FollowCounts(it, onOpenFollowers, onOpenFollowing) }
             if (!state.isMe) {
                 val follow = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                // L'action principale (s'abonner) est le bouton plein de marque ; se désabonner reste discret.
                 if (state.following) {
-                    OutlinedButton(onClick = onToggleFollow, enabled = !state.followBusy, colors = brandButtonColors(), modifier = follow) {
+                    OutlinedButton(onClick = onToggleFollow, enabled = !state.followBusy, modifier = follow) {
                         Text(stringResource(R.string.action_unfollow))
                     }
                 } else {
-                    Button(onClick = onToggleFollow, enabled = !state.followBusy, modifier = follow) {
+                    Button(onClick = onToggleFollow, enabled = !state.followBusy, colors = brandButtonColors(), modifier = follow) {
                         Text(stringResource(R.string.action_follow))
                     }
                 }

@@ -27,9 +27,13 @@ class SearchViewModelTest {
     val main = MainDispatcherRule()
 
     private val calls = mutableListOf<String>()
+
+    /** Réponses en échec, consommées avant les réponses normales des vidéos. */
+    private val videoFailures = ArrayDeque<ApiResult<Nothing>>()
     private val repo = object : SearchRepository {
         override suspend fun videos(q: String, cursor: String?): ApiResult<SearchPage<VideoHit>> {
             calls += "videos:$q:$cursor"
+            videoFailures.removeFirstOrNull()?.let { return it }
             return ApiResult.Success(SearchPage(listOf(VideoHit("v-$cursor")), if (cursor == null) "c2" else null))
         }
 
@@ -117,5 +121,26 @@ class SearchViewModelTest {
         assertEquals("pagnes.awa", vm.state.value.shops.items.single().handle)
         assertEquals(listOf("products:pagne", "shops:@pagnes"), calls)
     }
-}
 
+    @Test
+    fun `a failed first page or next page can be retried`() = runTest(main.dispatcher) {
+        val vm = SearchViewModel(repo, SavedStateHandle())
+        videoFailures += ApiResult.NetworkError(java.io.IOException("offline"))
+        vm.submit("danse")
+        runCurrent()
+        assertTrue(vm.state.value.videos.error != null)
+
+        vm.retry()
+        runCurrent()
+        assertEquals(listOf("v-null"), vm.state.value.videos.items.map { it.videoId })
+
+        videoFailures += ApiResult.NetworkError(java.io.IOException("offline"))
+        vm.loadMore()
+        runCurrent()
+        assertTrue(vm.state.value.videos.error != null)
+        vm.retry()
+        runCurrent()
+        assertEquals(listOf("v-null", "v-c2"), vm.state.value.videos.items.map { it.videoId })
+        assertEquals(listOf("videos:danse:null", "videos:danse:null", "videos:danse:c2", "videos:danse:c2"), calls)
+    }
+}

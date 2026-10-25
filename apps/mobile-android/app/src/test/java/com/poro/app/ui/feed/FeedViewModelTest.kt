@@ -131,4 +131,40 @@ class FeedViewModelTest {
         assertEquals(listOf(FeedKind.ForYou, FeedKind.Following, FeedKind.Trending), vm.state.value.kinds)
         assertEquals(listOf(FeedKind.ForYou to null), feed.requests)
     }
+
+    @Test
+    fun `a failed next page is shown and retried, the first page restarts`() = runTest(main.dispatcher) {
+        feed.pages.getValue(FeedKind.ForYou) += page("v1", "v2", next = "c2")
+        feed.pages.getValue(FeedKind.ForYou) += ApiResult.NetworkError(java.io.IOException("offline"))
+        feed.pages.getValue(FeedKind.ForYou) += page("v3", next = null)
+        val vm = FeedViewModel(feed)
+        runCurrent()
+
+        vm.onItemShown(1)
+        runCurrent()
+        val failed = vm.state.value.current
+        assertEquals("les vidéos déjà vues restent", 2, failed.items.size)
+        assertTrue("l'échec est visible", failed.error != null)
+
+        vm.retry()
+        runCurrent()
+        assertEquals(listOf(FeedKind.ForYou to null, FeedKind.ForYou to "c2", FeedKind.ForYou to "c2"), feed.requests)
+        assertEquals(3, vm.state.value.current.items.size)
+        assertEquals(null, vm.state.value.current.error)
+    }
+
+    @Test
+    fun `each feed remembers the last video shown`() = runTest(main.dispatcher) {
+        feed.pages.getValue(FeedKind.ForYou) += page("v1", "v2", "v3", "v4", "v5", "v6", next = null)
+        feed.pages.getValue(FeedKind.Trending) += page("t1", "t2", next = null)
+        val vm = FeedViewModel(feed)
+        runCurrent()
+        vm.onItemShown(2)
+        vm.select(FeedKind.Trending)
+        runCurrent()
+        vm.onItemShown(1)
+        vm.select(FeedKind.ForYou)
+        assertEquals(2, vm.state.value.current.position)
+        assertEquals(1, vm.state.value.lists.getValue(FeedKind.Trending).position)
+    }
 }

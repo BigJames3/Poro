@@ -53,7 +53,7 @@ fun NavGraphBuilder.feedGraph(
             // Toucher l'onglet déjà choisi recharge le fil.
             onSelect = { kind -> if (kind == state.kind) vm.refresh() else vm.select(kind) },
             onItemShown = vm::onItemShown,
-            onRetry = { vm.refresh() },
+            onRetry = vm::retry,
             onOpenAuthor = { item -> onOpenAuthor(item.author.id, item.author.username) },
             actions = feedActions,
             topEnd = feedTopEnd,
@@ -69,7 +69,7 @@ fun NavGraphBuilder.feedGraph(
             player = player,
             onSelect = { vm.refresh() },
             onItemShown = vm::onItemShown,
-            onRetry = { vm.refresh() },
+            onRetry = vm::retry,
             onOpenAuthor = { nav.signInPrompt() },
             actions = guestActions,
             topEnd = {
@@ -81,16 +81,18 @@ fun NavGraphBuilder.feedGraph(
     }
     composable<VideoRoute> { entry ->
         val route = entry.toRoute<VideoRoute>()
-        val vm = poroViewModel { VideoViewModel(route.videoId, container.videoRepository) }
+        val vm = poroViewModel { VideoViewModel(route.videoId, container.videoRepository, container.profileRepository) }
         val state by vm.video.collectAsStateWithLifecycle()
+        val author by vm.author.collectAsStateWithLifecycle()
         val player = rememberVideoPlayer(container.network.mediaClient)
         VideoScreen(
             state = state,
             player = player,
             onBack = nav::back,
             onRetry = vm::load,
-            onOpenAuthor = { userId -> onOpenAuthor(userId, null) },
+            onOpenAuthor = onOpenAuthor,
             actions = videoActions,
+            author = author,
         )
     }
 }

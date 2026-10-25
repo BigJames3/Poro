@@ -2,6 +2,7 @@ package com.poro.app.ui.notification
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,6 +11,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -18,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
@@ -28,11 +31,12 @@ import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.core.format.Formats
 import com.poro.app.data.notification.NotificationDto
-import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.common.ErrorRetry
 import com.poro.app.ui.quantityString
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(
     state: NotificationsUiState,
@@ -40,6 +44,8 @@ fun NotificationsScreen(
     onOpen: (NotificationDto) -> Unit,
     onReadAll: () -> Unit,
     onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
+    onRefresh: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -48,12 +54,14 @@ fun NotificationsScreen(
             }
         },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-            items(state.items, key = { it.id }) { notification -> NotificationRow(notification) { onOpen(notification) } }
-            if (state.isEmpty) item { Text(stringResource(R.string.notifications_empty), modifier = Modifier.padding(16.dp)) }
-            state.error?.let { item { ErrorMessageText(it, Modifier.padding(16.dp)) } }
-            if (state.loading) item { CircularProgressIndicator(Modifier.padding(16.dp)) }
-            if (state.canLoadMore) item { LaunchedEffect(state.items.size) { onLoadMore() } }
+        PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize().padding(padding)) {
+            LazyColumn(Modifier.fillMaxSize()) {
+                items(state.items, key = { it.id }) { notification -> NotificationRow(notification) { onOpen(notification) } }
+                if (state.isEmpty) item { Text(stringResource(R.string.notifications_empty), modifier = Modifier.padding(16.dp)) }
+                state.error?.let { item { ErrorRetry(it, onRetry, Modifier.fillMaxWidth().padding(16.dp)) } }
+                if (state.loading) item { CircularProgressIndicator(Modifier.padding(16.dp)) }
+                if (state.canLoadMore) item { LaunchedEffect(state.items.size) { onLoadMore() } }
+            }
         }
     }
 }

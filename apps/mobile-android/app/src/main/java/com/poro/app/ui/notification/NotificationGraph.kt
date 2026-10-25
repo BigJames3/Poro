@@ -33,6 +33,8 @@ fun NavGraphBuilder.notificationGraph(nav: AppNav, onOpenOrder: (orderId: String
             },
             onReadAll = vm::readAll,
             onLoadMore = vm::loadMore,
+            onRetry = vm::retry,
+            onRefresh = vm::reload,
         )
     }
     composable<NotificationPreferencesRoute> {

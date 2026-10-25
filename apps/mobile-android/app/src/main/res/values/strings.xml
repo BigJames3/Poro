@@ -98,6 +98,7 @@
     <string name="video_failed">Le traitement de cette vidéo a échoué.</string>
     <string name="video_removed">Cette vidéo a été retirée par la modération.</string>
     <string name="video_ready">Vidéo prête.</string>
+    <string name="video_playback_failed">Impossible de lire cette vidéo. Vérifiez votre connexion.</string>
 
     <!-- Interactions -->
     <string name="action_like">J’aime, %1$s</string>

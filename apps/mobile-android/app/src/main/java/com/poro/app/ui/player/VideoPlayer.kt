@@ -17,8 +17,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -38,6 +41,8 @@ import okhttp3.OkHttpClient
 @Stable
 class VideoPlayer internal constructor(private val newPlayer: () -> ExoPlayer) {
     private val playing = mutableStateOf(false)
+    private val buffering = mutableStateOf(false)
+    private val failed = mutableStateOf(false)
 
     /** Lecteur affiché ; état Compose pour que la surface suive l'échange des lecteurs. */
     private var active by mutableStateOf(newPlayer().also(::listen))
@@ -53,6 +58,12 @@ class VideoPlayer internal constructor(private val newPlayer: () -> ExoPlayer) {
 
     val isPlaying: State<Boolean> get() = playing
 
+    /** La vidéo affichée attend des données (démarrage, réseau lent) : afficher un indicateur. */
+    val isBuffering: State<Boolean> get() = buffering
+
+    /** La vidéo affichée n'a pas pu être lue (réseau coupé, flux introuvable) : proposer de réessayer. */
+    val hasFailed: State<Boolean> get() = failed
+
     internal val exo: ExoPlayer get() = active
 
     private fun listen(player: ExoPlayer) {
@@ -60,7 +71,28 @@ class VideoPlayer internal constructor(private val newPlayer: () -> ExoPlayer) {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (player === active) playing.value = isPlaying
             }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (player === active) buffering.value = playbackState == Player.STATE_BUFFERING
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                if (player === active) {
+                    failed.value = true
+                    buffering.value = false
+                } else if (player === standby) {
+                    // La vidéo suivante n'a pas pu être préparée : elle sera chargée normalement.
+                    preloadedUrl = null
+                }
+            }
         })
+    }
+
+    /** Le lecteur affiché vient de changer : ses indicateurs suivent son état réel. */
+    private fun syncState() {
+        playing.value = active.isPlaying
+        buffering.value = active.playbackState == Player.STATE_BUFFERING
+        failed.value = active.playerError != null
     }
 
     /** Lit [url] en boucle depuis le début (nouvelle vidéo affichée). */
@@ -83,7 +115,15 @@ class VideoPlayer internal constructor(private val newPlayer: () -> ExoPlayer) {
             currentUrl = url
         }
         active.playWhenReady = true
-        playing.value = active.isPlaying
+        syncState()
+    }
+
+    /** « Réessayer » après un échec : la même vidéo reprend là où elle s'était arrêtée. */
+    fun retry() {
+        if (active.playerError == null) return
+        failed.value = false
+        active.prepare()
+        active.playWhenReady = true
     }
 
     /**
@@ -175,7 +215,7 @@ fun VideoSurface(player: VideoPlayer, modifier: Modifier = Modifier) {
 fun LocalVideoPreview(uri: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val player = remember(uri) {
-        ExoPlayer.Builder(context).build().apply {
+        ExoPlayer.Builder(context).setAudioAttributes(mediaAudio, true).build().apply {
             setMediaItem(MediaItem.fromUri(uri))
             playWhenReady = false
             prepare()
@@ -213,6 +253,10 @@ fun LocalVideoPreview(uri: String, modifier: Modifier = Modifier) {
 @OptIn(UnstableApi::class)
 private fun buildExoPlayer(context: Context, client: OkHttpClient): ExoPlayer =
     ExoPlayer.Builder(context)
+        // Focus audio : la vidéo se met en pause pendant un appel ou la musique d'une autre app,
+        // et quand le casque est débranché.
+        .setAudioAttributes(mediaAudio, true)
+        .setHandleAudioBecomingNoisy(true)
         .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(client)))
         .setLoadControl(
             DefaultLoadControl.Builder()
@@ -221,6 +265,12 @@ private fun buildExoPlayer(context: Context, client: OkHttpClient): ExoPlayer =
         )
         .build()
         .apply { repeatMode = Player.REPEAT_MODE_ONE }
+
+/** Vidéo avec du son : la lecture demande le focus audio, sans jouer sur une autre app. */
+private val mediaAudio: AudioAttributes = AudioAttributes.Builder()
+    .setUsage(C.USAGE_MEDIA)
+    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+    .build()
 
 private const val MIN_BUFFER_MS = 4_000
 private const val MAX_BUFFER_MS = 15_000
