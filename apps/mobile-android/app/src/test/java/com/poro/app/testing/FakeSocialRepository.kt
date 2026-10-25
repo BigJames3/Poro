@@ -4,6 +4,7 @@ import com.poro.app.core.network.ApiResult
 import com.poro.app.core.network.PageDto
 import com.poro.app.data.social.CommentDto
 import com.poro.app.data.social.CommentLikeDto
+import com.poro.app.data.social.FollowEntryDto
 import com.poro.app.data.social.ShareChannel
 import com.poro.app.data.social.ShareResultDto
 import com.poro.app.data.social.SocialRepository
@@ -17,6 +18,8 @@ class FakeSocialRepository : SocialRepository {
     val commentPages = ArrayDeque<ApiResult<PageDto<CommentDto>>>()
     val replyPages = ArrayDeque<ApiResult<PageDto<CommentDto>>>()
     val postResults = ArrayDeque<ApiResult<CommentDto>>()
+    val editResults = ArrayDeque<ApiResult<CommentDto>>()
+    val followPages = ArrayDeque<ApiResult<PageDto<FollowEntryDto>>>()
     val followResults = ArrayDeque<ApiResult<UserStatsDto>>()
     var stats = VideoStatsDto(videoId = "v1", likes = 10, comments = 2, shares = 1, likedByMe = false)
     var userStats = UserStatsDto(userId = "u2", followers = 5, following = 3, followedByMe = false)
@@ -48,8 +51,10 @@ class FakeSocialRepository : SocialRepository {
         return postResults.removeFirst()
     }
 
-    override suspend fun editComment(commentId: String, content: String): ApiResult<CommentDto> =
-        ApiResult.Success(CommentDto(id = commentId, content = content, edited = true))
+    override suspend fun editComment(commentId: String, content: String): ApiResult<CommentDto> {
+        calls += "edit:$commentId:$content"
+        return if (editResults.isNotEmpty()) editResults.removeFirst() else ApiResult.Success(CommentDto(id = commentId, content = content, edited = true))
+    }
 
     override suspend fun deleteComment(commentId: String): ApiResult<Unit> {
         calls += "delete:$commentId"
@@ -62,6 +67,12 @@ class FakeSocialRepository : SocialRepository {
     }
 
     override suspend fun userStats(userId: String): ApiResult<UserStatsDto> = ApiResult.Success(userStats)
+
+    override suspend fun followers(userId: String, cursor: String?) =
+        (if (followPages.isNotEmpty()) followPages.removeFirst() else ApiResult.Success(PageDto())).also { calls += "followers:$userId:$cursor" }
+
+    override suspend fun following(userId: String, cursor: String?) =
+        (if (followPages.isNotEmpty()) followPages.removeFirst() else ApiResult.Success(PageDto())).also { calls += "following:$userId:$cursor" }
 
     override suspend fun setFollowing(userId: String, following: Boolean): ApiResult<UserStatsDto> {
         calls += "follow:$userId:$following"

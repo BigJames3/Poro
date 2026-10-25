@@ -43,6 +43,11 @@ class AuthErrorMessagesTest {
     }
 
     @Test
+    fun `a closed edit window says the 15 minute rule`() {
+        assertEquals(ErrorMessage(R.string.error_comment_edit_window), failure(ApiErrorCodes.COMMENT_EDIT_WINDOW_CLOSED).toErrorMessage())
+    }
+
+    @Test
     fun `unknown codes fall back to a generic message carrying the request id`() {
         assertEquals(ErrorMessage(R.string.error_unexpected, "req-9"), failure(ApiErrorCodes.INTERNAL_ERROR).toErrorMessage())
         assertEquals(ErrorMessage(R.string.error_unexpected, "req-9"), failure("added_later_by_backend").toErrorMessage())

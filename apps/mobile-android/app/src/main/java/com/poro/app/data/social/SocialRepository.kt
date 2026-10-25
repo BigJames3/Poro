@@ -30,6 +30,10 @@ interface SocialRepository {
 
     suspend fun userStats(userId: String): ApiResult<UserStatsDto>
 
+    suspend fun followers(userId: String, cursor: String?): ApiResult<PageDto<FollowEntryDto>>
+
+    suspend fun following(userId: String, cursor: String?): ApiResult<PageDto<FollowEntryDto>>
+
     suspend fun setFollowing(userId: String, following: Boolean): ApiResult<UserStatsDto>
 
     suspend fun share(videoId: String, channel: ShareChannel): ApiResult<ShareResultDto>
@@ -69,6 +73,10 @@ class DefaultSocialRepository(private val api: SocialApi) : SocialRepository {
         apiCall { if (liked) api.likeComment(commentId) else api.unlikeComment(commentId) }
 
     override suspend fun userStats(userId: String) = apiCall { api.userStats(userId) }
+
+    override suspend fun followers(userId: String, cursor: String?) = apiCall { api.followers(userId, cursor, PAGE_SIZE) }
+
+    override suspend fun following(userId: String, cursor: String?) = apiCall { api.following(userId, cursor, PAGE_SIZE) }
 
     override suspend fun setFollowing(userId: String, following: Boolean) =
         apiCall { if (following) api.follow(userId) else api.unfollow(userId) }

@@ -2,6 +2,7 @@ package com.poro.app.ui.social
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.poro.app.core.network.ApiErrorCodes
 import com.poro.app.core.network.ApiResult
 import com.poro.app.data.social.CommentDto
 import com.poro.app.data.social.SocialRepository
@@ -35,6 +36,9 @@ data class CommentsUiState(
     val draft: String = "",
     /** Commentaire de premier niveau auquel on répond, sinon nouveau commentaire. */
     val replyingTo: CommentDto? = null,
+    /** Commentaire en cours d'édition (fenêtre de 15 minutes). */
+    val editing: CommentDto? = null,
+    val editDraft: String = "",
     val posting: Boolean = false,
     /** Identifiant du compte connecté : ses commentaires peuvent être supprimés. */
     val myUserId: String? = null,
@@ -42,7 +46,8 @@ data class CommentsUiState(
     val authors: Map<String, ProfileDto> = emptyMap(),
     val error: ErrorMessage? = null,
 ) {
-    val canPost: Boolean get() = draft.isNotBlank() && draft.trim().length <= MAX_LENGTH && !posting
+    val canPost: Boolean get() = editing == null && draft.isNotBlank() && draft.trim().length <= MAX_LENGTH && !posting
+    val canSaveEdit: Boolean get() = editing != null && editDraft.isNotBlank() && editDraft.trim().length <= MAX_LENGTH && !posting
     val endReached: Boolean get() = started && !loading && nextCursor == null
 
     companion object {
@@ -144,8 +149,45 @@ class CommentsViewModel(
 
     fun onDraftChange(value: String) = _state.update { it.copy(draft = value.take(CommentsUiState.MAX_LENGTH), error = null) }
 
+    fun onEditDraftChange(value: String) = _state.update { it.copy(editDraft = value.take(CommentsUiState.MAX_LENGTH), error = null) }
+
     /** Répondre à [comment] ; une réponse à une réponse va à son commentaire parent (un seul niveau). */
-    fun replyTo(comment: CommentDto?) = _state.update { it.copy(replyingTo = comment) }
+    fun replyTo(comment: CommentDto?) = _state.update { it.copy(replyingTo = comment, editing = null) }
+
+    fun startEdit(comment: CommentDto, nowMs: Long = System.currentTimeMillis()) {
+        if (!CommentRules.canEdit(comment, _state.value.myUserId, nowMs)) return
+        _state.update { it.copy(editing = comment, editDraft = comment.content.orEmpty(), replyingTo = null, error = null) }
+    }
+
+    fun cancelEdit() = _state.update { it.copy(editing = null, editDraft = "") }
+
+    fun saveEdit() {
+        val current = _state.value
+        val editing = current.editing ?: return
+        if (!current.canSaveEdit) return
+        _state.update { it.copy(posting = true, error = null) }
+        viewModelScope.launch {
+            when (val result = social.editComment(editing.id, current.editDraft)) {
+                is ApiResult.Success -> {
+                    replace(result.data)
+                    _state.update { it.copy(posting = false, editing = null, editDraft = "") }
+                }
+                // Le serveur tranche : fenêtre de 15 minutes dépassée (horloge du téléphone en avance,
+                // ou édition commencée trop tard) ou commentaire d'un autre. L'édition ne peut plus
+                // aboutir : on la ferme et on dit pourquoi.
+                is ApiResult.Failure -> _state.update {
+                    val final = result.code == ApiErrorCodes.COMMENT_EDIT_WINDOW_CLOSED || result.code == ApiErrorCodes.FORBIDDEN
+                    it.copy(
+                        posting = false,
+                        error = result.toErrorMessage(),
+                        editing = if (final) null else it.editing,
+                        editDraft = if (final) "" else it.editDraft,
+                    )
+                }
+                is ApiResult.NetworkError -> _state.update { it.copy(posting = false, error = result.toErrorMessage()) }
+            }
+        }
+    }
 
     fun post() {
         val current = _state.value

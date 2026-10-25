@@ -484,7 +484,25 @@ def social(seller, buyer, video_id):
     check(len(many["items"] if isinstance(many, dict) else many) == 1, "videos/stats did not return the video")
     user_stats = buyer.call("GET", "/api/v1/users/{userId}/stats", f"/api/v1/users/{uid}/stats")
     check(user_stats["followers"] >= 1, f"followers not counted: {user_stats}")
+    follow_lists(seller, buyer)
+    # Only the author edits: the server refuses anyone else, whatever the app shows.
+    status, raw, _ = http("PATCH", f"{BASE}/api/v1/comments/{comment['id']}", {"content": "Pas à moi"},
+                          {"Authorization": f"Bearer {seller.token}"})
+    check(status == 403 and json.loads(raw)["error"]["code"] == "forbidden", f"edit by another user: {status} {raw[:200]}")
     return comment, reply
+
+
+def follow_lists(seller, buyer):
+    """Abonnés and Abonnements screens: the page of ids, then names and avatars in one batch."""
+    followers = buyer.call("GET", "/api/v1/users/{userId}/followers", f"/api/v1/users/{seller.user['id']}/followers",
+                           query={"limit": 20})
+    check([i["user_id"] for i in followers["items"]] == [buyer.user["id"]], f"followers of the seller: {followers}")
+    following = seller.call("GET", "/api/v1/users/{userId}/following", f"/api/v1/users/{buyer.user['id']}/following",
+                            query={"limit": 20})
+    check([i["user_id"] for i in following["items"]] == [seller.user["id"]], f"accounts the buyer follows: {following}")
+    names = buyer.call("GET", "/api/v1/users", query={"ids": ",".join(i["user_id"] for i in followers["items"])})
+    items = names["items"] if isinstance(names, dict) else names
+    check([u.get("display_name") for u in items] == [f"E2E {buyer.name}"], f"follower names: {items}")
 
 
 def feeds(buyer, video_id):
