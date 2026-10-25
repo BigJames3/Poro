@@ -196,14 +196,14 @@ func TestListLikesPagesWithoutGapOrDuplicate(t *testing.T) {
 	require.Equal(t, 3, pages)
 	require.Equal(t, want, seen)
 
-	liked, err := svc.ListUserLikes(ctx, liker, "", 0)
+	liked, err := svc.ListUserLikes(ctx, liker, false, "", 0)
 	require.NoError(t, err)
 	require.Len(t, liked.Items, 1)
 	require.Equal(t, video.String(), liked.Items[0].VideoID)
 
 	_, err = svc.ListVideoLikes(ctx, video, "not-a-cursor", 10)
 	requireCode(t, err, 400, "invalid_cursor")
-	_, err = svc.ListUserLikes(ctx, uuid.Must(uuid.NewV7()), "", 10)
+	_, err = svc.ListUserLikes(ctx, uuid.Must(uuid.NewV7()), false, "", 10)
 	requireCode(t, err, 404, "user_not_found")
 }
 

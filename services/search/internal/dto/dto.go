@@ -23,8 +23,11 @@ type Stats struct {
 	Shares   int64 `json:"shares"`
 }
 
+// Video is a post found by the search: a video, or a photo post for a client
+// that declared photo posts (ADR-0020). duration_ms is 0 for a photo post.
 type Video struct {
 	VideoID      string    `json:"video_id"`
+	MediaType    string    `json:"media_type"`
 	Title        string    `json:"title"`
 	Hashtags     []string  `json:"hashtags"`
 	ThumbnailURL *string   `json:"thumbnail_url"`

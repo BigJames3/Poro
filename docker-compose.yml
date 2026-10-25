@@ -541,8 +541,8 @@ services:
       S3_ACCESS_KEY_ID: ${S3_VIDEO_ACCESS_KEY_ID:?S3_VIDEO_ACCESS_KEY_ID must be set in .env}
       S3_SECRET_ACCESS_KEY: ${S3_VIDEO_SECRET_ACCESS_KEY:?S3_VIDEO_SECRET_ACCESS_KEY must be set in .env}
       S3_FORCE_PATH_STYLE: "true"
-      # Publications photo (ADR-0020) : fermées tant que le fil et les autres services ne filtrent pas les photos (étape 2d).
-      PHOTO_POSTS_ENABLED: ${PHOTO_POSTS_ENABLED:-false}
+      # Publications photo (ADR-0020) : ouvertes depuis l'étape 2d (fil, recherche, social et notifications filtrent par capacité).
+      PHOTO_POSTS_ENABLED: ${PHOTO_POSTS_ENABLED:-true}
     ports:
       - "127.0.0.1:8083:8083"
     depends_on:

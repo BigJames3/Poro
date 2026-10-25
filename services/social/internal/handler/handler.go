@@ -7,6 +7,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 
+	"github.com/poro/shared-go/capability"
 	"github.com/poro/shared-go/httpx"
 	"github.com/poro/shared-go/jwtauth"
 
@@ -92,7 +93,8 @@ func (h *Social) ListUserLikes(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.svc.ListUserLikes(c.UserContext(), id, c.Query("cursor"), c.QueryInt("limit"))
+	photoPosts := capability.Has(c.Get(capability.Header), capability.PhotoPosts)
+	out, err := h.svc.ListUserLikes(c.UserContext(), id, photoPosts, c.Query("cursor"), c.QueryInt("limit"))
 	return reply(c, fiber.StatusOK, out, err)
 }
 

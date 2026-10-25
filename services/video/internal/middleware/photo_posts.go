@@ -6,8 +6,8 @@ import (
 	"github.com/poro/shared-go/httpx"
 )
 
-// errPhotoPostsDisabled answers the photo post upload routes while they are
-// switched off (PHOTO_POSTS_ENABLED=false).
+// errPhotoPostsDisabled answers the photo post upload routes when they are
+// switched off (PHOTO_POSTS_ENABLED=false; on by default).
 var errPhotoPostsDisabled = httpx.NewAPIError(fiber.StatusNotFound, "photo_posts_disabled",
 	"photo posts are not available yet")
 

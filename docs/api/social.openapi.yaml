@@ -124,8 +124,16 @@ paths:
     get:
       tags: [likes]
       security: [{}, { bearerAuth: [] }]
-      summary: Ready videos a user likes, newest like first
-      parameters: [{ $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }]
+      summary: Ready posts a user likes, newest like first
+      description: |
+        Liked photo posts (ADR-0020) are listed only to a client sending
+        `Poro-Capabilities: photo-posts`; a cursor issued with the header is
+        refused without it (`invalid_cursor`), and the reverse. Likes,
+        comments and shares of a photo post use the same routes as a video.
+      parameters:
+        - { $ref: "#/components/parameters/Cursor" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Capabilities" }
       responses:
         "200":
           description: Page of liked videos
@@ -315,6 +323,16 @@ components:
       scheme: bearer
       bearerFormat: JWT
   parameters:
+    Capabilities:
+      name: Poro-Capabilities
+      in: header
+      required: false
+      description: |
+        Comma-separated client capabilities, case-insensitive; unknown tokens
+        are ignored. `photo-posts`: the client displays photo posts (ADR-0020).
+        Without it, no photo post is ever returned, and a cursor issued with
+        it is refused (`invalid_cursor`).
+      schema: { type: string, example: photo-posts }
     VideoID:
       name: videoId
       in: path

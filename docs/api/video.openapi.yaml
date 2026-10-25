@@ -181,7 +181,7 @@ paths:
         aborted and its sources deleted. The caption (`description`) is
         optional, 0–500 runes, with the same character rules as a video
         description. HEIC/HEIF is refused. Counts against the `init` rate limit.
-        Switched off by default: until PHOTO_POSTS_ENABLED, both photo routes
+        Open by default; with PHOTO_POSTS_ENABLED=false both photo routes
         answer 404 `photo_posts_disabled`.
         Signed storage refuses a body of another length or another
         `Content-Type` with 403 (checked against SeaweedFS). A refused or
@@ -498,8 +498,8 @@ components:
       required: [position, url, thumbnail_url, width, height]
       properties:
         position: { type: integer, minimum: 1, maximum: 10 }
-        url: { type: string, format: uri, description: JPEG, long side at most 2048 px }
-        thumbnail_url: { type: string, format: uri, description: JPEG, long side at most 540 px }
+        url: { type: string, format: uri, description: "JPEG, long side at most 2048 px" }
+        thumbnail_url: { type: string, format: uri, description: "JPEG, long side at most 540 px" }
         width: { type: integer }
         height: { type: integer }
     Video:
@@ -559,7 +559,7 @@ components:
       description: "`not_found`"
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
     PhotoPostsDisabled:
-      description: "`photo_posts_disabled`: photo posts are switched off on this server (PHOTO_POSTS_ENABLED=false, the default until image processing ships); answered before authentication"
+      description: "`photo_posts_disabled`: photo posts are switched off on this server (PHOTO_POSTS_ENABLED=false; open by default); answered before authentication"
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
     RateLimited:
       description: "`rate_limited`"

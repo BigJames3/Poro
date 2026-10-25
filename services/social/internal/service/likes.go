@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/poro/shared-go/capability"
 	"github.com/poro/shared-go/events"
 
 	"github.com/poro/social/internal/cursor"
@@ -147,9 +148,15 @@ func (s *Social) ListVideoLikes(ctx context.Context, videoID uuid.UUID, rawCurso
 	return &p, nil
 }
 
-// ListUserLikes lists the ready videos a user likes, newest like first.
-func (s *Social) ListUserLikes(ctx context.Context, userID uuid.UUID, rawCursor string, limit int) (*dto.Page[dto.LikedVideo], error) {
-	after, err := decodeCursor(rawCursor)
+// ListUserLikes lists the ready posts a user likes, newest like first.
+// Without photoPosts the client receives videos only (ADR-0020), and a cursor
+// issued with other capabilities is refused.
+func (s *Social) ListUserLikes(ctx context.Context, userID uuid.UUID, photoPosts bool, rawCursor string, limit int) (*dto.Page[dto.LikedVideo], error) {
+	inner, err := cursor.Unscope(rawCursor, photoPosts)
+	if err != nil {
+		return nil, errCursor
+	}
+	after, err := decodeCursor(inner)
 	if err != nil {
 		return nil, err
 	}
@@ -157,13 +164,17 @@ func (s *Social) ListUserLikes(ctx context.Context, userID uuid.UUID, rawCursor 
 		return nil, asAPIError(err)
 	}
 	limit = model.PageSize(limit)
-	rows, err := repository.ListUserLikes(ctx, s.pool, userID, after, limit+1)
+	rows, err := repository.ListUserLikes(ctx, s.pool, userID, capability.MediaTypes(photoPosts), after, limit+1)
 	if err != nil {
 		return nil, errInternal.WithCause(err)
 	}
 	p := page(rows, limit, likePosition, func(l repository.Like) dto.LikedVideo {
 		return dto.LikedVideo{VideoID: l.VideoID.String(), LikedAt: l.CreatedAt}
 	})
+	if p.NextCursor != nil {
+		next := cursor.Scope(*p.NextCursor, photoPosts)
+		p.NextCursor = &next
+	}
 	return &p, nil
 }
 

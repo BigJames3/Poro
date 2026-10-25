@@ -23,9 +23,10 @@ type Author struct {
 	AvatarURL   *string
 }
 
-// VideoHit is a searchable video.
+// VideoHit is a searchable post: a video, or a photo post (ADR-0020).
 type VideoHit struct {
 	VideoID      uuid.UUID
+	MediaType    string
 	Title        string
 	Hashtags     []string
 	ThumbnailKey *string
@@ -95,11 +96,13 @@ type Suggestions struct {
 }
 
 // Index ranks results for a query. offset and limit are already validated.
+// photoPosts: the client declared photo posts (ADR-0020); otherwise videos
+// only are returned, and hashtags count videos only.
 type Index interface {
-	Videos(ctx context.Context, query string, offset, limit int) (Page[VideoHit], error)
+	Videos(ctx context.Context, query string, photoPosts bool, offset, limit int) (Page[VideoHit], error)
 	Users(ctx context.Context, query string, offset, limit int) (Page[UserHit], error)
-	Hashtags(ctx context.Context, query string, offset, limit int) (Page[HashtagHit], error)
+	Hashtags(ctx context.Context, query string, photoPosts bool, offset, limit int) (Page[HashtagHit], error)
 	Products(ctx context.Context, query string, filter CatalogFilter, offset, limit int) (Page[ProductHit], error)
 	Shops(ctx context.Context, query string, filter CatalogFilter, offset, limit int) (Page[ShopHit], error)
-	Suggest(ctx context.Context, prefix string, perKind int) (Suggestions, error)
+	Suggest(ctx context.Context, prefix string, photoPosts bool, perKind int) (Suggestions, error)
 }

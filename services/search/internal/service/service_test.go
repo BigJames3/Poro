@@ -27,7 +27,7 @@ type fakeIndex struct {
 	gotFilter  index.CatalogFilter
 }
 
-func (f *fakeIndex) Videos(_ context.Context, _ string, offset, limit int) (index.Page[index.VideoHit], error) {
+func (f *fakeIndex) Videos(_ context.Context, _ string, _ bool, offset, limit int) (index.Page[index.VideoHit], error) {
 	f.gotOffset, f.gotLimit = offset, limit
 	return index.Page[index.VideoHit]{Items: []index.VideoHit{{VideoID: uuid.New(), ThumbnailKey: f.thumbnail}}, More: f.more}, f.err
 }
@@ -37,7 +37,7 @@ func (f *fakeIndex) Users(_ context.Context, _ string, offset, limit int) (index
 	return index.Page[index.UserHit]{Items: []index.UserHit{{UserID: uuid.New(), Username: "awa"}}, More: f.more}, f.err
 }
 
-func (f *fakeIndex) Hashtags(_ context.Context, _ string, offset, limit int) (index.Page[index.HashtagHit], error) {
+func (f *fakeIndex) Hashtags(_ context.Context, _ string, _ bool, offset, limit int) (index.Page[index.HashtagHit], error) {
 	f.gotOffset, f.gotLimit = offset, limit
 	return index.Page[index.HashtagHit]{Items: []index.HashtagHit{{Tag: "abidjan", VideosCount: 2}}, More: f.more}, f.err
 }
@@ -55,7 +55,7 @@ func (f *fakeIndex) Shops(_ context.Context, _ string, filter index.CatalogFilte
 		Handle: "chez.awa", CountryCode: "CI"}, Currency: "XOF"}}}, f.err
 }
 
-func (f *fakeIndex) Suggest(context.Context, string, int) (index.Suggestions, error) {
+func (f *fakeIndex) Suggest(context.Context, string, bool, int) (index.Suggestions, error) {
 	return f.suggestion, f.err
 }
 
@@ -70,14 +70,14 @@ func TestValidation(t *testing.T) {
 	svc := New(&fakeIndex{}, func(k string) string { return k })
 	ctx := context.Background()
 	for _, q := range []string{"", "   ", strings.Repeat("a", 101), "a\u202eb", "a\x00b"} {
-		_, err := svc.Search(ctx, q, "", "", 0, Filters{})
+		_, err := svc.Search(ctx, q, "", false, "", 0, Filters{})
 		require.Equal(t, "invalid_query", code(t, err), "%q", q)
 	}
-	_, err := svc.Search(ctx, "x", "places", "", 0, Filters{})
+	_, err := svc.Search(ctx, "x", "places", false, "", 0, Filters{})
 	require.Equal(t, "invalid_type", code(t, err))
-	_, err = svc.Search(ctx, "x", "", "bad!", 0, Filters{})
+	_, err = svc.Search(ctx, "x", "", false, "bad!", 0, Filters{})
 	require.Equal(t, "invalid_cursor", code(t, err))
-	_, err = svc.Suggest(ctx, "")
+	_, err = svc.Suggest(ctx, "", false)
 	require.Equal(t, "invalid_query", code(t, err))
 }
 
@@ -87,30 +87,30 @@ func TestPagingAndShapes(t *testing.T) {
 	svc := New(f, func(k string) string { return "https://cdn/" + k })
 	ctx := context.Background()
 
-	out, err := svc.Search(ctx, " abidjan ", "", "", 0, Filters{})
+	out, err := svc.Search(ctx, " abidjan ", "", false, "", 0, Filters{})
 	require.NoError(t, err)
 	require.Equal(t, model.TypeVideos, out.Type)
 	require.Equal(t, model.DefaultPageSize, f.gotLimit)
 	require.NotNil(t, out.NextCursor)
-	off, err := cursor.Decode(*out.NextCursor, model.MaxResults)
+	off, err := cursor.Decode(*out.NextCursor, model.MaxResults, false)
 	require.NoError(t, err)
 	require.Equal(t, model.DefaultPageSize, off)
 
-	_, err = svc.Search(ctx, "x", model.TypeUsers, cursor.Encode(490), 50, Filters{})
+	_, err = svc.Search(ctx, "x", model.TypeUsers, false, cursor.Encode(490, false), 50, Filters{})
 	require.NoError(t, err)
 	require.Equal(t, 490, f.gotOffset)
 	require.Equal(t, 10, f.gotLimit, "never past MaxResults")
-	last, err := svc.Search(ctx, "x", model.TypeHashtags, cursor.Encode(490), 50, Filters{})
+	last, err := svc.Search(ctx, "x", model.TypeHashtags, false, cursor.Encode(490, false), 50, Filters{})
 	require.NoError(t, err)
 	require.Nil(t, last.NextCursor, "no cursor past MaxResults")
 
 	f.more = false
-	out, err = svc.Search(ctx, "x", model.TypeVideos, "", 5, Filters{})
+	out, err = svc.Search(ctx, "x", model.TypeVideos, false, "", 5, Filters{})
 	require.NoError(t, err)
 	require.Nil(t, out.NextCursor)
 
 	f.suggestion = index.Suggestions{Users: []index.UserHit{{UserID: uuid.New(), Username: "awa"}}}
-	sug, err := svc.Suggest(ctx, "aw")
+	sug, err := svc.Suggest(ctx, "aw", false)
 	require.NoError(t, err)
 	require.Len(t, sug.Users, 1)
 	require.Empty(t, sug.Hashtags)
@@ -121,10 +121,10 @@ func TestIndexFailuresAre500(t *testing.T) {
 	svc := New(&fakeIndex{err: errors.New("db down")}, func(k string) string { return k })
 	ctx := context.Background()
 	for _, kind := range []string{model.TypeVideos, model.TypeUsers, model.TypeHashtags, model.TypeProducts, model.TypeShops} {
-		_, err := svc.Search(ctx, "x", kind, "", 0, Filters{})
+		_, err := svc.Search(ctx, "x", kind, false, "", 0, Filters{})
 		require.Equal(t, "internal_error", code(t, err), kind)
 	}
-	_, err := svc.Suggest(ctx, "x")
+	_, err := svc.Suggest(ctx, "x", false)
 	require.Equal(t, "internal_error", code(t, err))
 }
 
@@ -133,7 +133,7 @@ func TestCatalogFilters(t *testing.T) {
 	svc := New(idx, func(k string) string { return k })
 	ctx := context.Background()
 
-	out, err := svc.Search(ctx, "pagne", model.TypeProducts, "", 0,
+	out, err := svc.Search(ctx, "pagne", model.TypeProducts, false, "", 0,
 		Filters{Country: "ci", Currency: "xof", MinPrice: "1000", MaxPrice: "20000"})
 	require.NoError(t, err)
 	require.Equal(t, "CI", *idx.gotFilter.CountryCode)
@@ -144,7 +144,7 @@ func TestCatalogFilters(t *testing.T) {
 	require.Len(t, items, 1)
 	require.Equal(t, "chez.awa", items[0].Shop.Handle)
 
-	shopsOut, err := svc.Search(ctx, "awa", model.TypeShops, "", 0, Filters{Country: "SN"})
+	shopsOut, err := svc.Search(ctx, "awa", model.TypeShops, false, "", 0, Filters{Country: "SN"})
 	require.NoError(t, err)
 	require.Len(t, shopsOut.Items.([]dto.Shop), 1)
 	require.Equal(t, "SN", *idx.gotFilter.CountryCode)
@@ -162,7 +162,7 @@ func TestCatalogFilters(t *testing.T) {
 		{model.TypeProducts, Filters{MaxPrice: "12.5"}},
 		{model.TypeProducts, Filters{MinPrice: "200", MaxPrice: "100"}},
 	} {
-		_, err := svc.Search(ctx, "x", c.kind, "", 0, c.f)
+		_, err := svc.Search(ctx, "x", c.kind, false, "", 0, c.f)
 		require.Equal(t, "invalid_filter", code(t, err), "%+v", c)
 	}
 }

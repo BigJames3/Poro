@@ -88,7 +88,7 @@ func TestEventsOverKafkaReachTheIndex(t *testing.T) {
 	publish(events.TypeVideoReady, video.String(), ready(video, author, "Solo de "+word, word))
 
 	require.Eventually(t, func() bool {
-		page, err := idx.Videos(ctx, word, 0, 5)
+		page, err := idx.Videos(ctx, word, false, 0, 5)
 		return err == nil && len(page.Items) == 1 && page.Items[0].Author.Username != nil && *page.Items[0].Author.Username == name
 	}, time.Minute, 200*time.Millisecond, "the video and its author become searchable")
 
@@ -97,7 +97,7 @@ func TestEventsOverKafkaReachTheIndex(t *testing.T) {
 		Reason: events.ModerationReasonHate, DecidedBy: events.ModerationDecidedByModerator, RemovedAt: time.Now(),
 	})
 	require.Eventually(t, func() bool {
-		page, err := idx.Videos(ctx, word, 0, 5)
+		page, err := idx.Videos(ctx, word, false, 0, 5)
 		return err == nil && len(page.Items) == 0
 	}, time.Minute, 200*time.Millisecond, "a removed video leaves the results")
 

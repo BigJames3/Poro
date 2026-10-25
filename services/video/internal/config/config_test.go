@@ -143,7 +143,7 @@ func TestPhotoPostsAreOffUnlessEnabled(t *testing.T) {
 	setRequired()
 	cfg, err := Load()
 	require.NoError(t, err)
-	require.False(t, cfg.PhotoPostsEnabled, "photo posts are off by default")
+	require.True(t, cfg.PhotoPostsEnabled, "photo posts are on by default since step 2d")
 
 	for value, want := range map[string]bool{"true": true, "false": false, "1": true, "0": false} {
 		t.Setenv("PHOTO_POSTS_ENABLED", value)

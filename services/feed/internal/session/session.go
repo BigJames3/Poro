@@ -26,12 +26,14 @@ func NewStore(rdb redis.UniversalClient, ttl time.Duration) *Store {
 	return &Store{rdb: rdb, ttl: ttl}
 }
 
-func sessionKey(viewer uuid.UUID, id string) string {
-	return "feed:fy:" + viewer.String() + ":" + id
+// sessionKey includes the capability scope ("v" or "vp", ADR-0020): a
+// session built with photo posts is never read by a video-only request.
+func sessionKey(viewer uuid.UUID, scope, id string) string {
+	return "feed:fy:" + viewer.String() + ":" + scope + ":" + id
 }
 
-// Create saves ids under a new random session id.
-func (s *Store) Create(ctx context.Context, viewer uuid.UUID, ids []uuid.UUID) (string, error) {
+// Create saves ids under a new random session id, for the capability scope.
+func (s *Store) Create(ctx context.Context, viewer uuid.UUID, scope string, ids []uuid.UUID) (string, error) {
 	var raw [12]byte
 	if _, err := rand.Read(raw[:]); err != nil {
 		return "", fmt.Errorf("session id: %w", err)
@@ -41,16 +43,16 @@ func (s *Store) Create(ctx context.Context, viewer uuid.UUID, ids []uuid.UUID) (
 	for i, v := range ids {
 		parts[i] = v.String()
 	}
-	if err := s.rdb.Set(ctx, sessionKey(viewer, id), strings.Join(parts, ","), s.ttl).Err(); err != nil {
+	if err := s.rdb.Set(ctx, sessionKey(viewer, scope, id), strings.Join(parts, ","), s.ttl).Err(); err != nil {
 		return "", fmt.Errorf("save session: %w", err)
 	}
 	return id, nil
 }
 
 // Load returns the ids of a session and extends its life. ok is false when
-// the session expired or belongs to another viewer.
-func (s *Store) Load(ctx context.Context, viewer uuid.UUID, id string) ([]uuid.UUID, bool, error) {
-	key := sessionKey(viewer, id)
+// the session expired, belongs to another viewer or to another scope.
+func (s *Store) Load(ctx context.Context, viewer uuid.UUID, scope, id string) ([]uuid.UUID, bool, error) {
+	key := sessionKey(viewer, scope, id)
 	raw, err := s.rdb.GetEx(ctx, key, s.ttl).Result()
 	if errors.Is(err, redis.Nil) {
 		return nil, false, nil

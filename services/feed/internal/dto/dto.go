@@ -10,9 +10,14 @@ type Page struct {
 	NextCursor *string `json:"next_cursor"`
 }
 
-// Item is one video of a feed. liked_by_me is not part of v1.
+// Item is one post of a feed: a video, or a photo post for a client that
+// declared photo posts (ADR-0020). liked_by_me is not part of v1.
 type Item struct {
-	VideoID      string    `json:"video_id"`
+	VideoID string `json:"video_id"`
+	// MediaType is "video" or "photo". A photo post has an empty hls_url,
+	// duration_ms 0, and its pictures in images; thumbnail_url is image 1's.
+	MediaType    string    `json:"media_type"`
+	Images       []Image   `json:"images"`
 	Title        string    `json:"title"`
 	Hashtags     []string  `json:"hashtags"`
 	DurationMs   int       `json:"duration_ms"`
@@ -21,6 +26,14 @@ type Item struct {
 	HLSURL       string    `json:"hls_url"`
 	Stats        Stats     `json:"stats"`
 	Author       Author    `json:"author"`
+}
+
+// Image is one picture of a photo post, in order.
+type Image struct {
+	URL          string `json:"url"`
+	ThumbnailURL string `json:"thumbnail_url"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
 }
 
 // Stats are the counters of a video as last seen by the feed.
