@@ -2,6 +2,7 @@ package com.poro.app.ui.notification
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,9 +47,9 @@ fun NavGraphBuilder.notificationGraph(nav: AppNav, onOpenOrder: (orderId: String
 
 /** Cloche du fil : le compteur est relu chaque fois que l'écran revient au premier plan. */
 @Composable
-fun FeedNotificationBell(nav: AppNav) {
+fun FeedNotificationBell(nav: AppNav, tint: Color = Color.White) {
     val vm = poroViewModel { UnreadCountViewModel(nav.container.notificationRepository) }
     val count by vm.count.collectAsStateWithLifecycle()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refresh() }
-    NotificationBell(count = count, onClick = { nav.controller.navigate(NotificationsRoute) })
+    NotificationBell(count = count, onClick = { nav.controller.navigate(NotificationsRoute) }, tint = tint)
 }
