@@ -48,3 +48,30 @@ func Decode(s string) (*Position, error) {
 	}
 	return &Position{CreatedAt: ts, ID: id}, nil
 }
+
+// photoPrefix marks a cursor issued to a client that declared photo posts
+// (ADR-0020). The dot is not in the base64url alphabet, so a marked cursor
+// never decodes as a video-only one, and the reverse.
+const photoPrefix = "p."
+
+// Scope marks cursor s for the capabilities it was issued with: a page that
+// may hold photo posts is never continued for a client that cannot show them.
+func Scope(s string, photoPosts bool) string {
+	if photoPosts && s != "" {
+		return photoPrefix + s
+	}
+	return s
+}
+
+// Unscope returns the cursor behind Scope, or ErrInvalid when it was issued
+// with other capabilities.
+func Unscope(s string, photoPosts bool) (string, error) {
+	if s == "" {
+		return "", nil
+	}
+	inner, marked := strings.CutPrefix(s, photoPrefix)
+	if marked != photoPosts {
+		return "", ErrInvalid
+	}
+	return inner, nil
+}

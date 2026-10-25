@@ -189,7 +189,7 @@ http:
     cors:
       headers:
         accessControlAllowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
-        accessControlAllowHeaders: [Authorization, Content-Type, X-Request-Id, Idempotency-Key]
+        accessControlAllowHeaders: [Authorization, Content-Type, X-Request-Id, Idempotency-Key, Poro-Capabilities]
         accessControlExposeHeaders: [X-Request-Id, Retry-After]
         accessControlAllowOriginList: [{{ range $i, $origin := splitList "," (env "GATEWAY_CORS_ORIGINS") }}{{ if trim $origin }}"{{ trim $origin }}", {{ end }}{{ end }}]
         accessControlMaxAge: 600

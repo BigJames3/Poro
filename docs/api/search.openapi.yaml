@@ -65,8 +65,16 @@ paths:
 
         At most 500 results per query. Pages use an offset: a ranking that
         changes between two pages can repeat or skip a result.
+
+        Photo posts (ADR-0020): `videos` returns them, searched on their
+        caption and hashtags, and `hashtags` counts them, only for a client
+        sending `Poro-Capabilities: photo-posts`. Without it, results and
+        counts concern videos only, and a tag carried by photo posts alone is
+        not returned. A `videos` or `hashtags` cursor issued with the header is
+        refused without it, and the reverse.
       parameters:
         - { $ref: "#/components/parameters/Query" }
+        - { $ref: "#/components/parameters/Capabilities" }
         - name: type
           in: query
           schema: { type: string, enum: [videos, users, hashtags, products, shops], default: videos }
@@ -128,8 +136,9 @@ paths:
       summary: Autocompletion of usernames and hashtags
       description: |
         Up to 5 usernames (most followed first) and 5 hashtags (most used
-        first) starting with `q`. A leading `@` or `#` is ignored.
-      parameters: [{ $ref: "#/components/parameters/Query" }]
+        first) starting with `q`. A leading `@` or `#` is ignored. Hashtags
+        count photo posts only with `Poro-Capabilities: photo-posts`.
+      parameters: [{ $ref: "#/components/parameters/Query" }, { $ref: "#/components/parameters/Capabilities" }]
       responses:
         "200":
           description: Suggestions
@@ -164,6 +173,16 @@ components:
       required: true
       description: 1 to 100 characters after trimming, without control or format characters.
       schema: { type: string, minLength: 1, maxLength: 100 }
+    Capabilities:
+      name: Poro-Capabilities
+      in: header
+      required: false
+      description: |
+        Comma-separated client capabilities, case-insensitive; unknown tokens
+        are ignored. `photo-posts`: the client displays photo posts (ADR-0020).
+        Without it, no photo post is ever returned, and a cursor issued with
+        it is refused (`invalid_cursor`).
+      schema: { type: string, example: photo-posts }
   responses:
     Error:
       description: Error envelope, see `error.code`
@@ -189,8 +208,10 @@ components:
         meta: { $ref: "#/components/schemas/Meta" }
     Video:
       type: object
+      description: A video, or a photo post for a client that declared photo posts (`duration_ms` 0, empty title).
       properties:
         video_id: { type: string, format: uuid }
+        media_type: { type: string, enum: [video, photo] }
         title: { type: string }
         hashtags: { type: array, items: { type: string } }
         thumbnail_url: { type: ["string", "null"], format: uri }

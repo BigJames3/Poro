@@ -21,14 +21,16 @@ func ReadyVideoOwner(ctx context.Context, db DBTX, videoID uuid.UUID) (uuid.UUID
 	return owner, nil
 }
 
-// MarkVideoReady records a ready video. A video already deleted or removed by
-// moderation keeps that status, whatever order the events arrive in.
-func MarkVideoReady(ctx context.Context, db DBTX, videoID, ownerID uuid.UUID, at time.Time) error {
-	_, err := db.Exec(ctx, `INSERT INTO videos_projection (video_id, owner_id, status, updated_at)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (video_id) DO UPDATE SET owner_id = EXCLUDED.owner_id, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+// MarkVideoReady records a ready post and its media type ("video" or
+// "photo"). A post already deleted or removed by moderation keeps that
+// status, whatever order the events arrive in.
+func MarkVideoReady(ctx context.Context, db DBTX, videoID, ownerID uuid.UUID, mediaType string, at time.Time) error {
+	_, err := db.Exec(ctx, `INSERT INTO videos_projection (video_id, owner_id, status, updated_at, media_type)
+		VALUES ($1, $2, $3, $4, $7)
+		ON CONFLICT (video_id) DO UPDATE SET owner_id = EXCLUDED.owner_id, status = EXCLUDED.status, updated_at = EXCLUDED.updated_at,
+			media_type = EXCLUDED.media_type
 		WHERE videos_projection.status NOT IN ($5, $6)`,
-		videoID, ownerID, model.VideoReady, at, model.VideoDeleted, model.VideoRemoved)
+		videoID, ownerID, model.VideoReady, at, model.VideoDeleted, model.VideoRemoved, mediaType)
 	if err != nil {
 		return fmt.Errorf("mark video ready: %w", err)
 	}

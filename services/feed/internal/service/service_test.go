@@ -104,7 +104,7 @@ func TestFollowingKeysetHasNoGapOrDuplicate(t *testing.T) {
 	var last *dto.Item
 	cur, pages := "", 0
 	for {
-		p, err := e.svc.Following(ctx, viewer, cur, 4)
+		p, err := e.svc.Following(ctx, viewer, false, cur, 4)
 		require.NoError(t, err)
 		pages++
 		for i := range p.Items {
@@ -130,22 +130,22 @@ func TestFollowingFirstPageIsCached(t *testing.T) {
 	viewer, a := uuid.New(), uuid.New()
 	follow(t, viewer, a)
 	video(t, a, time.Now())
-	p, err := e.svc.Following(ctx, viewer, "", 10)
+	p, err := e.svc.Following(ctx, viewer, false, "", 10)
 	require.NoError(t, err)
 	require.Len(t, p.Items, 1)
 	require.Equal(t, "https://cdn.poro.test/thumb.jpg", p.Items[0].ThumbnailURL)
 
 	video(t, a, time.Now())
-	p, err = e.svc.Following(ctx, viewer, "", 10)
+	p, err = e.svc.Following(ctx, viewer, false, "", 10)
 	require.NoError(t, err)
 	require.Len(t, p.Items, 1, "served from cache within 60 seconds")
 
 	e.mr.FastForward(61 * time.Second)
-	p, err = e.svc.Following(ctx, viewer, "", 10)
+	p, err = e.svc.Following(ctx, viewer, false, "", 10)
 	require.NoError(t, err)
 	require.Len(t, p.Items, 2)
 
-	_, err = e.svc.Following(ctx, viewer, "garbage", 10)
+	_, err = e.svc.Following(ctx, viewer, false, "garbage", 10)
 	requireCode(t, err, "invalid_cursor")
 }
 
@@ -155,10 +155,10 @@ func TestFeedsWorkWhenTheCacheIsDown(t *testing.T) {
 	follow(t, viewer, a)
 	video(t, a, time.Now())
 	e.mr.Close()
-	p, err := e.svc.Following(ctx, viewer, "", 10)
+	p, err := e.svc.Following(ctx, viewer, false, "", 10)
 	require.NoError(t, err, "a cache outage costs a database read, not an error")
 	require.Len(t, p.Items, 1)
-	_, err = e.svc.ForYou(ctx, viewer, "", 10)
+	_, err = e.svc.ForYou(ctx, viewer, false, "", 10)
 	requireCode(t, err, "unavailable")
 }
 
@@ -173,10 +173,10 @@ func TestTrendingOrderWindowAndDecay(t *testing.T) {
 	engage(t, warm, 5)
 	engage(t, old, 1000)
 
-	p, err := e.svc.Trending(ctx, "", 1)
+	p, err := e.svc.Trending(ctx, false, "", 1)
 	require.NoError(t, err)
 	require.Equal(t, []string{hot.String()}, ids(p.Items))
-	p, err = e.svc.Trending(ctx, *p.NextCursor, 10)
+	p, err = e.svc.Trending(ctx, false, *p.NextCursor, 10)
 	require.NoError(t, err)
 	require.Equal(t, []string{warm.String()}, ids(p.Items), "outside 72 h or without engagement: not trending")
 	require.Nil(t, p.NextCursor)
@@ -188,11 +188,11 @@ func TestTrendingOrderWindowAndDecay(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, n, int64(2))
 	e.mr.FastForward(61 * time.Second)
-	p, err = e.svc.Trending(ctx, "", 10)
+	p, err = e.svc.Trending(ctx, false, "", 10)
 	require.NoError(t, err)
 	require.Equal(t, []string{warm.String()}, ids(p.Items))
 
-	_, err = e.svc.Trending(ctx, cursor.EncodeTime(cursor.Time{At: time.Now(), VideoID: hot}), 10)
+	_, err = e.svc.Trending(ctx, false, cursor.EncodeTime(cursor.Time{At: time.Now(), VideoID: hot}, false), 10)
 	requireCode(t, err, "invalid_cursor")
 }
 
@@ -228,7 +228,7 @@ func collect(t *testing.T, svc *service.Feed, viewer uuid.UUID) []dto.Item {
 	var all []dto.Item
 	cur := ""
 	for {
-		p, err := svc.ForYou(ctx, viewer, cur, 30)
+		p, err := svc.ForYou(ctx, viewer, false, cur, 30)
 		require.NoError(t, err)
 		all = append(all, p.Items...)
 		if p.NextCursor == nil {
@@ -300,48 +300,48 @@ func TestForYouSessionPagingAndExpiry(t *testing.T) {
 	viewer := uuid.New()
 	seed(t, viewer, 2)
 
-	p1, err := e.svc.ForYou(ctx, viewer, "", 10)
+	p1, err := e.svc.ForYou(ctx, viewer, false, "", 10)
 	require.NoError(t, err)
 	require.Len(t, p1.Items, 10)
-	p2, err := e.svc.ForYou(ctx, viewer, *p1.NextCursor, 10)
+	p2, err := e.svc.ForYou(ctx, viewer, false, *p1.NextCursor, 10)
 	require.NoError(t, err)
 	require.NotEqual(t, ids(p1.Items), ids(p2.Items))
 
-	again, err := e.svc.ForYou(ctx, viewer, *p1.NextCursor, 10)
+	again, err := e.svc.ForYou(ctx, viewer, false, *p1.NextCursor, 10)
 	require.NoError(t, err)
 	require.Equal(t, ids(p2.Items), ids(again.Items), "a cursor replays the same page")
 
 	// A video deleted after the session was built disappears from the next page.
-	pos, err := cursor.DecodeSession(*p2.NextCursor)
+	pos, err := cursor.DecodeSession(*p2.NextCursor, false)
 	require.NoError(t, err)
-	p3, err := e.svc.ForYou(ctx, viewer, *p2.NextCursor, 10)
+	p3, err := e.svc.ForYou(ctx, viewer, false, *p2.NextCursor, 10)
 	require.NoError(t, err)
 	victim := uuid.MustParse(p3.Items[0].VideoID)
 	require.NoError(t, repository.DeleteVideo(ctx, testdb.Pool, victim, uuid.MustParse(p3.Items[0].Author.ID), time.Now()))
-	p3, err = e.svc.ForYou(ctx, viewer, cursor.EncodeSession(*pos), 10)
+	p3, err = e.svc.ForYou(ctx, viewer, false, cursor.EncodeSession(*pos, false), 10)
 	require.NoError(t, err)
 	require.NotContains(t, ids(p3.Items), victim.String())
 
 	other := uuid.New()
-	fresh, err := e.svc.ForYou(ctx, other, *p1.NextCursor, 10)
+	fresh, err := e.svc.ForYou(ctx, other, false, *p1.NextCursor, 10)
 	require.NoError(t, err, "someone else's cursor starts a new session")
 	require.NotNil(t, fresh.NextCursor)
 
 	e.mr.FastForward(31 * time.Minute)
-	restarted, err := e.svc.ForYou(ctx, viewer, *p2.NextCursor, 10)
+	restarted, err := e.svc.ForYou(ctx, viewer, false, *p2.NextCursor, 10)
 	require.NoError(t, err, "an expired session restarts without error")
 	require.Len(t, restarted.Items, 10)
-	next, err := cursor.DecodeSession(*restarted.NextCursor)
+	next, err := cursor.DecodeSession(*restarted.NextCursor, false)
 	require.NoError(t, err)
 	require.Equal(t, 10, next.Offset, "the new session starts at its first page")
 
-	_, err = e.svc.ForYou(ctx, viewer, "nope", 10)
+	_, err = e.svc.ForYou(ctx, viewer, false, "nope", 10)
 	requireCode(t, err, "invalid_cursor")
 }
 
 func TestForYouWithNothingToShow(t *testing.T) {
 	e := newEnv(t)
-	p, err := e.svc.ForYou(ctx, uuid.New(), "", 10)
+	p, err := e.svc.ForYou(ctx, uuid.New(), false, "", 10)
 	require.NoError(t, err)
 	require.Empty(t, p.Items)
 	require.Nil(t, p.NextCursor)

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/poro/shared-go/capability"
 	"github.com/poro/shared-go/events"
 	"github.com/poro/shared-go/inbox"
 	"github.com/poro/shared-go/kafka"
@@ -80,11 +81,20 @@ func decode(env events.Envelope) (applyFunc, error) {
 		if at.IsZero() {
 			at = d.ReadyAt
 		}
+		// Events published before photo posts are videos (ADR-0020).
+		mediaType := d.MediaType
+		switch mediaType {
+		case "":
+			mediaType = capability.MediaVideo
+		case capability.MediaVideo, capability.MediaPhoto:
+		default:
+			return nil, fmt.Errorf("unsupported media_type %q", d.MediaType)
+		}
 		return func(ctx context.Context, tx pgx.Tx) error {
 			if err := repository.EnsureUser(ctx, tx, owner); err != nil {
 				return err
 			}
-			return repository.MarkVideoReady(ctx, tx, video, owner, at)
+			return repository.MarkVideoReady(ctx, tx, video, owner, mediaType, at)
 		}, nil
 	case events.TypeVideoDeleted:
 		var d events.VideoDeletedV1

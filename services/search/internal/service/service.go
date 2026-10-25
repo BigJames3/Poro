@@ -11,6 +11,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 
+	"github.com/poro/shared-go/capability"
 	"github.com/poro/shared-go/httpx"
 
 	"github.com/poro/search/internal/cursor"
@@ -50,8 +51,10 @@ func New(idx index.Index, publicURL func(string) string) *Search {
 	return &Search{idx: idx, publicURL: publicURL}
 }
 
-// Search returns one ranked page of kind for query.
-func (s *Search) Search(ctx context.Context, query, kind, rawCursor string, limit int, raw Filters) (*dto.Results, error) {
+// Search returns one ranked page of kind for query. photoPosts: the client
+// declared photo posts (ADR-0020); otherwise videos and hashtags concern
+// videos only.
+func (s *Search) Search(ctx context.Context, query, kind string, photoPosts bool, rawCursor string, limit int, raw Filters) (*dto.Results, error) {
 	q, err := cleanQuery(query)
 	if err != nil {
 		return nil, err
@@ -63,7 +66,9 @@ func (s *Search) Search(ctx context.Context, query, kind, rawCursor string, limi
 	if err != nil {
 		return nil, err
 	}
-	offset, err := cursor.Decode(rawCursor, model.MaxResults)
+	// Users, products and shops never hold photo posts: their cursors stay unscoped.
+	scoped := photoPosts && (kind == model.TypeVideos || kind == model.TypeHashtags)
+	offset, err := cursor.Decode(rawCursor, model.MaxResults, scoped)
 	if err != nil {
 		return nil, errCursor
 	}
@@ -72,7 +77,7 @@ func (s *Search) Search(ctx context.Context, query, kind, rawCursor string, limi
 	more := false
 	switch kind {
 	case model.TypeVideos:
-		page, err := s.idx.Videos(ctx, q, offset, limit)
+		page, err := s.idx.Videos(ctx, q, photoPosts, offset, limit)
 		if err != nil {
 			return nil, errInternal.WithCause(err)
 		}
@@ -88,7 +93,7 @@ func (s *Search) Search(ctx context.Context, query, kind, rawCursor string, limi
 		}
 		out.Items, more = users(page.Items), page.More
 	case model.TypeHashtags:
-		page, err := s.idx.Hashtags(ctx, q, offset, limit)
+		page, err := s.idx.Hashtags(ctx, q, photoPosts, offset, limit)
 		if err != nil {
 			return nil, errInternal.WithCause(err)
 		}
@@ -109,19 +114,20 @@ func (s *Search) Search(ctx context.Context, query, kind, rawCursor string, limi
 		return nil, errType
 	}
 	if more && offset+limit < model.MaxResults {
-		next := cursor.Encode(offset + limit)
+		next := cursor.Encode(offset+limit, scoped)
 		out.NextCursor = &next
 	}
 	return out, nil
 }
 
-// Suggest completes usernames and hashtags for the search box.
-func (s *Search) Suggest(ctx context.Context, prefix string) (*dto.Suggestions, error) {
+// Suggest completes usernames and hashtags for the search box; a tag carried
+// by photo posts only is suggested to clients that declared them.
+func (s *Search) Suggest(ctx context.Context, prefix string, photoPosts bool) (*dto.Suggestions, error) {
 	q, err := cleanQuery(prefix)
 	if err != nil {
 		return nil, err
 	}
-	got, err := s.idx.Suggest(ctx, q, model.SuggestPerKind)
+	got, err := s.idx.Suggest(ctx, q, photoPosts, model.SuggestPerKind)
 	if err != nil {
 		return nil, errInternal.WithCause(err)
 	}
@@ -187,8 +193,12 @@ func cleanQuery(raw string) (string, error) {
 }
 
 func (s *Search) video(h index.VideoHit) dto.Video {
+	mediaType := h.MediaType
+	if mediaType == "" {
+		mediaType = capability.MediaVideo
+	}
 	v := dto.Video{
-		VideoID: h.VideoID.String(), Title: h.Title, Hashtags: h.Hashtags, DurationMs: h.DurationMs,
+		VideoID: h.VideoID.String(), MediaType: mediaType, Title: h.Title, Hashtags: h.Hashtags, DurationMs: h.DurationMs,
 		PublishedAt: h.PublishedAt, Stats: dto.Stats{Likes: h.Likes, Comments: h.Comments, Shares: h.Shares},
 		Author: dto.Author{UserID: h.Author.UserID.String(), Username: h.Author.Username,
 			DisplayName: h.Author.DisplayName, AvatarURL: h.Author.AvatarURL},

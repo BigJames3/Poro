@@ -352,4 +352,83 @@ describe('notification service HTTP API', () => {
     const list = await request(server).get('/api/v1/notifications').set('Authorization', me.auth);
     expect(list.body.data.items).toEqual([]);
   });
+  // ADR-0020 § 5: notifications about photo posts stay stored, but are listed
+  // and counted only for a client that declared photo posts. A like processed
+  // before poro.video.ready (another topic, no ordering) is hidden as well.
+  it('shows photo post notifications only with the photo-posts capability', async () => {
+    const me = await as();
+    const [photo, video, early, late] = [uuidv7(), uuidv7(), uuidv7(), uuidv7()];
+    const like = (actor: string, target: string) =>
+      dispatcher.handle(
+        newEnvelope('poro.social.like.created', 1, target, {
+          like_id: uuidv7(),
+          user_id: actor,
+          video_id: target,
+          video_owner_id: me.userId,
+          created_at: new Date().toISOString(),
+        }),
+      );
+    await like(early, photo);
+    await dispatcher.handle(
+      newEnvelope('poro.video.ready', 1, photo, {
+        video_id: photo,
+        user_id: me.userId,
+        duration_ms: 0,
+        width: 1536,
+        height: 2048,
+        hls_key: '',
+        thumbnail_key: 'thumb-1.jpg',
+        renditions: [],
+        ready_at: new Date().toISOString(),
+        title: '',
+        description: 'Marché de Treichville',
+        media_type: 'photo',
+        images: [
+          { image_key: 'image-1.jpg', thumbnail_key: 'thumb-1.jpg', width: 1536, height: 2048 },
+        ],
+      }),
+    );
+    await like(late, photo);
+    await like(late, video);
+
+    const list = (capabilities?: string) => {
+      const req = request(server).get('/api/v1/notifications').set('Authorization', me.auth);
+      return (capabilities === undefined ? req : req.set('Poro-Capabilities', capabilities)).then(
+        (res) =>
+          res.body.data.items as {
+            type: string;
+            entity_id: string;
+            body: string;
+            data: Record<string, string>;
+          }[],
+      );
+    };
+    const count = (capabilities?: string) => {
+      const req = request(server)
+        .get('/api/v1/notifications/unread-count')
+        .set('Authorization', me.auth);
+      return (capabilities === undefined ? req : req.set('Poro-Capabilities', capabilities)).then(
+        (res) => (res.body.data as { count: number }).count,
+      );
+    };
+
+    const videosOnly = await list();
+    expect(videosOnly.map((item) => item.entity_id)).toEqual([video]);
+    expect(videosOnly[0].body).toBe('Quelqu’un a aimé ta vidéo');
+    expect(await count()).toBe(1);
+    // The two likes of the photo post are one grouped notification.
+    expect(await count('reels, Photo-Posts')).toBe(3);
+
+    const all = await list('photo-posts');
+    expect(all).toHaveLength(3);
+    const ready = all.find((item) => item.type === 'video_ready');
+    expect(ready).toMatchObject({
+      entity_id: photo,
+      title: 'Ta publication photo est en ligne',
+      data: { video_id: photo },
+    });
+    const photoLike = all.find((item) => item.type === 'like' && item.entity_id === photo);
+    expect(photoLike?.data).toEqual({ video_id: photo, media_type: 'photo' });
+    expect(photoLike?.body).toBe('Quelqu’un et 1 autre personne ont aimé ta publication');
+  });
 });

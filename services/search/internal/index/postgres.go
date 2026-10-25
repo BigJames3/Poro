@@ -7,6 +7,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/poro/shared-go/capability"
 )
 
 // Postgres ranks with full-text search (search_fr: French stems without
@@ -23,26 +25,27 @@ var _ Index = (*Postgres)(nil)
 // Videos: relevance (text rank plus the best word match in the title, which
 // tolerates typos), lifted by engagement and decayed over months, so a fresh
 // popular match beats a stale one.
-func (p *Postgres) Videos(ctx context.Context, query string, offset, limit int) (Page[VideoHit], error) {
+func (p *Postgres) Videos(ctx context.Context, query string, photoPosts bool, offset, limit int) (Page[VideoHit], error) {
 	rows, err := p.pool.Query(ctx, `
 		WITH q AS (SELECT websearch_to_tsquery('search_fr', $1) AS tsq, search_fold($1) AS folded)
-		SELECT v.video_id, v.title, v.hashtags, v.thumbnail_key, v.duration_ms, v.published_at,
+		SELECT v.video_id, v.media_type, v.title, v.hashtags, v.thumbnail_key, v.duration_ms, v.published_at,
 			v.likes_count, v.comments_count, v.shares_count,
 			v.author_id, u.username, u.display_name, u.avatar_url
 		FROM videos v CROSS JOIN q LEFT JOIN users u ON u.user_id = v.author_id
 		WHERE v.published_at IS NOT NULL AND v.deleted_at IS NULL AND v.moderation_status = 'approved'
+			AND v.media_type = ANY($4)
 			AND (v.document @@ q.tsq OR q.folded <% search_fold(v.title))
 		ORDER BY (ts_rank_cd(v.document, q.tsq, 32) + word_similarity(q.folded, search_fold(v.title)))
 			* (1 + ln(1 + v.likes_count + 2 * v.comments_count + 3 * v.shares_count) / 10)
 			/ (1 + extract(epoch FROM now() - v.published_at) / 2592000) DESC,
 			v.video_id DESC
-		OFFSET $2 LIMIT $3`, query, offset, limit+1)
+		OFFSET $2 LIMIT $3`, query, offset, limit+1, capability.MediaTypes(photoPosts))
 	if err != nil {
 		return Page[VideoHit]{}, fmt.Errorf("search videos: %w", err)
 	}
 	hits, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (VideoHit, error) {
 		var h VideoHit
-		err := row.Scan(&h.VideoID, &h.Title, &h.Hashtags, &h.ThumbnailKey, &h.DurationMs, &h.PublishedAt,
+		err := row.Scan(&h.VideoID, &h.MediaType, &h.Title, &h.Hashtags, &h.ThumbnailKey, &h.DurationMs, &h.PublishedAt,
 			&h.Likes, &h.Comments, &h.Shares,
 			&h.Author.UserID, &h.Author.Username, &h.Author.DisplayName, &h.Author.AvatarURL)
 		return h, err
@@ -82,16 +85,23 @@ func (p *Postgres) Users(ctx context.Context, query string, offset, limit int) (
 	return page(hits, limit), nil
 }
 
+// tagCount is the number of posts a client may see under a tag: videos only,
+// or videos and photo posts ($n is true when the client declared photo posts).
+func tagCount(param string) string {
+	return `(h.videos_count + CASE WHEN ` + param + `::boolean THEN h.photos_count ELSE 0 END)`
+}
+
 // Hashtags: prefix matches first, then typos, then the most used.
-func (p *Postgres) Hashtags(ctx context.Context, query string, offset, limit int) (Page[HashtagHit], error) {
+func (p *Postgres) Hashtags(ctx context.Context, query string, photoPosts bool, offset, limit int) (Page[HashtagHit], error) {
+	count := tagCount("$4")
 	rows, err := p.pool.Query(ctx, `
 		WITH q AS (SELECT search_fold(ltrim(btrim($1), '#')) AS folded)
-		SELECT h.tag, h.videos_count
+		SELECT h.tag, `+count+`
 		FROM hashtags h CROSS JOIN q
-		WHERE h.videos_count > 0 AND (search_fold(h.tag) LIKE `+likePrefix("q.folded")+` OR search_fold(h.tag) % q.folded)
+		WHERE `+count+` > 0 AND (search_fold(h.tag) LIKE `+likePrefix("q.folded")+` OR search_fold(h.tag) % q.folded)
 		ORDER BY (search_fold(h.tag) LIKE `+likePrefix("q.folded")+`) DESC, similarity(search_fold(h.tag), q.folded) DESC,
-			h.videos_count DESC, h.tag
-		OFFSET $2 LIMIT $3`, query, offset, limit+1)
+			`+count+` DESC, h.tag
+		OFFSET $2 LIMIT $3`, query, offset, limit+1, photoPosts)
 	if err != nil {
 		return Page[HashtagHit]{}, fmt.Errorf("search hashtags: %w", err)
 	}
@@ -167,7 +177,7 @@ func (p *Postgres) Shops(ctx context.Context, query string, f CatalogFilter, off
 }
 
 // Suggest completes a username or a hashtag from its first characters.
-func (p *Postgres) Suggest(ctx context.Context, prefix string, perKind int) (Suggestions, error) {
+func (p *Postgres) Suggest(ctx context.Context, prefix string, photoPosts bool, perKind int) (Suggestions, error) {
 	clean := strings.ToLower(strings.TrimLeft(strings.TrimSpace(prefix), "@#"))
 	if clean == "" {
 		return Suggestions{Users: []UserHit{}, Hashtags: []HashtagHit{}}, nil
@@ -185,9 +195,9 @@ func (p *Postgres) Suggest(ctx context.Context, prefix string, perKind int) (Sug
 		return Suggestions{}, fmt.Errorf("scan users: %w", err)
 	}
 	rows, err = p.pool.Query(ctx, `
-		SELECT tag, videos_count FROM hashtags
-		WHERE videos_count > 0 AND search_fold(tag) LIKE search_fold($1)
-		ORDER BY videos_count DESC, tag LIMIT $2`, pattern, perKind)
+		SELECT h.tag, `+tagCount("$3")+` FROM hashtags h
+		WHERE `+tagCount("$3")+` > 0 AND search_fold(h.tag) LIKE search_fold($1)
+		ORDER BY `+tagCount("$3")+` DESC, h.tag LIMIT $2`, pattern, perKind, photoPosts)
 	if err != nil {
 		return Suggestions{}, fmt.Errorf("suggest hashtags: %w", err)
 	}

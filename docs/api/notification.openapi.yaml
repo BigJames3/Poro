@@ -28,7 +28,15 @@ paths:
       description: |
         A like group that gains an actor moves to the top. Marking read never reorders.
         A notification that moves while a client pages may be repeated or skipped once.
+        Notifications about a photo post (ADR-0020: its `video_ready`, likes and
+        comments, with `data.media_type: photo`) are stored for everyone but
+        listed only to a client sending `Poro-Capabilities: photo-posts`.
       parameters:
+        - name: Poro-Capabilities
+          in: header
+          required: false
+          description: "`photo-posts`: the client displays photo posts. Comma-separated, case-insensitive."
+          schema: { type: string, example: photo-posts }
         - name: cursor
           in: query
           description: Opaque `next_cursor` of the previous page; omit for page 1.
@@ -62,6 +70,12 @@ paths:
     get:
       tags: [notifications]
       summary: Number of unread notifications
+      description: "Counted on the same rule as the list, photo posts included only with `Poro-Capabilities: photo-posts`."
+      parameters:
+        - name: Poro-Capabilities
+          in: header
+          required: false
+          schema: { type: string, example: photo-posts }
       responses:
         "200":
           description: Count

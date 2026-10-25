@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -226,4 +228,52 @@ func TestBadEventsArePermanent(t *testing.T) {
 			require.True(t, kafka.IsPermanent(err), "%v", err)
 		})
 	}
+}
+
+// ADR-0020 § 7: a photo post is projected with its images in order and no
+// HLS; an event without media_type stays a video; a photo without images or
+// an unknown media type is refused (DLQ).
+func TestPhotoPostsAreProjected(t *testing.T) {
+	testdb.Available(t)
+	author := uuid.Must(uuid.NewV7())
+	pic := uuid.Must(uuid.NewV7())
+	now := time.Now()
+	ev := events.VideoReadyV1{VideoID: pic.String(), UserID: author.String(), Width: 1536, Height: 2048,
+		ThumbnailKey: "videos/a/p/thumb-1.jpg", Renditions: []events.VideoRenditionV1{}, ReadyAt: now,
+		Description: "Marché de Treichville #abidjan", Hashtags: []string{"abidjan"}, PublishedAt: now,
+		MediaType: "photo", Images: []events.VideoImageV1{
+			{ImageKey: "videos/a/p/image-1.jpg", ThumbnailKey: "videos/a/p/thumb-1.jpg", Width: 1536, Height: 2048},
+			{ImageKey: "videos/a/p/image-2.jpg", ThumbnailKey: "videos/a/p/thumb-2.jpg", Width: 2048, Height: 1536},
+		}}
+	require.NoError(t, send(t, events.TypeVideoReady, ev))
+	require.Equal(t, "photo", row[string](t, `SELECT media_type FROM videos WHERE video_id = $1`, pic))
+	require.Empty(t, row[string](t, `SELECT hls_key FROM videos WHERE video_id = $1`, pic))
+	require.Equal(t, "Marché de Treichville #abidjan", row[string](t, `SELECT title FROM videos WHERE video_id = $1`, pic),
+		"the caption stands in for the missing title")
+	var images []map[string]any
+	require.NoError(t, json.Unmarshal(row[[]byte](t, `SELECT images FROM videos WHERE video_id = $1`, pic), &images))
+	require.Len(t, images, 2)
+	require.Equal(t, "videos/a/p/image-1.jpg", images[0]["image_key"])
+	require.Equal(t, "videos/a/p/thumb-2.jpg", images[1]["thumbnail_key"])
+
+	legacy := uuid.Must(uuid.NewV7())
+	require.NoError(t, send(t, events.TypeVideoReady, ready(legacy, author, now)))
+	require.Equal(t, "video", row[string](t, `SELECT media_type FROM videos WHERE video_id = $1`, legacy))
+	require.Equal(t, "[]", row[string](t, `SELECT images::text FROM videos WHERE video_id = $1`, legacy))
+
+	long := ev
+	long.VideoID, long.Description = uuid.NewString(), strings.Repeat("é", 300)
+	require.NoError(t, send(t, events.TypeVideoReady, long))
+	stored := row[string](t, `SELECT title FROM videos WHERE video_id = $1`, uuid.MustParse(long.VideoID))
+	require.Equal(t, 200, utf8.RuneCountInString(stored), "a long caption fits the title column")
+	require.True(t, strings.HasSuffix(stored, "…"))
+
+	empty := ev
+	empty.VideoID, empty.Images = uuid.NewString(), nil
+	err := send(t, events.TypeVideoReady, empty)
+	require.True(t, kafka.IsPermanent(err), "a photo post without images goes to the DLQ: %v", err)
+	strange := ev
+	strange.VideoID, strange.MediaType = uuid.NewString(), "gif"
+	err = send(t, events.TypeVideoReady, strange)
+	require.True(t, kafka.IsPermanent(err), "an unknown media type goes to the DLQ: %v", err)
 }

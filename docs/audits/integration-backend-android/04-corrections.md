@@ -146,5 +146,14 @@ Backend seul : aucune modification Android, du fil ni du worker de traitement (�
   - Quarantaine de ce qui était écrit en cas de panne du stockage.
   - Sources supprimées après traitement.
 - Vérifié sur fichiers réels (Pillow) portant l'orientation et des coordonnées GPS. Deux défauts volontaires (rotation désactivée, écriture publique anticipée) sont détectés par les tests.
-- `PHOTO_POSTS_ENABLED` reste fermé jusqu'à l'étape 2d.
+- `PHOTO_POSTS_ENABLED` est resté fermé jusqu’à l’étape 2d.
 
+
+## Module « Publier », étape 2d : photos réservées aux clients qui les affichent (ADR-0020)
+
+- feed, search, social et notification ne renvoient une publication photo qu'aux clients qui envoient `Poro-Capabilities: photo-posts` : fils (Pour toi, Abonnements, Tendances, Tendances publiques), recherche (`videos`, `hashtags`, suggestions), j'aime d'un compte, notifications et compteur non lus.
+- Caches, sessions « Pour toi » et curseurs cloisonnés par capacité : un curseur obtenu avec photos est refusé sans l'en-tête (400 `invalid_cursor`). Les curseurs vidéo existants restent valides.
+- Migrations additives : feed `000003`, social `000004`, search `000004`, notification `20261025120000_photo_posts`.
+- Notifications : libellés propres aux photos ; un j'aime traité avant le `ready` de sa photo est rattrapé au `ready`.
+- `PHOTO_POSTS_ENABLED` passe à `true` par défaut ; `false` referme les routes de création.
+- Corrigé au passage : deux descriptions YAML coupées par une virgule (`video.openapi.yaml`, `auth.openapi.yaml`), qui ajoutaient une clé parasite au contrat.

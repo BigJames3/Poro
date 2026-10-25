@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   Param,
   Patch,
@@ -22,6 +23,7 @@ import {
   type NotificationPage,
   type PreferencesView,
 } from './notification.dto';
+import { CAPABILITIES_HEADER, CAPABILITY_PHOTO_POSTS, hasCapability } from '../common/capabilities';
 import { NotificationsService } from './notifications.service';
 
 @Controller('api/v1/notifications')
@@ -32,13 +34,25 @@ export class NotificationsController {
   list(
     @CurrentUser() user: AuthUser,
     @Query() query: ListNotificationsDto,
+    @Headers(CAPABILITIES_HEADER) capabilities?: string,
   ): Promise<NotificationPage> {
-    return this.notifications.list(user.userId, query.cursor, query.limit);
+    return this.notifications.list(
+      user.userId,
+      query.cursor,
+      query.limit,
+      hasCapability(capabilities, CAPABILITY_PHOTO_POSTS),
+    );
   }
 
   @Get('unread-count')
-  unreadCount(@CurrentUser() user: AuthUser): Promise<{ count: number }> {
-    return this.notifications.unreadCount(user.userId);
+  unreadCount(
+    @CurrentUser() user: AuthUser,
+    @Headers(CAPABILITIES_HEADER) capabilities?: string,
+  ): Promise<{ count: number }> {
+    return this.notifications.unreadCount(
+      user.userId,
+      hasCapability(capabilities, CAPABILITY_PHOTO_POSTS),
+    );
   }
 
   @Post('read-all')

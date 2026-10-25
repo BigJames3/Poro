@@ -104,7 +104,7 @@ func TestEventsOverKafkaReachTheFeeds(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		expireCache()
-		p, err := svc.Following(ctx, fan, "", 10)
+		p, err := svc.Following(ctx, fan, false, "", 10)
 		return err == nil && len(p.Items) == 1 && p.Items[0].VideoID == video.String()
 	}, 60*time.Second, 250*time.Millisecond, "the follower's feed shows the new video")
 
@@ -113,7 +113,7 @@ func TestEventsOverKafkaReachTheFeeds(t *testing.T) {
 	})
 	require.Eventually(t, func() bool {
 		expireCache()
-		p, err := svc.Trending(ctx, "", 30)
+		p, err := svc.Trending(ctx, false, "", 30)
 		if err != nil {
 			return false
 		}

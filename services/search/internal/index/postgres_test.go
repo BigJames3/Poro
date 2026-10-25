@@ -45,12 +45,12 @@ func TestHashtagsPrefixTyposAndWildcards(t *testing.T) {
 	seedVideo(t, "b", "coupé_décalé"+suffix, "coupe"+suffix)
 	seedVideo(t, "c", "coupeXdecale"+suffix)
 
-	page, err := idx.Hashtags(ctx, "#coupe_decale"+suffix, 0, 10)
+	page, err := idx.Hashtags(ctx, "#coupe_decale"+suffix, false, 0, 10)
 	require.NoError(t, err)
 	require.Equal(t, "coupé_décalé"+suffix, page.Items[0].Tag, "accents are folded and # is ignored")
 	require.EqualValues(t, 2, page.Items[0].VideosCount)
 
-	sug, err := idx.Suggest(ctx, "#coupe_", 50)
+	sug, err := idx.Suggest(ctx, "#coupe_", false, 50)
 	require.NoError(t, err)
 	tags := map[string]bool{}
 	for _, h := range sug.Hashtags {
@@ -68,13 +68,13 @@ func TestUserSuggestionsAndPaging(t *testing.T) {
 	small := seedUser(t, base+"_a", 1)
 	big := seedUser(t, base+"_b", 100)
 
-	sug, err := idx.Suggest(ctx, "@"+base, 5)
+	sug, err := idx.Suggest(ctx, "@"+base, false, 5)
 	require.NoError(t, err)
 	require.Len(t, sug.Users, 2)
 	require.Equal(t, big, sug.Users[0].UserID, "more followers first")
 	require.Equal(t, small, sug.Users[1].UserID)
 
-	empty, err := idx.Suggest(ctx, " @# ", 5)
+	empty, err := idx.Suggest(ctx, " @# ", false, 5)
 	require.NoError(t, err)
 	require.Empty(t, empty.Users)
 	require.Empty(t, empty.Hashtags)
@@ -83,11 +83,11 @@ func TestUserSuggestionsAndPaging(t *testing.T) {
 	for i := range 5 {
 		seedVideo(t, fmt.Sprintf("%s %d", word, i))
 	}
-	first, err := idx.Videos(ctx, word, 0, 3)
+	first, err := idx.Videos(ctx, word, false, 0, 3)
 	require.NoError(t, err)
 	require.Len(t, first.Items, 3)
 	require.True(t, first.More)
-	second, err := idx.Videos(ctx, word, 3, 3)
+	second, err := idx.Videos(ctx, word, false, 3, 3)
 	require.NoError(t, err)
 	require.Len(t, second.Items, 2)
 	require.False(t, second.More)
@@ -97,7 +97,7 @@ func TestUserSuggestionsAndPaging(t *testing.T) {
 		}
 	}
 
-	none, err := idx.Videos(ctx, "le la les", 0, 3)
+	none, err := idx.Videos(ctx, "le la les", false, 0, 3)
 	require.NoError(t, err, "a query of stop words is not an error")
 	require.NotNil(t, none.Items)
 }
@@ -107,12 +107,12 @@ func TestCancelledQueriesFail(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	idx := index.NewPostgres(testdb.Pool)
-	_, err := idx.Videos(ctx, "x", 0, 1)
+	_, err := idx.Videos(ctx, "x", false, 0, 1)
 	require.Error(t, err)
 	_, err = idx.Users(ctx, "x", 0, 1)
 	require.Error(t, err)
-	_, err = idx.Hashtags(ctx, "x", 0, 1)
+	_, err = idx.Hashtags(ctx, "x", false, 0, 1)
 	require.Error(t, err)
-	_, err = idx.Suggest(ctx, "x", 1)
+	_, err = idx.Suggest(ctx, "x", false, 1)
 	require.Error(t, err)
 }

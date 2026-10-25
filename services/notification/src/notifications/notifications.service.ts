@@ -37,16 +37,22 @@ function preferencesView(prefs: Preferences): PreferencesView {
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Newest activity first. A group that gains an actor moves to the top. */
+  /**
+   * Newest activity first. A group that gains an actor moves to the top.
+   * Notifications about photo posts are listed only to a client that declared
+   * photo posts (ADR-0020); they stay stored for the others.
+   */
   async list(
     userId: string,
     cursor?: string,
     limit = DEFAULT_PAGE_SIZE,
+    photoPosts = false,
   ): Promise<NotificationPage> {
     const after = cursor === undefined ? undefined : decodeCursor(cursor);
     const rows = await this.prisma.notification.findMany({
       where: {
         userId,
+        ...(photoPosts ? {} : { photoPost: false }),
         ...(after === undefined
           ? {}
           : {
@@ -106,10 +112,11 @@ export class NotificationsService {
     };
   }
 
-  async unreadCount(userId: string): Promise<{ count: number }> {
+  /** Counted on the same rule as list: photo posts only with the capability. */
+  async unreadCount(userId: string, photoPosts = false): Promise<{ count: number }> {
     return {
       count: await this.prisma.notification.count({
-        where: { userId, readAt: null },
+        where: { userId, readAt: null, ...(photoPosts ? {} : { photoPost: false }) },
       }),
     };
   }

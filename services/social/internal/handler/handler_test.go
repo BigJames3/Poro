@@ -133,7 +133,7 @@ func seed(t *testing.T) (video, owner uuid.UUID) {
 	ctx := context.Background()
 	owner, video = uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 	require.NoError(t, repository.EnsureUser(ctx, testdb.Pool, owner))
-	require.NoError(t, repository.MarkVideoReady(ctx, testdb.Pool, video, owner, time.Now()))
+	require.NoError(t, repository.MarkVideoReady(ctx, testdb.Pool, video, owner, "video", time.Now()))
 	return video, owner
 }
 
