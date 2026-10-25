@@ -62,7 +62,17 @@ func TestS3AgainstSeaweedFS(t *testing.T) {
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode, "the presigned part URL is accepted")
-	require.NoError(t, store.CompleteMultipart(ctx, source, uploadID, []CompletedPart{{Number: 1, ETag: resp.Header.Get("ETag")}}))
+	// A resumed upload learns from storage which parts arrived, and with which
+	// ETag: CompleteMultipart must accept that ETag as listed.
+	listed, err := store.ListParts(ctx, source, uploadID)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	require.Equal(t, int32(1), listed[0].Number)
+	require.Equal(t, int64(len(body)), listed[0].Size)
+	require.NotEmpty(t, listed[0].ETag)
+	require.NoError(t, store.CompleteMultipart(ctx, source, uploadID, []CompletedPart{{Number: 1, ETag: listed[0].ETag}}))
+	_, err = store.ListParts(ctx, source, "unknown-upload")
+	require.ErrorIs(t, err, ErrMissing, "an unknown upload reads as missing")
 
 	obj, err := store.HeadSource(ctx, source)
 	require.NoError(t, err)

@@ -47,8 +47,8 @@ paths:
         part (8 MiB). Each URL signs its part's exact length: `part_size` bytes,
         the rest of `size_bytes` for the last part; storage refuses any other
         length with 403. Upload URLs expire after 1 h; an upload left in
-        `uploading` for 24 h is aborted and deleted. Max declared size 256 MiB. Title 1–100 runes, description
-        0–500 runes. Control and format characters (Unicode Cc, Cf) are refused
+        `uploading` for 24 h is aborted and deleted. Max declared size 256 MiB. Title 0–100 runes (optional:
+        readers show the description when it is empty), description 0–500 runes. Control and format characters (Unicode Cc, Cf) are refused
         with `title_invalid` / `description_invalid`, except the zero-width
         joiner U+200D between two emoji, so composed emoji are kept.
       requestBody:
@@ -58,7 +58,7 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [title, content_type, size_bytes]
+              required: [content_type, size_bytes]
               properties:
                 title: { type: string, maxLength: 100, example: "Match du dimanche" }
                 description: { type: string, maxLength: 500 }
@@ -139,6 +139,36 @@ paths:
         "422":
           description: "`invalid_media`"
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+  /api/v1/videos/uploads/{id}/resume:
+    post:
+      tags: [videos]
+      summary: Resume an interrupted multipart upload
+      description: |
+        For the owner of a video still `uploading`. Storage is the source of
+        truth: `uploaded_parts` lists the parts it already holds at their exact
+        length, with the ETag to send to complete; `parts` holds a fresh
+        presigned URL (1 h) for every other part. A part of the wrong length is
+        signed again, and re-sending it replaces it. Has its own rate limit.
+      parameters:
+        - $ref: "#/components/parameters/VideoID"
+      responses:
+        "200":
+          description: What is left to upload
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/ResumeUpload" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: "`conflict`: the upload is no longer open (completed, aborted or expired); start over"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/v1/videos/photo-uploads:
     post:
       tags: [videos]
@@ -286,6 +316,40 @@ paths:
                     properties:
                       data: { $ref: "#/components/schemas/VideoList" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/v1/videos/users/{userId}:
+    get:
+      tags: [videos]
+      security: []
+      summary: List a user's public publications
+      description: |
+        For a public profile: ready publications not removed by moderation,
+        newest first. Photo posts are listed only with `Poro-Capabilities: photo-posts`.
+        An unknown user has an empty list.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/Capabilities"
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: Page
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Envelope"
+                  - type: object
+                    properties:
+                      data: { $ref: "#/components/schemas/VideoList" }
+        "400": { $ref: "#/components/responses/InvalidRequest" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/v1/videos/{id}:
     get:
       tags: [videos]
@@ -385,6 +449,32 @@ components:
             properties:
               part_number: { type: integer }
               url: { type: string, format: uri }
+    ResumeUpload:
+      type: object
+      required: [video_id, upload_id, key, part_size, uploaded_parts, parts]
+      properties:
+        video_id: { type: string, format: uuid }
+        upload_id: { type: string }
+        key: { type: string }
+        part_size: { type: integer, example: 8388608 }
+        uploaded_parts:
+          type: array
+          description: Parts storage holds; send them to complete as listed
+          items:
+            type: object
+            required: [part_number, etag]
+            properties:
+              part_number: { type: integer }
+              etag: { type: string }
+        parts:
+          type: array
+          description: Parts still to upload, with fresh URLs
+          items:
+            type: object
+            required: [part_number, url]
+            properties:
+              part_number: { type: integer }
+              url: { type: string, format: uri }
     InitPhotoUpload:
       type: object
       required: [video_id, images, expires_in]
@@ -422,7 +512,7 @@ components:
           type: string
           enum: [video, photo]
           description: "`photo`: no `hls_url`, `duration_ms` or `renditions`; `images` holds the pictures in order."
-        title: { type: string, description: Empty for a photo post }
+        title: { type: string, description: "May be empty: a photo post has none, a video's is optional" }
         description: { type: string }
         status:
           type: string

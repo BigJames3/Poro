@@ -58,6 +58,23 @@ func (h *Videos) Complete(c *fiber.Ctx) error {
 	return httpx.WriteData(c, fiber.StatusOK, out)
 }
 
+// Resume serves POST /api/v1/videos/uploads/:id/resume.
+func (h *Videos) Resume(c *fiber.Ctx) error {
+	user, err := h.requireUser(c)
+	if err != nil {
+		return err
+	}
+	id, err := parseID(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.ResumeUpload(c.UserContext(), user, id)
+	if err != nil {
+		return err
+	}
+	return httpx.WriteData(c, fiber.StatusOK, out)
+}
+
 // InitPhoto serves POST /api/v1/videos/photo-uploads.
 func (h *Videos) InitPhoto(c *fiber.Ctx) error {
 	user, err := h.requireUser(c)
@@ -130,6 +147,20 @@ func (h *Videos) List(c *fiber.Ctx) error {
 	}
 	limit := c.QueryInt("limit", 0)
 	out, err := h.svc.List(c.UserContext(), user, c.Query("cursor"), limit, PhotoPosts(c))
+	if err != nil {
+		return err
+	}
+	return httpx.WriteData(c, fiber.StatusOK, out)
+}
+
+// ListByUser serves GET /api/v1/videos/users/:userId: a user's public
+// publications, for their profile. Signing in is not required.
+func (h *Videos) ListByUser(c *fiber.Ctx) error {
+	user, err := uuid.Parse(c.Params("userId"))
+	if err != nil {
+		return httpx.NewAPIError(fiber.StatusBadRequest, "invalid_request", "invalid user id")
+	}
+	out, err := h.svc.ListPublic(c.UserContext(), user, c.Query("cursor"), c.QueryInt("limit", 0), PhotoPosts(c))
 	if err != nil {
 		return err
 	}

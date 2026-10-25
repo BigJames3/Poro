@@ -12,8 +12,11 @@ func TestTitle(t *testing.T) {
 	require.Equal(t, "clip", got)
 	require.Empty(t, code)
 
-	_, code = Title("")
-	require.Equal(t, "title_invalid", code)
+	for _, blank := range []string{"", "   "} {
+		got, code = Title(blank)
+		require.Empty(t, code, "a title is optional")
+		require.Empty(t, got)
+	}
 	_, code = Title("a\nb")
 	require.Equal(t, "title_invalid", code)
 	_, code = Title("a\u202eb")

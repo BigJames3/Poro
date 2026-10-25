@@ -8,10 +8,11 @@ import (
 	"github.com/poro/video/internal/model"
 )
 
-// Title returns a trimmed caption or why it is unusable.
+// Title returns a trimmed title or why it is unusable. Empty is allowed:
+// readers then show the description.
 func Title(raw string) (string, string) {
 	s := strings.TrimSpace(raw)
-	if s == "" || utf8.RuneCountInString(s) > model.MaxTitleRunes {
+	if utf8.RuneCountInString(s) > model.MaxTitleRunes {
 		return "", "title_invalid"
 	}
 	if hasForbidden(s, false) {

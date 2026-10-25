@@ -12,6 +12,13 @@ type CompletedPart struct {
 	ETag   string
 }
 
+// UploadedPart is a part storage already holds for an open multipart upload.
+type UploadedPart struct {
+	Number int32
+	ETag   string
+	Size   int64
+}
+
 // Object holds HeadObject metadata.
 type Object struct {
 	Size        int64
@@ -34,6 +41,11 @@ type Storage interface {
 	// any other size, so a client cannot store more than it declared.
 	PresignPart(ctx context.Context, key, uploadID string, part int32, size int64) (url string, err error)
 	CompleteMultipart(ctx context.Context, key, uploadID string, parts []CompletedPart) error
+	// ListParts returns the parts already uploaded, by part number. It
+	// returns ErrMissing for an upload storage does not know; SeaweedFS
+	// lists an aborted or completed upload as empty instead, so the video
+	// row, not this call, says whether an upload is still open.
+	ListParts(ctx context.Context, key, uploadID string) ([]UploadedPart, error)
 	// PresignPut signs a single-object PUT of a photo post image. The URL
 	// signs the exact length and Content-Type: storage refuses any other body
 	// or type, so a client cannot store more than it declared. headers are

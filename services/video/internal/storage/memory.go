@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -90,6 +91,21 @@ func (m *Memory) CompleteMultipart(_ context.Context, key, uploadID string, part
 	m.sources[key] = buf.Bytes()
 	delete(m.uploads, uploadID)
 	return nil
+}
+
+func (m *Memory) ListParts(_ context.Context, _, uploadID string) ([]UploadedPart, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.uploads[uploadID]
+	if !ok {
+		return nil, ErrMissing
+	}
+	out := make([]UploadedPart, 0, len(u.parts))
+	for n, body := range u.parts {
+		out = append(out, UploadedPart{Number: n, ETag: fmt.Sprintf("etag-%d", n), Size: int64(len(body))})
+	}
+	slices.SortFunc(out, func(a, b UploadedPart) int { return int(a.Number - b.Number) })
+	return out, nil
 }
 
 func (m *Memory) AbortMultipart(_ context.Context, _, uploadID string) error {

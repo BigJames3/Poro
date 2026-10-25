@@ -15,6 +15,7 @@ import (
 const (
 	initLimit     = 10
 	completeLimit = 20
+	resumeLimit   = 20
 	generalLimit  = 60
 )
 
@@ -49,6 +50,12 @@ func InitLimit(l *ratelimit.Limiter) fiber.Handler {
 // CompleteLimit covers upload completion, per account.
 func CompleteLimit(l *ratelimit.Limiter) fiber.Handler {
 	return l.Handler("complete", completeLimit, ratelimit.ByUserOrIP)
+}
+
+// ResumeLimit covers resuming an upload, per account. It has its own
+// counter, so a client on a flaky network does not use up its inits.
+func ResumeLimit(l *ratelimit.Limiter) fiber.Handler {
+	return l.Handler("resume", resumeLimit, ratelimit.ByUserOrIP)
 }
 
 // GeneralLimit covers every video route, per account once a token was
