@@ -1,25 +1,20 @@
 package com.poro.app.ui.common
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.core.network.ApiResult
 import com.poro.app.ui.auth.ErrorMessage
-import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.toErrorMessage
+import com.poro.app.ui.theme.PoroSpacing
 
 /** Contenu chargé depuis l'API : en cours, disponible, ou en échec avec un message à afficher. */
 sealed interface Loadable<out T> {
@@ -53,13 +48,8 @@ fun <T> LoadableContent(
             val loading = stringResource(R.string.loading)
             CircularProgressIndicator(modifier = Modifier.semantics { contentDescription = loading })
         }
-        is Loadable.Failed -> Column(
-            modifier = modifier.fillMaxSize().padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            ErrorMessageText(state.error)
-            OutlinedButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
+        is Loadable.Failed -> Box(modifier.fillMaxSize().padding(PoroSpacing.XL), contentAlignment = Alignment.Center) {
+            ErrorRetry(state.error, onRetry)
         }
         is Loadable.Loaded -> content(state.value)
     }

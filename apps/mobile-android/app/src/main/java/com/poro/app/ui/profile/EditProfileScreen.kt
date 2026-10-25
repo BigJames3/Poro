@@ -32,6 +32,7 @@ import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.theme.PoroSpacing
 
 @Composable
 fun EditProfileScreen(
@@ -54,10 +55,10 @@ fun EditProfileScreen(
             return@Scaffold
         }
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+            verticalArrangement = Arrangement.spacedBy(PoroSpacing.L),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(PoroSpacing.L)) {
                 Avatar(state.avatarUrl, state.displayName.ifBlank { state.username }, size = 80.dp)
                 Column {
                     if (state.uploadingAvatar) {

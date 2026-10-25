@@ -33,6 +33,7 @@ import com.poro.app.data.moderation.ReportTargetType
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.quantityString
+import com.poro.app.ui.theme.PoroSpacing
 
 @StringRes
 fun ReportReason.label(): Int = when (this) {
@@ -65,8 +66,8 @@ fun ReportSheet(
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
-            Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.verticalScroll(rememberScrollState()).padding(horizontal = PoroSpacing.L).padding(bottom = PoroSpacing.XL),
+            verticalArrangement = Arrangement.spacedBy(PoroSpacing.S),
         ) {
             Text(stringResource(type.title()), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
             Text(stringResource(R.string.report_intro), style = MaterialTheme.typography.bodyMedium)
@@ -79,7 +80,7 @@ fun ReportSheet(
                     ) {
                         // L'appui est géré par la ligne entière, pas seulement par le bouton.
                         RadioButton(selected = state.reason == reason, onClick = null)
-                        Text(stringResource(reason.label()), modifier = Modifier.padding(start = 12.dp))
+                        Text(stringResource(reason.label()), modifier = Modifier.padding(start = PoroSpacing.M))
                     }
                 }
             }

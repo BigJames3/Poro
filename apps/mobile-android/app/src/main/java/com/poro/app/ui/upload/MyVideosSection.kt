@@ -27,15 +27,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.poro.app.R
 import com.poro.app.data.video.VideoDto
-import com.poro.app.ui.auth.ErrorMessageText
+import com.poro.app.ui.common.EmptyState
+import com.poro.app.ui.common.ErrorRetry
+import com.poro.app.ui.common.SectionHeader
 import com.poro.app.ui.feed.videoStatusText
+import com.poro.app.ui.theme.PoroSpacing
 
 /**
  * Grille de ses vidéos (3 par ligne), dans le défilement du profil. Toucher une vidéo prête
@@ -50,17 +51,13 @@ fun MyVideosSection(
     onLoadMore: () -> Unit,
 ) {
     var toDelete by remember { mutableStateOf<VideoDto?>(null) }
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            stringResource(R.string.my_videos_title),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.semantics { heading() },
-        )
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(PoroSpacing.XS)) {
+        SectionHeader(stringResource(R.string.my_videos_title))
         if (state.started && !state.loading && state.videos.isEmpty() && state.error == null) {
-            Text(stringResource(R.string.my_videos_empty), style = MaterialTheme.typography.bodyMedium)
+            EmptyState(stringResource(R.string.my_videos_empty))
         }
         state.videos.chunked(COLUMNS).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(PoroSpacing.XS)) {
                 row.forEach { video ->
                     val name = video.title.ifBlank { if (video.isPhoto) stringResource(R.string.post_photo_label) else "" }
                     val label = name + if (!video.isReady) ", " + stringResource(videoStatusText(video)) else ""
@@ -82,7 +79,7 @@ fun MyVideosSection(
                                 stringResource(R.string.post_photo_label),
                                 color = Color.White,
                                 style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.align(Alignment.TopEnd).background(Color.Black.copy(alpha = 0.6f)).padding(4.dp),
+                                modifier = Modifier.align(Alignment.TopEnd).background(Color.Black.copy(alpha = 0.6f)).padding(PoroSpacing.XS),
                             )
                         }
                         if (!video.isReady) {
@@ -91,7 +88,7 @@ fun MyVideosSection(
                                 color = Color.White,
                                 style = MaterialTheme.typography.labelSmall,
                                 textAlign = TextAlign.Center,
-                                modifier = Modifier.align(Alignment.Center).background(Color.Black.copy(alpha = 0.6f)).padding(4.dp),
+                                modifier = Modifier.align(Alignment.Center).background(Color.Black.copy(alpha = 0.6f)).padding(PoroSpacing.XS),
                             )
                         }
                     }
@@ -99,7 +96,7 @@ fun MyVideosSection(
                 repeat(COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
-        state.error?.let { ErrorMessageText(it) }
+        state.error?.let { ErrorRetry(it, onLoadMore, Modifier.fillMaxWidth()) }
         if (state.canLoadMore) TextButton(onClick = onLoadMore) { Text(stringResource(R.string.my_videos_more)) }
     }
     toDelete?.let { video ->

@@ -36,7 +36,9 @@ import com.poro.app.core.format.Formats
 import com.poro.app.data.social.CommentDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
+import com.poro.app.ui.common.EmptyState
 import com.poro.app.ui.common.displayNameOf
+import com.poro.app.ui.theme.PoroSpacing
 
 /** Actions de la feuille des commentaires, transmises par l'écran qui l'ouvre. */
 class CommentsActions(
@@ -63,11 +65,11 @@ fun CommentsSheet(state: CommentsUiState, actions: CommentsActions, onDismiss: (
             Text(
                 stringResource(R.string.comments_title),
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).semantics { heading() },
+                modifier = Modifier.padding(horizontal = PoroSpacing.L, vertical = PoroSpacing.S).semantics { heading() },
             )
             LazyColumn(Modifier.weight(1f)) {
                 if (state.endReached && state.comments.isEmpty()) {
-                    item { Text(stringResource(R.string.comments_empty), modifier = Modifier.padding(16.dp)) }
+                    item { EmptyState(stringResource(R.string.comments_empty)) }
                 }
                 items(state.comments, key = { it.id }) { comment ->
                     CommentRow(comment, state, actions)
@@ -100,18 +102,18 @@ fun CommentsSheet(state: CommentsUiState, actions: CommentsActions, onDismiss: (
                     item {
                         // Dernier élément affiché : la page suivante se charge d'elle-même.
                         LaunchedEffect(state.comments.size) { actions.onLoadMore() }
-                        CircularProgressIndicator(Modifier.padding(16.dp))
+                        CircularProgressIndicator(Modifier.padding(PoroSpacing.L))
                     }
                 }
             }
-            state.error?.let { ErrorMessageText(it, Modifier.padding(horizontal = 16.dp)) }
+            state.error?.let { ErrorMessageText(it, Modifier.padding(horizontal = PoroSpacing.L)) }
             state.replyingTo?.let {
-                Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.padding(horizontal = PoroSpacing.L), verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.comments_replying), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                     TextButton(onClick = { actions.onReplyTo(null) }) { Text(stringResource(R.string.action_cancel)) }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(PoroSpacing.S), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = state.draft,
                     onValueChange = actions.onDraftChange,
@@ -145,7 +147,7 @@ private fun CommentRow(
         profile != null && (profile.displayName != null || profile.username != null) -> displayNameOf(profile.displayName, profile.username)
         else -> stringResource(R.string.member_fallback)
     }
-    Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(modifier.fillMaxWidth().padding(horizontal = PoroSpacing.L, vertical = PoroSpacing.S), horizontalArrangement = Arrangement.spacedBy(PoroSpacing.M)) {
         Avatar(url = profile?.avatarUrl, name = author, size = 32.dp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(

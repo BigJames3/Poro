@@ -36,6 +36,7 @@ import com.poro.app.core.legal.LegalBlock
 import com.poro.app.core.legal.LegalDocument
 import com.poro.app.core.legal.LegalDocumentId
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.theme.PoroSpacing
 
 @StringRes
 fun LegalDocumentId.titleRes(): Int = when (this) {
@@ -77,7 +78,7 @@ fun LegalDocumentScreen(id: LegalDocumentId, state: LegalDocumentState, onBack: 
             LegalDocumentState.Loading ->
                 Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             LegalDocumentState.Unavailable ->
-                Text(stringResource(R.string.legal_unavailable), Modifier.padding(padding).padding(24.dp))
+                Text(stringResource(R.string.legal_unavailable), Modifier.padding(padding).padding(PoroSpacing.XL))
             is LegalDocumentState.Ready -> LegalDocumentContent(state.document, Modifier.padding(padding))
         }
     }
@@ -85,7 +86,7 @@ fun LegalDocumentScreen(id: LegalDocumentId, state: LegalDocumentState, onBack: 
 
 @Composable
 private fun LegalDocumentContent(document: LegalDocument, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(PoroSpacing.XL), verticalArrangement = Arrangement.spacedBy(PoroSpacing.M)) {
         // Texte de travail : le bandeau ne peut pas être masqué.
         if (!document.validated) DraftBanner()
         Text(document.title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
@@ -99,7 +100,7 @@ private fun LegalDocumentContent(document: LegalDocument, modifier: Modifier = M
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         SelectionContainer {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(PoroSpacing.M)) {
                 document.blocks.forEach { block ->
                     when (block) {
                         is LegalBlock.Heading ->
@@ -110,7 +111,7 @@ private fun LegalDocumentContent(document: LegalDocument, modifier: Modifier = M
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.fillMaxWidth()
                                 .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                                .padding(12.dp),
+                                .padding(PoroSpacing.M),
                         )
                     }
                 }
@@ -127,7 +128,7 @@ private fun DraftBanner() {
         color = MaterialTheme.colorScheme.onErrorContainer,
         modifier = Modifier.fillMaxWidth()
             .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(8.dp))
-            .padding(12.dp),
+            .padding(PoroSpacing.M),
     )
 }
 

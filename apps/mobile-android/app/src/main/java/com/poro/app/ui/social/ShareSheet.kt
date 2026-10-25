@@ -14,21 +14,21 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.clickable
 import com.poro.app.R
 import com.poro.app.data.social.ShareChannel
+import com.poro.app.ui.theme.PoroSpacing
 
 /** WhatsApp en premier (premier canal de partage dans les pays de lancement), puis les autres. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareSheet(onChoose: (ShareChannel) -> Unit, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(bottom = 24.dp)) {
+        Column(Modifier.padding(bottom = PoroSpacing.XL)) {
             Text(
                 stringResource(R.string.share_title),
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(16.dp).semantics { heading() },
+                modifier = Modifier.padding(PoroSpacing.L).semantics { heading() },
             )
             ShareOption(stringResource(R.string.share_whatsapp)) { onChoose(ShareChannel.WhatsApp) }
             ShareOption(stringResource(R.string.share_other)) { onChoose(ShareChannel.Other) }

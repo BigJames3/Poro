@@ -59,7 +59,8 @@ class MyVideosViewModel(private val videos: VideoRepository) : ViewModel() {
 
     fun loadMore() {
         val current = _state.value
-        if (current.loading || (current.started && current.nextCursor == null)) return
+        // Après une erreur, la même page est redemandée (la première aussi).
+        if (current.loading || (current.started && current.nextCursor == null && current.error == null)) return
         _state.update { it.copy(loading = true, started = true, error = null) }
         viewModelScope.launch {
             when (val result = videos.mine(current.nextCursor)) {

@@ -31,14 +31,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.core.format.Formats
 import com.poro.app.data.order.OrderDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.common.EmptyState
+import com.poro.app.ui.common.ErrorRetry
 import com.poro.app.ui.common.LoadableContent
+import com.poro.app.ui.theme.PoroSpacing
 
 @StringRes
 fun orderStatusLabel(status: String): Int = when (status) {
@@ -101,9 +103,9 @@ fun OrdersScreen(asSeller: Boolean, state: OrdersUiState, onBack: () -> Unit, on
                 )
                 HorizontalDivider()
             }
-            if (state.isEmpty) item { Text(stringResource(if (asSeller) R.string.seller_orders_empty else R.string.orders_empty), Modifier.padding(24.dp)) }
-            state.error?.let { item { ErrorMessageText(it, Modifier.padding(24.dp)) } }
-            if (state.loading) item { CircularProgressIndicator(Modifier.padding(24.dp)) }
+            if (state.isEmpty) item { EmptyState(stringResource(if (asSeller) R.string.seller_orders_empty else R.string.orders_empty)) }
+            state.error?.let { item { ErrorRetry(it, onLoadMore, Modifier.fillMaxWidth().padding(PoroSpacing.XL)) } }
+            if (state.loading) item { CircularProgressIndicator(Modifier.padding(PoroSpacing.XL)) }
             if (state.canLoadMore) item { LaunchedEffect(state.orders.size) { onLoadMore() } }
         }
     }
@@ -124,8 +126,8 @@ fun OrderScreen(
     Scaffold(topBar = { BackTopBar(stringResource(R.string.order_title), onBack) }) { padding ->
         LoadableContent(state.order, onRetry, Modifier.padding(padding)) { order ->
             Column(
-                Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+                verticalArrangement = Arrangement.spacedBy(PoroSpacing.M),
             ) {
                 Text(order.shop.name, style = MaterialTheme.typography.titleLarge)
                 Text(stringResource(orderStatusLabel(order.status)), style = MaterialTheme.typography.titleMedium)

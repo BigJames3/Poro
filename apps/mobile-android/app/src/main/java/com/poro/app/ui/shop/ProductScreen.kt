@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.poro.app.R
 import com.poro.app.core.format.Formats
@@ -31,6 +30,7 @@ import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.common.BackTopBar
 import com.poro.app.ui.common.LoadableContent
+import com.poro.app.ui.theme.PoroSpacing
 
 @Composable
 fun ProductScreen(
@@ -47,7 +47,7 @@ fun ProductScreen(
             val selected = product.variants.firstOrNull { it.variantId == state.variantId }
             Column(
                 Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(PoroSpacing.M),
             ) {
                 if (product.images.isNotEmpty()) {
                     val pager = rememberPagerState(pageCount = { product.images.size })
@@ -60,14 +60,14 @@ fun ProductScreen(
                         )
                     }
                 }
-                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.padding(horizontal = PoroSpacing.L), verticalArrangement = Arrangement.spacedBy(PoroSpacing.M)) {
                     Text(product.title, style = MaterialTheme.typography.headlineSmall)
                     selected?.let { Text(Formats.money(it.price, product.currency), style = MaterialTheme.typography.titleLarge) }
                     TextButton(onClick = { onOpenShop(product.shop.handle) }) {
                         Text(stringResource(R.string.product_sold_by, product.shop.name))
                     }
                     if (product.variants.size > 1) {
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
                             product.variants.forEach { variant ->
                                 FilterChip(
                                     selected = variant.variantId == state.variantId,
@@ -103,13 +103,13 @@ fun ProductScreen(
 /** − quantité + , de 1 à [max] ; TalkBack lit « Quantité : 2 ». */
 @Composable
 fun QuantityStepper(quantity: Int, onChange: (Int) -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, max: Int = 99) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(PoroSpacing.XS)) {
         OutlinedButton(onClick = { onChange(quantity - 1) }, enabled = enabled && quantity > 1) {
-            Text("−", modifier = Modifier.padding(horizontal = 4.dp))
+            Text("−", modifier = Modifier.padding(horizontal = PoroSpacing.XS))
         }
-        Text(stringResource(R.string.quantity, quantity), modifier = Modifier.padding(horizontal = 8.dp))
+        Text(stringResource(R.string.quantity, quantity), modifier = Modifier.padding(horizontal = PoroSpacing.S))
         OutlinedButton(onClick = { onChange(quantity + 1) }, enabled = enabled && quantity < max) {
-            Text("+", modifier = Modifier.padding(horizontal = 4.dp))
+            Text("+", modifier = Modifier.padding(horizontal = PoroSpacing.XS))
         }
     }
 }

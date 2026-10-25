@@ -44,8 +44,10 @@ import com.poro.app.data.search.ShopHit
 import com.poro.app.data.search.UserHit
 import com.poro.app.data.search.VideoHit
 import com.poro.app.ui.common.Avatar
+import com.poro.app.ui.common.EmptyState
 import com.poro.app.ui.common.ErrorRetry
 import com.poro.app.ui.common.displayNameOf
+import com.poro.app.ui.theme.PoroSpacing
 
 @Composable
 fun SearchScreen(
@@ -76,7 +78,7 @@ fun SearchScreen(
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSubmit(state.query) }),
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(PoroSpacing.L),
         )
         val suggestions = state.suggestions
         if (suggestions.users.isNotEmpty() || suggestions.hashtags.isNotEmpty()) {
@@ -88,7 +90,7 @@ fun SearchScreen(
             return@Column
         }
         if (state.submitted == null) {
-            Text(stringResource(R.string.search_hint), modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.search_hint), modifier = Modifier.padding(PoroSpacing.L), style = MaterialTheme.typography.bodyMedium)
             return@Column
         }
         ScrollableTabRow(selectedTabIndex = state.tab.ordinal, edgePadding = 16.dp) {
@@ -129,22 +131,22 @@ private fun <T> LazyListScope.results(
     row: @Composable (T) -> Unit,
 ) {
     items(results.items) { row(it) }
-    if (results.isEmpty) item { Text(stringResource(R.string.search_no_results), modifier = Modifier.padding(16.dp)) }
-    results.error?.let { item { ErrorRetry(it, onRetry, Modifier.fillMaxWidth().padding(16.dp)) } }
-    if (results.loading) item { CircularProgressIndicator(Modifier.padding(16.dp)) }
+    if (results.isEmpty) item { EmptyState(stringResource(R.string.search_no_results), icon = Icons.Filled.Search) }
+    results.error?.let { item { ErrorRetry(it, onRetry, Modifier.fillMaxWidth().padding(PoroSpacing.L)) } }
+    if (results.loading) item { CircularProgressIndicator(Modifier.padding(PoroSpacing.L)) }
     if (results.canLoadMore) item { LaunchedEffect(results.items.size) { onLoadMore() } }
 }
 
 @Composable
 private fun VideoRow(video: VideoHit, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = PoroSpacing.L, vertical = PoroSpacing.S),
+        horizontalArrangement = Arrangement.spacedBy(PoroSpacing.M),
     ) {
         Box(Modifier.size(width = 72.dp, height = 96.dp)) {
             AsyncImage(video.thumbnailUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(PoroSpacing.XS)) {
             // Une publication photo n'a pas de titre : on l'annonce comme telle.
             Text(
                 video.title.ifBlank { if (video.isPhoto) stringResource(R.string.post_photo_label) else "" },
@@ -187,13 +189,13 @@ private fun HashtagRow(tag: HashtagHit, onClick: () -> Unit) {
 @Composable
 private fun ProductRow(product: ProductHit, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = PoroSpacing.L, vertical = PoroSpacing.S),
+        horizontalArrangement = Arrangement.spacedBy(PoroSpacing.M),
     ) {
         Box(Modifier.size(72.dp)) {
             AsyncImage(product.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(PoroSpacing.XS)) {
             Text(product.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             product.minPrice?.let {
                 Text(stringResource(R.string.search_price_from, Formats.money(it, product.currency)), style = MaterialTheme.typography.bodyMedium)

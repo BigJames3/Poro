@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +36,9 @@ import com.poro.app.data.order.CartLine
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.common.EmptyState
 import com.poro.app.ui.common.LoadableContent
+import com.poro.app.ui.theme.PoroSpacing
 
 @Composable
 fun CartScreen(
@@ -66,20 +70,20 @@ fun CartScreen(
     Scaffold(topBar = { BackTopBar(stringResource(R.string.cart_title), onBack) }) { padding ->
         LoadableContent(state.cart, onRetry, Modifier.padding(padding)) { cart ->
             if (cart.shops.isEmpty() && cart.unavailable.isEmpty()) {
-                Text(stringResource(R.string.cart_empty), Modifier.padding(padding).padding(24.dp))
+                EmptyState(stringResource(R.string.cart_empty), Modifier.padding(padding), icon = Icons.Outlined.ShoppingCart)
                 return@LoadableContent
             }
-            LazyColumn(Modifier.fillMaxSize().padding(padding), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(Modifier.fillMaxSize().padding(padding), verticalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
                 item(key = "clear") {
                     TextButton(
                         onClick = { confirmClear = true },
                         enabled = "cart" !in state.busy,
-                        modifier = Modifier.padding(horizontal = 8.dp),
+                        modifier = Modifier.padding(horizontal = PoroSpacing.S),
                     ) { Text(stringResource(R.string.cart_clear)) }
                 }
                 cart.shops.forEach { group ->
                     item(key = "shop-${group.shop.shopId}") {
-                        Text(group.shop.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(16.dp).semantics { heading() })
+                        Text(group.shop.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(PoroSpacing.L).semantics { heading() })
                     }
                     items(group.items, key = { it.variantId }) { line ->
                         CartLineRow(line, group.shop.currency, line.variantId in state.busy, onOpenProduct, onQuantityChange, onRemove)
@@ -88,9 +92,9 @@ fun CartScreen(
                         Text(
                             stringResource(R.string.cart_subtotal, Formats.money(group.subtotal, group.shop.currency)),
                             style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.padding(horizontal = 16.dp),
+                            modifier = Modifier.padding(horizontal = PoroSpacing.L),
                         )
-                        HorizontalDivider(Modifier.padding(top = 8.dp))
+                        HorizontalDivider(Modifier.padding(top = PoroSpacing.S))
                     }
                 }
                 if (cart.unavailable.isNotEmpty()) {
@@ -98,7 +102,7 @@ fun CartScreen(
                         Text(
                             stringResource(R.string.cart_unavailable),
                             color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(16.dp).semantics { heading() },
+                            modifier = Modifier.padding(PoroSpacing.L).semantics { heading() },
                         )
                     }
                     items(cart.unavailable, key = { "u-" + it.variantId }) { line ->
@@ -106,7 +110,7 @@ fun CartScreen(
                     }
                 }
                 item(key = "checkout") {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.padding(PoroSpacing.L), verticalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
                         state.error?.let { ErrorMessageText(it) }
                         Text(stringResource(R.string.cart_payment_notice), style = MaterialTheme.typography.bodySmall)
                         SubmitButton(stringResource(R.string.cart_checkout), enabled = state.canCheckout, loading = false, onClick = onCheckout)
@@ -126,9 +130,9 @@ private fun CartLineRow(
     onQuantityChange: (String, Int) -> Unit,
     onRemove: (String) -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = PoroSpacing.L), horizontalArrangement = Arrangement.spacedBy(PoroSpacing.M)) {
         AsyncImage(line.imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(72.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(PoroSpacing.XS)) {
             val title = line.title ?: stringResource(R.string.cart_item_unknown)
             line.productId?.let { id -> TextButton(onClick = { onOpenProduct(id) }) { Text(title) } } ?: Text(title)
             line.variantTitle?.let { Text(it, style = MaterialTheme.typography.bodySmall) }

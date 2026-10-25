@@ -28,13 +28,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.data.order.AddressDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.common.EmptyState
 import com.poro.app.ui.common.LoadableContent
+import com.poro.app.ui.theme.PoroSpacing
 
 @Composable
 fun AddressesScreen(
@@ -71,9 +72,9 @@ fun AddressesScreen(
             return@Scaffold
         }
         LoadableContent(state.list, onRetry, Modifier.padding(padding)) { addresses ->
-            LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(PoroSpacing.XS)) {
                 if (addresses.isEmpty()) {
-                    item { Text(stringResource(R.string.addresses_empty), Modifier.padding(24.dp)) }
+                    item { EmptyState(stringResource(R.string.addresses_empty)) }
                 }
                 items(addresses, key = { it.addressId }) { address ->
                     AddressRow(
@@ -85,7 +86,7 @@ fun AddressesScreen(
                     )
                 }
                 item {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.padding(PoroSpacing.L), verticalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
                         state.error?.let { ErrorMessageText(it) }
                         OutlinedButton(onClick = onAdd, enabled = !state.working, modifier = Modifier.fillMaxWidth()) {
                             Text(stringResource(R.string.addresses_add))
@@ -136,8 +137,8 @@ private fun AddressForm(
     val form = state.form
     // Défile au-dessus du clavier : le bouton Enregistrer reste atteignable sur petit écran.
     Column(
-        modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+        verticalArrangement = Arrangement.spacedBy(PoroSpacing.M),
     ) {
         Text(
             stringResource(if (state.editingId == null) R.string.addresses_add else R.string.addresses_edit),

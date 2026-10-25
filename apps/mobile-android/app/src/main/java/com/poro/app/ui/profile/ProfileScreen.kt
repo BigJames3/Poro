@@ -29,6 +29,7 @@ import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.LoadableContent
 import com.poro.app.ui.common.displayNameOf
+import com.poro.app.ui.theme.PoroSpacing
 import com.poro.app.ui.theme.brandButtonColors
 
 /**
@@ -49,8 +50,8 @@ fun ProfileScreen(
     LoadableContent(state.content, onRetry, modifier) { me ->
         val profile = me.profile
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+            verticalArrangement = Arrangement.spacedBy(PoroSpacing.M),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Avatar(profile.avatarUrl, profile.displayName ?: profile.username, size = 96.dp)
@@ -76,7 +77,7 @@ fun ProfileScreen(
             if (me.needsEmailVerification) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
                     Row(
-                        modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                        modifier = Modifier.padding(start = PoroSpacing.L, end = PoroSpacing.S, top = PoroSpacing.S, bottom = PoroSpacing.S),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(stringResource(R.string.profile_verify_email), modifier = Modifier.weight(1f))
@@ -85,7 +86,7 @@ fun ProfileScreen(
                 }
             }
             extra(me)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(PoroSpacing.S), modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.profile_edit))
                 }

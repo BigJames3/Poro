@@ -13,13 +13,14 @@ import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.ui.auth.ErrorMessage
 import com.poro.app.ui.auth.ErrorMessageText
+import com.poro.app.ui.theme.PoroSpacing
 
 /** Message d'erreur d'une liste et son bouton « Réessayer » : une erreur n'est jamais une impasse. */
 @Composable
 fun ErrorRetry(error: ErrorMessage, onRetry: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(PoroSpacing.S),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         ErrorMessageText(error)

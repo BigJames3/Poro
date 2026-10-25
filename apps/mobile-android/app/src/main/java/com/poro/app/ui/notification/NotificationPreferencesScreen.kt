@@ -15,12 +15,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.data.notification.PreferencesDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.BackTopBar
 import com.poro.app.ui.common.LoadableContent
+import com.poro.app.ui.theme.PoroSpacing
 
 @Composable
 fun NotificationPreferencesScreen(
@@ -37,7 +37,7 @@ fun NotificationPreferencesScreen(
                 Text(
                     stringResource(R.string.prefs_push_unavailable),
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(PoroSpacing.L),
                 )
                 Toggle(R.string.prefs_push, R.string.prefs_push_hint, prefs.pushEnabled, enabled = PUSH_AVAILABLE) { v ->
                     onChange { it.copy(pushEnabled = v) }

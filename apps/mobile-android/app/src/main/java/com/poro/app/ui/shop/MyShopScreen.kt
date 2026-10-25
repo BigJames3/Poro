@@ -47,7 +47,9 @@ import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.auth.phone.label
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.common.EmptyState
 import com.poro.app.ui.common.TextLimitHint
+import com.poro.app.ui.theme.PoroSpacing
 
 class MyShopActions(
     val onOpenFormChange: (OpenShopForm) -> Unit,
@@ -73,8 +75,8 @@ fun MyShopScreen(state: MyShopUiState, onBack: () -> Unit, actions: MyShopAction
             return@Scaffold
         }
         Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+            verticalArrangement = Arrangement.spacedBy(PoroSpacing.M),
         ) {
             if (shop == null) OpenShopFields(state, actions) else Dashboard(shop, state, actions)
         }
@@ -103,7 +105,7 @@ private fun OpenShopFields(state: MyShopUiState, actions: MyShopActions) {
         modifier = Modifier.fillMaxWidth(),
     )
     Text(stringResource(R.string.shop_country_label), style = MaterialTheme.typography.titleSmall)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
         LaunchCountry.entries.forEach { country ->
             FilterChip(
                 selected = form.country == country,
@@ -130,7 +132,7 @@ private fun Dashboard(shop: ShopDto, state: MyShopUiState, actions: MyShopAction
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let { actions.onLogoPicked(it.toString()) }
     }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(PoroSpacing.L)) {
         Avatar(shop.logoUrl, shop.name, size = 72.dp)
         Column {
             Text("@${shop.handle}", style = MaterialTheme.typography.titleMedium)
@@ -176,7 +178,7 @@ private fun Dashboard(shop: ShopDto, state: MyShopUiState, actions: MyShopAction
         Text(stringResource(R.string.my_products_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         TextButton(onClick = actions.onNewProduct) { Text(stringResource(R.string.product_new)) }
     }
-    if (state.products.isEmpty()) Text(stringResource(R.string.my_products_empty))
+    if (state.products.isEmpty()) EmptyState(stringResource(R.string.my_products_empty))
     state.products.forEach { product ->
         ListItem(
             leadingContent = {

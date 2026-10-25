@@ -4,7 +4,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.poro.app.R
+import com.poro.app.ui.theme.PoroSpacing
 
 /**
  * Code à 6 chiffres : un seul champ invisible dessiné en 6 cases. Le collage et le remplissage
@@ -61,13 +62,14 @@ fun CodeField(
                 contentDescription = description
             },
         decorationBox = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
                 repeat(length) { index ->
                     val active = enabled && index == code.length
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(width = 44.dp, height = 56.dp)
+                            // Taille minimale : la case grandit avec la police au lieu de couper le chiffre.
+                            .sizeIn(minWidth = 44.dp, minHeight = 56.dp)
                             .border(
                                 width = if (active) 2.dp else 1.dp,
                                 color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
