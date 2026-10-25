@@ -17,6 +17,14 @@ interface VideoApi {
     @GET("api/v1/videos/{id}")
     suspend fun video(@Path("id") id: String): Response<ApiEnvelope<VideoDto>>
 
+    /** Publications visibles par tous d'un utilisateur (prêtes, non retirées), pour son profil. */
+    @GET("api/v1/videos/users/{userId}")
+    suspend fun byUser(
+        @Path("userId") userId: String,
+        @Query("cursor") cursor: String?,
+        @Query("limit") limit: Int,
+    ): Response<ApiEnvelope<PageDto<VideoDto>>>
+
     /** Ses propres vidéos, tous statuts confondus, plus récentes d'abord. */
     @GET("api/v1/videos")
     suspend fun mine(@Query("cursor") cursor: String?, @Query("limit") limit: Int): Response<ApiEnvelope<PageDto<VideoDto>>>
@@ -27,6 +35,10 @@ interface VideoApi {
 
     @POST("api/v1/videos/uploads")
     suspend fun initUpload(@Body body: InitUploadRequest): Response<ApiEnvelope<InitUpload>>
+
+    /** Reprise d'un envoi `uploading` : parties déjà reçues et nouvelles URL pour les autres. */
+    @POST("api/v1/videos/uploads/{id}/resume")
+    suspend fun resumeUpload(@Path("id") id: String): Response<ApiEnvelope<ResumeUpload>>
 
     @POST("api/v1/videos/uploads/{id}/complete")
     suspend fun completeUpload(@Path("id") id: String, @Body body: CompleteUpload): Response<ApiEnvelope<VideoDto>>
@@ -66,6 +78,9 @@ data class VideoDto(
     val images: List<ImageDto> = emptyList(),
 ) {
     val isReady: Boolean get() = status == STATUS_READY && moderationStatus != MODERATION_REMOVED
+
+    /** Titre à afficher : le titre, facultatif, ou la première ligne de la description. */
+    val headline: String get() = title.ifBlank { description.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty() }
     val isPhoto: Boolean get() = mediaType == MEDIA_PHOTO
 
     companion object {
@@ -119,7 +134,8 @@ data class PhotoTarget(
 
 @Serializable
 data class InitUploadRequest(
-    val title: String,
+    /** Facultatif (100 caractères) : vide, les lecteurs affichent la description. */
+    val title: String = "",
     val description: String? = null,
     val filename: String? = null,
     @SerialName("content_type") val contentType: String,
@@ -134,6 +150,15 @@ data class InitUpload(
     val key: String = "",
     @SerialName("part_size") val partSize: Long,
     val parts: List<UploadPart>,
+)
+
+/** Ce qu'il reste à envoyer : le stockage fait foi pour les parties déjà reçues. */
+@Serializable
+data class ResumeUpload(
+    @SerialName("video_id") val videoId: String,
+    @SerialName("part_size") val partSize: Long,
+    @SerialName("uploaded_parts") val uploadedParts: List<CompletedPart> = emptyList(),
+    val parts: List<UploadPart> = emptyList(),
 )
 
 @Serializable

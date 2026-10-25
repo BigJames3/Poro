@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/poro/video/internal/model"
 )
 
 func TestTitle(t *testing.T) {
@@ -12,8 +14,11 @@ func TestTitle(t *testing.T) {
 	require.Equal(t, "clip", got)
 	require.Empty(t, code)
 
-	_, code = Title("")
-	require.Equal(t, "title_invalid", code)
+	for _, blank := range []string{"", "   "} {
+		got, code = Title(blank)
+		require.Empty(t, code, "a title is optional")
+		require.Empty(t, got)
+	}
 	_, code = Title("a\nb")
 	require.Equal(t, "title_invalid", code)
 	_, code = Title("a\u202eb")
@@ -23,6 +28,15 @@ func TestTitle(t *testing.T) {
 	got, code = Title(strings.Repeat("é", 100))
 	require.Empty(t, code)
 	require.Equal(t, 100, len([]rune(got)))
+}
+
+func TestDisplayTitle(t *testing.T) {
+	require.Equal(t, "Match", DisplayTitle("Match", "Danse #wax"))
+	require.Equal(t, "Danse #wax", DisplayTitle("", "\n  Danse #wax  \nsuite"))
+	require.Empty(t, DisplayTitle("", " \n "))
+	long := DisplayTitle("", strings.Repeat("é", 150))
+	require.Equal(t, model.MaxTitleRunes, len([]rune(long)))
+	require.True(t, strings.HasSuffix(long, "…"))
 }
 
 func TestDescription(t *testing.T) {

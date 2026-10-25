@@ -161,10 +161,11 @@
     <string name="upload_rules">MP4, MOV ou WebM, 3 minutes et 256 Mo au plus.</string>
     <string name="upload_pick">Choisir une vidéo</string>
     <string name="upload_pick_other">Choisir une autre vidéo</string>
-    <string name="upload_video_title">Titre</string>
+    <string name="upload_video_title">Titre (facultatif)</string>
     <string name="upload_video_description">Description</string>
     <string name="upload_publish">Publier</string>
     <string name="upload_sending">Envoi de « %1$s » : %2$d %%</string>
+    <string name="upload_sending_untitled">Envoi de la vidéo : %1$d %%</string>
     <string name="upload_keep_open">Gardez l’application ouverte jusqu’à la fin de l’envoi.</string>
     <string name="upload_new">Publier une autre vidéo</string>
     <string name="upload_error_unreadable">La vidéo n’est plus accessible (supprimée ou autorisation perdue). Choisissez-la à nouveau : le titre et la description sont conservés.</string>
@@ -180,6 +181,9 @@
     <string name="my_videos_empty">Vous n’avez encore rien publié.</string>
     <string name="my_videos_more">Afficher plus</string>
     <string name="my_videos_delete_title">Supprimer la vidéo ?</string>
+    <string name="my_videos_delete_text_untitled">La vidéo ne sera plus visible. Cette action est définitive.</string>
+    <string name="profile_posts_title">Publications</string>
+    <string name="profile_posts_empty">Aucune publication pour l’instant.</string>
     <string name="my_videos_delete_text">« %1$s » ne sera plus visible. Cette action est définitive.</string>
     <string name="status_processing">En traitement</string>
     <string name="status_failed">Échec</string>

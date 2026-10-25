@@ -36,6 +36,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	v := app.Group("/api/v1/videos")
 	v.Get("/", auth, limit, deps.Videos.List)
 	v.Post("/uploads", auth, limit, middleware.InitLimit(deps.Limiter), deps.Videos.Init)
+	v.Post("/uploads/:id/resume", auth, limit, middleware.ResumeLimit(deps.Limiter), deps.Videos.Resume)
 	v.Post("/uploads/:id/complete", auth, limit, middleware.CompleteLimit(deps.Limiter), deps.Videos.Complete)
 	// Photo posts (ADR-0020) count against the same init and complete limits.
 	// With PHOTO_POSTS_ENABLED=false they answer 404 photo_posts_disabled;
@@ -44,6 +45,7 @@ func Register(app *fiber.App, deps Dependencies) {
 	v.Post("/photo-uploads", photos, auth, limit, middleware.InitLimit(deps.Limiter), deps.Videos.InitPhoto)
 	v.Post("/photo-uploads/:id/complete", photos, auth, limit, middleware.CompleteLimit(deps.Limiter), deps.Videos.CompletePhoto)
 	v.Delete("/uploads/:id", auth, limit, deps.Videos.Abort)
+	v.Get("/users/:userId", opt, limit, deps.Videos.ListByUser)
 	v.Get("/:id", opt, limit, deps.Videos.Get)
 	v.Delete("/:id", auth, limit, deps.Videos.Delete)
 }

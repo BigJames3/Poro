@@ -59,7 +59,7 @@ fun MyVideosSection(
         state.videos.chunked(COLUMNS).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(PoroSpacing.XS)) {
                 row.forEach { video ->
-                    val name = video.title.ifBlank { if (video.isPhoto) stringResource(R.string.post_photo_label) else "" }
+                    val name = video.headline.ifBlank { if (video.isPhoto) stringResource(R.string.post_photo_label) else "" }
                     val label = name + if (!video.isReady) ", " + stringResource(videoStatusText(video)) else ""
                     Box(
                         Modifier
@@ -103,7 +103,12 @@ fun MyVideosSection(
         AlertDialog(
             onDismissRequest = { toDelete = null },
             title = { Text(stringResource(R.string.my_videos_delete_title)) },
-            text = { Text(stringResource(R.string.my_videos_delete_text, video.title)) },
+            text = {
+                Text(
+                    video.headline.takeIf { it.isNotBlank() }?.let { stringResource(R.string.my_videos_delete_text, it) }
+                        ?: stringResource(R.string.my_videos_delete_text_untitled),
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete(video)

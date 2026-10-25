@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 
 	"github.com/poro/video/internal/config"
 	"github.com/poro/video/internal/model"
@@ -129,6 +130,36 @@ func (s *S3) CompleteMultipart(ctx context.Context, key, uploadID string, parts 
 		return fmt.Errorf("complete multipart: %w", err)
 	}
 	return nil
+}
+
+func (s *S3) ListParts(ctx context.Context, key, uploadID string) ([]UploadedPart, error) {
+	var out []UploadedPart
+	var marker *string
+	for {
+		page, err := s.internal.ListParts(ctx, &s3.ListPartsInput{
+			Bucket:           aws.String(s.sources),
+			Key:              aws.String(key),
+			UploadId:         aws.String(uploadID),
+			PartNumberMarker: marker,
+		})
+		// ListParts does not model NoSuchUpload: it arrives as a generic API error.
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) && apiErr.ErrorCode() == "NoSuchUpload" {
+			return nil, fmt.Errorf("list parts %s: %w", key, ErrMissing)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("list parts %s: %w", key, err)
+		}
+		for _, p := range page.Parts {
+			out = append(out, UploadedPart{
+				Number: aws.ToInt32(p.PartNumber), ETag: aws.ToString(p.ETag), Size: aws.ToInt64(p.Size),
+			})
+		}
+		if !aws.ToBool(page.IsTruncated) || page.NextPartNumberMarker == nil {
+			return out, nil
+		}
+		marker = page.NextPartNumberMarker
+	}
 }
 
 func (s *S3) AbortMultipart(ctx context.Context, key, uploadID string) error {

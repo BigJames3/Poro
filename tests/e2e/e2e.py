@@ -458,6 +458,47 @@ def videos(seller):
     return video_id
 
 
+def resumed_untitled_video(seller, buyer):
+    """A video posted without a title, its upload resumed through the real
+    storage: the server lists the part already received with its ETag and
+    signs only the missing ones. Once ready, readers get the caption's first
+    line as its title, and its author's public page lists it."""
+    video = (FIXTURES / "video.mp4").read_bytes()
+    caption = f"Sans titre {RUN}\nsuite #e2e{RUN}"
+    init = seller.call("POST", "/api/v1/videos/uploads", expect=201, body={
+        "description": caption, "content_type": "video/mp4", "size_bytes": len(video)})
+    vid = init["video_id"]
+    resume = ("POST", "/api/v1/videos/uploads/{id}/resume", f"/api/v1/videos/uploads/{vid}/resume")
+    fresh = seller.call(*resume)
+    check(fresh["uploaded_parts"] == [] and [p["part_number"] for p in fresh["parts"]] == [1], f"nothing sent yet: {fresh}")
+    status, raw, _ = http("PUT", fresh["parts"][0]["url"], video, {}, raw=True)
+    check(status == 200, f"storage refused the re-signed part: {status} {raw[:200]}")
+    held = seller.call(*resume)
+    check(held["parts"] == [] and len(held["uploaded_parts"]) == 1 and held["uploaded_parts"][0]["etag"],
+          f"storage lists the part it holds: {held}")
+    buyer.call(*resume, expect=404)
+    seller.call("POST", "/api/v1/videos/uploads/{id}/complete", f"/api/v1/videos/uploads/{vid}/complete",
+                body={"parts": held["uploaded_parts"]}, expect=200)
+    seller.call(*resume, expect=409)
+
+    def ready():
+        v = seller.call("GET", "/api/v1/videos/{id}", f"/api/v1/videos/{vid}")
+        check(v["status"] != "failed", f"video processing failed: {v}")
+        return v if v["status"] == "ready" else None
+    check(wait_for("untitled video ready", ready, timeout=180, interval=3)["title"] == "", "the video stays untitled")
+
+    public = ("GET", "/api/v1/videos/users/{userId}", f"/api/v1/videos/users/{seller.user['id']}")
+    listed = Client("anonymous").call(*public, query={"limit": 50})
+    check(any(v["id"] == vid for v in listed["items"]), "the public page does not list the ready video")
+    check(all(v["status"] == "ready" for v in listed["items"]), f"a public page lists an unready video: {listed}")
+    hits = wait_for("untitled video indexed", lambda: [h for h in buyer.call(
+        "GET", "/api/v1/search?type=videos", query={"q": f"Sans titre {RUN}"})["items"] if h["video_id"] == vid], timeout=60)
+    check(hits[0]["title"] == f"Sans titre {RUN}", f"search shows the caption's first line: {hits[0]}")
+    seller.call("DELETE", "/api/v1/videos/{id}", f"/api/v1/videos/{vid}", expect=204)
+    wait_for("deleted video leaves the public page", lambda: all(
+        v["id"] != vid for v in Client("anonymous").call(*public, query={"limit": 50})["items"]) or None, timeout=30)
+
+
 def social(seller, buyer, video_id):
     uid = seller.user["id"]
     buyer.call("PUT", "/api/v1/users/{userId}/follow", f"/api/v1/users/{uid}/follow", expect=(200, 204))
@@ -703,6 +744,7 @@ def main():
     step("avatar upload", avatar, seller)
     seller.call("POST", "/api/v1/users/me/creator", expect=(200, 201))
     video_id = step("video upload and processing", videos, seller)
+    step("untitled video, resumed upload, public page", resumed_untitled_video, seller, buyer)
     # Photo posts are open by default; E2E_PHOTO_POSTS=0 checks a server where
     # PHOTO_POSTS_ENABLED=false.
     photo = None
