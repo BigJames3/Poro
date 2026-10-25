@@ -300,6 +300,7 @@ ready ──► modération : removed (quarantaine) / restored (Reveal)
   - clés de cache de page 1 et clés de session « Pour toi » suffixées par l'ensemble de capacités (`v` ou `vp`) ;
   - curseurs : ceux des clients `photo-posts` portent un type distinct (`tp`, `sp`, `fp`) et sont refusés sans l'en-tête (400 `invalid_cursor`), et inversement ; ceux des vidéos seules gardent leur forme, donc aucun curseur en cours n'est invalidé au déploiement ;
   - DTO `Item` : `media_type`, `images[]` (`url`, `thumbnail_url`, `width`, `height`, toujours un tableau), `hls_url` vide pour une photo.
+  - une photo n'a pas de titre : sa légende (200 caractères au plus, coupée par « … ») est projetée à la place, car l'élément du fil ne porte pas de description.
 - **social** (migration `000004_photo_posts`) : `videos_projection.media_type` ; `GET /users/{userId}/likes` filtre par capacité, curseur préfixé `p.` avec photos. J'aime, commentaires et partages d'une photo utilisent les mêmes routes.
 - **search** (migration `000004_photo_posts`) : `videos.media_type` et `hashtags.photos_count`, tenu à jour à chaque changement de visibilité comme `videos_count`. Sans l'en-tête : résultats `videos` sans photo, hashtags comptés sur les vidéos seules, tag porté uniquement par des photos absent (recherche et suggestions). Curseurs `videos` et `hashtags` distincts par capacité. La légende d'une photo est cherchée comme une description.
 - **notification** (migration `20261025120000_photo_posts`) :

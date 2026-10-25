@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -246,6 +248,8 @@ func TestPhotoPostsAreProjected(t *testing.T) {
 	require.NoError(t, send(t, events.TypeVideoReady, ev))
 	require.Equal(t, "photo", row[string](t, `SELECT media_type FROM videos WHERE video_id = $1`, pic))
 	require.Empty(t, row[string](t, `SELECT hls_key FROM videos WHERE video_id = $1`, pic))
+	require.Equal(t, "Marché de Treichville #abidjan", row[string](t, `SELECT title FROM videos WHERE video_id = $1`, pic),
+		"the caption stands in for the missing title")
 	var images []map[string]any
 	require.NoError(t, json.Unmarshal(row[[]byte](t, `SELECT images FROM videos WHERE video_id = $1`, pic), &images))
 	require.Len(t, images, 2)
@@ -256,6 +260,13 @@ func TestPhotoPostsAreProjected(t *testing.T) {
 	require.NoError(t, send(t, events.TypeVideoReady, ready(legacy, author, now)))
 	require.Equal(t, "video", row[string](t, `SELECT media_type FROM videos WHERE video_id = $1`, legacy))
 	require.Equal(t, "[]", row[string](t, `SELECT images::text FROM videos WHERE video_id = $1`, legacy))
+
+	long := ev
+	long.VideoID, long.Description = uuid.NewString(), strings.Repeat("é", 300)
+	require.NoError(t, send(t, events.TypeVideoReady, long))
+	stored := row[string](t, `SELECT title FROM videos WHERE video_id = $1`, uuid.MustParse(long.VideoID))
+	require.Equal(t, 200, utf8.RuneCountInString(stored), "a long caption fits the title column")
+	require.True(t, strings.HasSuffix(stored, "…"))
 
 	empty := ev
 	empty.VideoID, empty.Images = uuid.NewString(), nil

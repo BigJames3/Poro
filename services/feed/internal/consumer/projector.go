@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -181,12 +182,18 @@ func decodeVideoReady(env events.Envelope) (applyFunc, error) {
 	default:
 		return nil, fmt.Errorf("unsupported media_type %q", d.MediaType)
 	}
+	title := d.Title
+	if mediaType == repository.MediaPhoto && title == "" {
+		// A photo post has no title: its caption, which the feed item does not
+		// carry, is shown in its place.
+		title = truncateRunes(d.Description, captionTitleRunes)
+	}
 	images := make([]repository.Image, len(d.Images))
 	for i, img := range d.Images {
 		images[i] = repository.Image{ImageKey: img.ImageKey, ThumbnailKey: img.ThumbnailKey, Width: img.Width, Height: img.Height}
 	}
 	v := repository.Video{
-		VideoID: ids[0], AuthorID: ids[1], Title: d.Title, Hashtags: d.Hashtags,
+		VideoID: ids[0], AuthorID: ids[1], Title: title, Hashtags: d.Hashtags,
 		ThumbnailKey: d.ThumbnailKey, HLSKey: d.HLSKey, DurationMs: d.DurationMs, PublishedAt: published,
 		MediaType: mediaType, Images: images,
 	}
@@ -269,4 +276,17 @@ func parseIDs(raw ...string) ([]uuid.UUID, error) {
 		out[i] = id
 	}
 	return out, nil
+}
+
+// captionTitleRunes bounds the caption stored as the title of a photo post,
+// within the 200 characters of videos.title.
+const captionTitleRunes = 200
+
+// truncateRunes cuts s to at most n runes, ending with an ellipsis when cut.
+func truncateRunes(s string, n int) string {
+	runes := []rune(strings.TrimSpace(s))
+	if len(runes) <= n {
+		return string(runes)
+	}
+	return strings.TrimSpace(string(runes[:n-1])) + "…"
 }
