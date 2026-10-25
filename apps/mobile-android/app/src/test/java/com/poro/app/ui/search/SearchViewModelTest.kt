@@ -97,6 +97,20 @@ class SearchViewModelTest {
     }
 
     @Test
+    fun `a hashtag touched in the feed searches its videos at once`() = runTest(main.dispatcher) {
+        // Arguments de SearchRoute(tab = "Videos", submitted = "wax"), lus par la navigation.
+        val vm = SearchViewModel(repo, SavedStateHandle().apply {
+            set("tab", SearchTab.Videos.name)
+            set("submitted", "wax")
+        })
+        runCurrent()
+
+        assertEquals("wax", vm.state.value.submitted)
+        assertEquals(SearchTab.Videos, vm.state.value.tab)
+        assertEquals(listOf("videos:wax:null"), calls)
+    }
+
+    @Test
     fun `an @username query opens the accounts tab`() = runTest(main.dispatcher) {
         val vm = SearchViewModel(repo, SavedStateHandle())
         vm.submit("@kofi")

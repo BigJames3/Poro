@@ -21,9 +21,11 @@ import com.poro.app.data.video.VideoDto
 import com.poro.app.ui.AppNav
 import com.poro.app.ui.GuestFeedRoute
 import com.poro.app.ui.HomeRoute
+import com.poro.app.ui.SearchRoute
 import com.poro.app.ui.VideoRoute
 import com.poro.app.ui.player.rememberVideoPlayer
 import com.poro.app.ui.poroViewModel
+import com.poro.app.ui.search.SearchTab
 
 /**
  * Fil (onglet d'accueil) et vidéo seule. Les actions sur une vidéo et le coin haut droit du fil
@@ -57,6 +59,7 @@ fun NavGraphBuilder.feedGraph(
             onOpenAuthor = { item -> onOpenAuthor(item.author.id, item.author.username) },
             actions = feedActions,
             topEnd = feedTopEnd,
+            onHashtag = { tag -> nav.controller.navigate(SearchRoute(tab = SearchTab.Videos.name, submitted = tag)) },
         )
     }
     // Invité : un seul fil, public ; l'auteur, les actions et « Se connecter » ouvrent la connexion.
@@ -72,6 +75,7 @@ fun NavGraphBuilder.feedGraph(
             onRetry = vm::retry,
             onOpenAuthor = { nav.signInPrompt() },
             actions = guestActions,
+            onHashtag = { nav.signInPrompt() },
             topEnd = {
                 TextButton(onClick = nav::signInPrompt, modifier = Modifier.heightIn(min = 48.dp)) {
                     Text(stringResource(R.string.action_sign_in), color = Color.White, fontWeight = FontWeight.Bold)

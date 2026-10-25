@@ -2,24 +2,29 @@ package com.poro.app.ui.feed
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -28,7 +33,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,9 +63,11 @@ import com.poro.app.data.feed.FeedKind
 import com.poro.app.ui.auth.ErrorMessage
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
+import com.poro.app.ui.common.PoroIcons
 import com.poro.app.ui.common.displayNameOf
 import com.poro.app.ui.player.VideoPlayer
 import com.poro.app.ui.player.VideoSurface
+import kotlinx.coroutines.delay
 
 /**
  * Fil plein écran : une vidéo par page, défilement vertical. [actions] dessine la colonne
@@ -74,12 +84,13 @@ fun FeedScreen(
     modifier: Modifier = Modifier,
     actions: @Composable (FeedItem) -> Unit = {},
     topEnd: @Composable () -> Unit = {},
+    onHashtag: (String) -> Unit = {},
 ) {
     val list = state.current
     Box(modifier.fillMaxSize().background(Color.Black)) {
         when {
             list.items.isNotEmpty() -> key(state.kind) {
-                VideoPager(list.items, list.position, player, onItemShown, onOpenAuthor, actions)
+                VideoPager(list.items, list.position, player, onItemShown, onOpenAuthor, actions, onHashtag)
             }
             list.error != null -> Column(
                 Modifier.fillMaxSize().padding(24.dp),
@@ -158,6 +169,7 @@ private fun VideoPager(
     onItemShown: (Int) -> Unit,
     onOpenAuthor: (FeedItem) -> Unit,
     actions: @Composable (FeedItem) -> Unit,
+    onHashtag: (String) -> Unit,
 ) {
     val pager = rememberPagerState(initialPage = initialPage.coerceIn(0, maxOf(items.size - 1, 0)), pageCount = { items.size })
     // La liste s'allonge pendant le défilement : l'effet doit lire la version courante.
@@ -185,6 +197,7 @@ private fun VideoPager(
             active = page == pager.settledPage,
             onOpenAuthor = { onOpenAuthor(items[page]) },
             actions = { actions(items[page]) },
+            onHashtag = onHashtag,
         )
     }
 }
@@ -198,8 +211,10 @@ fun VideoPage(
     onOpenAuthor: () -> Unit,
     actions: @Composable () -> Unit,
     description: String? = null,
+    onHashtag: (String) -> Unit = {},
 ) {
     val isPlaying by player.isPlaying
+    val isMuted by player.isMuted
     val isBuffering by player.isBuffering
     val hasFailed by player.hasFailed
     val author = displayNameOf(item.author.displayName, item.author.username)
@@ -270,21 +285,64 @@ fun VideoPage(
                     description?.takeIf { it.isNotBlank() }?.let {
                         Text(it, color = Color.White.copy(alpha = 0.85f), maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
-                    if (item.hashtags.isNotEmpty()) {
-                        Text(
-                            item.hashtags.joinToString(" ") { "#$it" },
-                            color = Color.White.copy(alpha = 0.85f),
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    if (item.hashtags.isNotEmpty()) Hashtags(item.hashtags, onHashtag)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    actions()
+                    if (!item.isPhoto) {
+                        IconButton(onClick = player::toggleMute) {
+                            Icon(
+                                if (isMuted) PoroIcons.VolumeOff else PoroIcons.VolumeOn,
+                                contentDescription = stringResource(if (isMuted) R.string.feed_unmute else R.string.feed_mute),
+                                tint = Color.White,
+                            )
+                        }
                     }
                 }
-                actions()
+            }
+        }
+        if (active && !item.isPhoto) PlaybackProgress(player, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+/** Hashtags d'une vidéo : chacun lance la recherche des vidéos qui le portent. */
+@Composable
+private fun Hashtags(tags: List<String>, onHashtag: (String) -> Unit) {
+    Row(Modifier.horizontalScroll(rememberScrollState())) {
+        tags.forEach { tag ->
+            val label = stringResource(R.string.feed_hashtag_search, tag)
+            Box(
+                Modifier
+                    .heightIn(min = 48.dp)
+                    .clickable(role = Role.Button, onClickLabel = label) { onHashtag(tag) }
+                    .padding(end = 8.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text("#$tag", color = Color.White, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
+
+/** Fine barre d'avancement de la vidéo lue, décorative pour TalkBack. */
+@Composable
+private fun PlaybackProgress(player: VideoPlayer, modifier: Modifier = Modifier) {
+    var progress by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(player) {
+        while (true) {
+            progress = player.progress()
+            delay(PROGRESS_TICK_MS)
+        }
+    }
+    LinearProgressIndicator(
+        progress = { progress },
+        color = Color.White,
+        trackColor = Color.White.copy(alpha = 0.25f),
+        modifier = modifier.fillMaxWidth().height(2.dp).clearAndSetSemantics {},
+    )
+}
+
+private const val PROGRESS_TICK_MS = 250L
 
 /** La vidéo n'a pas pu être lue : un message et « Réessayer », au lieu d'une image figée. */
 @Composable
