@@ -129,6 +129,29 @@ class SearchViewModel(
         if (!started) loadMore(tab)
     }
 
+    /**
+     * Relance après une erreur : la page qui a échoué, ou la première page (une première page en
+     * échec n'a pas de curseur, [loadMore] la croirait terminée).
+     */
+    fun retry(tab: SearchTab = _state.value.tab) {
+        _state.update { state ->
+            when (tab) {
+                SearchTab.Videos -> state.copy(videos = state.videos.forRetry())
+                SearchTab.Users -> state.copy(users = state.users.forRetry())
+                SearchTab.Hashtags -> state.copy(hashtags = state.hashtags.forRetry())
+                SearchTab.Products -> state.copy(products = state.products.forRetry())
+                SearchTab.Shops -> state.copy(shops = state.shops.forRetry())
+            }
+        }
+        loadMore(tab)
+    }
+
+    private fun <T> Results<T>.forRetry(): Results<T> = when {
+        error == null || loading -> this
+        items.isEmpty() -> Results()
+        else -> copy(error = null)
+    }
+
     fun loadMore(tab: SearchTab = _state.value.tab) {
         val q = _state.value.submitted ?: return
         when (tab) {

@@ -95,4 +95,19 @@ class NotificationsViewModelTest {
         assertTrue(vm.state.value.preferences.valueOrNull!!.likes)
         assertEquals(listOf("prefs:false"), repo.calls)
     }
+
+    @Test
+    fun `a failed first page can be retried`() = runTest(main.dispatcher) {
+        repo.pages += ApiResult.NetworkError(java.io.IOException("offline"))
+        repo.pages += ApiResult.Success(PageDto(listOf(n("a")), null))
+        val vm = NotificationsViewModel(repo)
+        runCurrent()
+        assertTrue(vm.state.value.error != null)
+        assertTrue("sans curseur, loadMore la croirait terminée", vm.state.value.items.isEmpty())
+
+        vm.retry()
+        runCurrent()
+        assertEquals(listOf("a"), vm.state.value.items.map { it.id })
+        assertEquals(null, vm.state.value.error)
+    }
 }

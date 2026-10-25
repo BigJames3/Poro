@@ -1,14 +1,16 @@
 package com.poro.app.core.network
 
 import java.io.IOException
-import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 
 /** Résultat d'un envoi direct vers le stockage : succès, refus du stockage (HTTP) ou réseau coupé. */
 sealed interface UploadResult {
@@ -37,15 +39,24 @@ class PresignedUploader(private val client: OkHttpClient) {
     suspend fun putPart(url: String, bytes: ByteArray): UploadResult =
         execute(Request.Builder().url(url).put(bytes.toRequestBody()).build())
 
-    private suspend fun execute(request: Request): UploadResult = withContext(Dispatchers.IO) {
-        try {
-            client.newCall(request).execute().use { response ->
-                if (response.isSuccessful) UploadResult.Success(response.header("ETag")) else UploadResult.Rejected(response.code)
+    /**
+     * Envoi asynchrone, annulé avec la coroutine : « Annuler » coupe tout de suite la partie en
+     * cours (jusqu'à 8 Mio) au lieu d'attendre la fin de son envoi.
+     */
+    private suspend fun execute(request: Request): UploadResult = suspendCancellableCoroutine { continuation ->
+        val call = client.newCall(request)
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isActive) continuation.resume(UploadResult.NetworkError(e))
             }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: IOException) {
-            UploadResult.NetworkError(e)
-        }
+
+            override fun onResponse(call: Call, response: Response) {
+                val result = response.use {
+                    if (it.isSuccessful) UploadResult.Success(it.header("ETag")) else UploadResult.Rejected(it.code)
+                }
+                if (continuation.isActive) continuation.resume(result)
+            }
+        })
     }
 }

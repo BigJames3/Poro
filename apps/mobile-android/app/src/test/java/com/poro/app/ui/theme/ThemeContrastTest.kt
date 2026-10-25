@@ -23,6 +23,7 @@ class ThemeContrastTest {
         "onSurfaceVariant/surfaceVariant (textes secondaires)" to (onSurfaceVariant to surfaceVariant),
         "onSurfaceVariant/surface" to (onSurfaceVariant to surface),
         "onSecondary/secondary" to (onSecondary to secondary),
+        "onSecondaryContainer/secondaryContainer (cartes d'information)" to (onSecondaryContainer to secondaryContainer),
         "secondary/background" to (secondary to background),
         "onBackground/background" to (onBackground to background),
         "onSurface/surface" to (onSurface to surface),

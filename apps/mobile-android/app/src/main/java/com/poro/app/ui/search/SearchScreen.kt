@@ -43,8 +43,8 @@ import com.poro.app.data.search.ProductHit
 import com.poro.app.data.search.ShopHit
 import com.poro.app.data.search.UserHit
 import com.poro.app.data.search.VideoHit
-import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
+import com.poro.app.ui.common.ErrorRetry
 import com.poro.app.ui.common.displayNameOf
 
 @Composable
@@ -54,6 +54,7 @@ fun SearchScreen(
     onSubmit: (String) -> Unit,
     onSelectTab: (SearchTab) -> Unit,
     onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
     onOpenVideo: (VideoHit) -> Unit,
     onOpenUser: (UserHit) -> Unit,
     onOpenProduct: (ProductHit) -> Unit,
@@ -101,11 +102,11 @@ fun SearchScreen(
         }
         LazyColumn(Modifier.fillMaxSize()) {
             when (state.tab) {
-                SearchTab.Videos -> results(state.videos, onLoadMore) { video -> VideoRow(video) { onOpenVideo(video) } }
-                SearchTab.Users -> results(state.users, onLoadMore) { user -> UserRow(user) { onOpenUser(user) } }
-                SearchTab.Hashtags -> results(state.hashtags, onLoadMore) { tag -> HashtagRow(tag) { onSubmit("#" + tag.tag) } }
-                SearchTab.Products -> results(state.products, onLoadMore) { product -> ProductRow(product) { onOpenProduct(product) } }
-                SearchTab.Shops -> results(state.shops, onLoadMore) { shop -> ShopRow(shop) { onOpenShop(shop) } }
+                SearchTab.Videos -> results(state.videos, onLoadMore, onRetry) { video -> VideoRow(video) { onOpenVideo(video) } }
+                SearchTab.Users -> results(state.users, onLoadMore, onRetry) { user -> UserRow(user) { onOpenUser(user) } }
+                SearchTab.Hashtags -> results(state.hashtags, onLoadMore, onRetry) { tag -> HashtagRow(tag) { onSubmit("#" + tag.tag) } }
+                SearchTab.Products -> results(state.products, onLoadMore, onRetry) { product -> ProductRow(product) { onOpenProduct(product) } }
+                SearchTab.Shops -> results(state.shops, onLoadMore, onRetry) { shop -> ShopRow(shop) { onOpenShop(shop) } }
             }
         }
     }
@@ -121,10 +122,15 @@ private val SearchTab.label: Int
     }
 
 /** Liste paginée : la page suivante se charge quand on atteint la fin. */
-private fun <T> LazyListScope.results(results: Results<T>, onLoadMore: () -> Unit, row: @Composable (T) -> Unit) {
+private fun <T> LazyListScope.results(
+    results: Results<T>,
+    onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
+    row: @Composable (T) -> Unit,
+) {
     items(results.items) { row(it) }
     if (results.isEmpty) item { Text(stringResource(R.string.search_no_results), modifier = Modifier.padding(16.dp)) }
-    results.error?.let { item { ErrorMessageText(it, Modifier.padding(16.dp)) } }
+    results.error?.let { item { ErrorRetry(it, onRetry, Modifier.fillMaxWidth().padding(16.dp)) } }
     if (results.loading) item { CircularProgressIndicator(Modifier.padding(16.dp)) }
     if (results.canLoadMore) item { LaunchedEffect(results.items.size) { onLoadMore() } }
 }

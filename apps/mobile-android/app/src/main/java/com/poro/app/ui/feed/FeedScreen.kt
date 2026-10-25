@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,8 +34,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +48,7 @@ import coil3.compose.AsyncImage
 import com.poro.app.R
 import com.poro.app.data.feed.FeedItem
 import com.poro.app.data.feed.FeedKind
+import com.poro.app.ui.auth.ErrorMessage
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.displayNameOf
@@ -71,7 +75,7 @@ fun FeedScreen(
     Box(modifier.fillMaxSize().background(Color.Black)) {
         when {
             list.items.isNotEmpty() -> key(state.kind) {
-                VideoPager(list.items, player, onItemShown, onOpenAuthor, actions)
+                VideoPager(list.items, list.position, player, onItemShown, onOpenAuthor, actions)
             }
             list.error != null -> Column(
                 Modifier.fillMaxSize().padding(24.dp),
@@ -92,14 +96,34 @@ fun FeedScreen(
                 CircularProgressIndicator(Modifier.align(Alignment.Center).semantics { contentDescription = loading })
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
-                state.kinds.forEach { kind -> FeedTab(kind, selected = kind == state.kind, onClick = { onSelect(kind) }) }
+        Column(Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
+                    state.kinds.forEach { kind -> FeedTab(kind, selected = kind == state.kind, onClick = { onSelect(kind) }) }
+                }
+                topEnd()
             }
-            topEnd()
+            // La suite du fil n'a pas pu être chargée : on le dit, au lieu d'un fil qui semble fini.
+            val error = list.error
+            if (error != null && list.items.isNotEmpty()) MoreFailed(error, onRetry)
+        }
+    }
+}
+
+@Composable
+private fun MoreFailed(error: ErrorMessage, onRetry: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(error.text), color = Color.White, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(stringResource(R.string.action_retry), color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -125,12 +149,13 @@ private fun FeedTab(kind: FeedKind, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun VideoPager(
     items: List<FeedItem>,
+    initialPage: Int,
     player: VideoPlayer,
     onItemShown: (Int) -> Unit,
     onOpenAuthor: (FeedItem) -> Unit,
     actions: @Composable (FeedItem) -> Unit,
 ) {
-    val pager = rememberPagerState(pageCount = { items.size })
+    val pager = rememberPagerState(initialPage = initialPage.coerceIn(0, maxOf(items.size - 1, 0)), pageCount = { items.size })
     // La liste s'allonge pendant le défilement : l'effet doit lire la version courante.
     val currentItems by rememberUpdatedState(items)
     val currentOnItemShown by rememberUpdatedState(onItemShown)
@@ -169,6 +194,8 @@ fun VideoPage(
     description: String? = null,
 ) {
     val isPlaying by player.isPlaying
+    val isBuffering by player.isBuffering
+    val hasFailed by player.hasFailed
     val author = displayNameOf(item.author.displayName, item.author.username)
     val spoken = stringResource(R.string.feed_video_description, item.title, author)
     Box(
@@ -184,8 +211,17 @@ fun VideoPage(
             modifier = Modifier.fillMaxSize(),
         )
         if (active) VideoSurface(player, Modifier.fillMaxSize())
-        if (active && !isPlaying) {
-            Icon(
+        when {
+            !active -> Unit
+            hasFailed -> PlaybackFailed(onRetry = player::retry, modifier = Modifier.align(Alignment.Center))
+            isBuffering -> {
+                val loading = stringResource(R.string.loading)
+                CircularProgressIndicator(
+                    color = Color.White,
+                    modifier = Modifier.align(Alignment.Center).semantics { contentDescription = loading },
+                )
+            }
+            !isPlaying -> Icon(
                 Icons.Filled.PlayArrow,
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.8f),
@@ -226,6 +262,24 @@ fun VideoPage(
                 }
                 actions()
             }
+        }
+    }
+}
+
+/** La vidéo n'a pas pu être lue : un message et « Réessayer », au lieu d'une image figée. */
+@Composable
+private fun PlaybackFailed(onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
+            .padding(16.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(stringResource(R.string.video_playback_failed), color = Color.White, textAlign = TextAlign.Center)
+        OutlinedButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(stringResource(R.string.action_retry), color = Color.White)
         }
     }
 }

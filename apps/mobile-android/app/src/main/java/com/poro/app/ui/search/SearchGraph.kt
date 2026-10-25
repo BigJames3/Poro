@@ -24,6 +24,7 @@ fun NavGraphBuilder.searchGraph(nav: AppNav) {
             onSubmit = vm::submit,
             onSelectTab = vm::selectTab,
             onLoadMore = { vm.loadMore() },
+            onRetry = { vm.retry() },
             onOpenVideo = { nav.controller.navigate(VideoRoute(it.videoId)) },
             onOpenUser = { nav.controller.navigate(PublicProfileRoute(it.userId, it.username)) },
             onOpenProduct = { nav.controller.navigate(ProductRoute(it.productId)) },

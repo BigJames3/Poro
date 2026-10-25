@@ -30,6 +30,9 @@ internal val LightColors = lightColorScheme(
     onPrimaryContainer = InkOnOrange,
     secondary = Color(0xFF1B7F5A),
     onSecondary = Color.White,
+    // Vert de marque très clair (cartes d'information) : la valeur par défaut de Material est lavande.
+    secondaryContainer = Color(0xFFD3F2E3),
+    onSecondaryContainer = Color(0xFF00281A),
     background = Color(0xFFFFFBF8),
     surface = Color.White,
     // Gris chauds accordés à l'orange (les valeurs par défaut de Material tirent sur le violet).
@@ -44,6 +47,8 @@ internal val DarkColors = darkColorScheme(
     onPrimaryContainer = InkOnOrange,
     secondary = Color(0xFF4CC497),
     onSecondary = Color.Black,
+    secondaryContainer = Color(0xFF0F4D36),
+    onSecondaryContainer = Color(0xFFC6F2DF),
     background = Night,
     surface = Color(0xFF1E1E1E),
     surfaceVariant = Color(0xFF2B2B2B),

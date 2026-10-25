@@ -19,6 +19,8 @@ data class NotificationsUiState(
     val loading: Boolean = false,
     val started: Boolean = false,
     val error: ErrorMessage? = null,
+    /** Rechargement demandé en tirant la liste : la liste affichée reste jusqu'à la réponse. */
+    val refreshing: Boolean = false,
 ) {
     val isEmpty: Boolean get() = started && !loading && items.isEmpty() && error == null
     val canLoadMore: Boolean get() = started && !loading && nextCursor != null
@@ -37,6 +39,30 @@ class NotificationsViewModel(private val notifications: NotificationRepository) 
     fun refresh() {
         _state.value = NotificationsUiState()
         loadMore()
+    }
+
+    /** Tirer pour rafraîchir : relit la première page et remplace la liste, sans la vider avant. */
+    fun reload() {
+        val current = _state.value
+        if (current.loading || current.refreshing) return
+        _state.update { it.copy(refreshing = true) }
+        viewModelScope.launch {
+            when (val result = notifications.page(null)) {
+                is ApiResult.Success -> _state.value = NotificationsUiState(
+                    items = result.data.items,
+                    nextCursor = result.data.nextCursor,
+                    started = true,
+                )
+                else -> _state.update { it.copy(refreshing = false, error = result.toErrorMessage()) }
+            }
+        }
+    }
+
+    /** Relance après une erreur : la page qui a échoué, ou la première (sans curseur). */
+    fun retry() {
+        val current = _state.value
+        if (current.error == null || current.loading) return
+        if (current.items.isEmpty()) refresh() else loadMore()
     }
 
     fun loadMore() {

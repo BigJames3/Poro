@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -65,7 +64,14 @@ fun ProfileScreen(
             } else {
                 Text(stringResource(R.string.profile_no_username), textAlign = TextAlign.Center)
             }
-            if (profile.isCreator) AssistChip(onClick = {}, label = { Text(stringResource(R.string.profile_creator_badge)) })
+            // Un statut, pas une action : du texte, jamais un bouton inerte pour TalkBack.
+            if (profile.isCreator) {
+                Text(
+                    stringResource(R.string.profile_creator_badge),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
             profile.bio?.takeIf { it.isNotBlank() }?.let { Text(it, textAlign = TextAlign.Center) }
             if (me.needsEmailVerification) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
