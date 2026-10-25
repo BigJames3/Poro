@@ -24,12 +24,17 @@ import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import java.io.File
 import okhttp3.OkHttpClient
 
 /**
@@ -43,6 +48,7 @@ class VideoPlayer internal constructor(private val newPlayer: () -> ExoPlayer) {
     private val playing = mutableStateOf(false)
     private val buffering = mutableStateOf(false)
     private val failed = mutableStateOf(false)
+    private val muted = mutableStateOf(false)
 
     /** Lecteur affiché ; état Compose pour que la surface suive l'échange des lecteurs. */
     private var active by mutableStateOf(newPlayer().also(::listen))
@@ -64,9 +70,13 @@ class VideoPlayer internal constructor(private val newPlayer: () -> ExoPlayer) {
     /** La vidéo affichée n'a pas pu être lue (réseau coupé, flux introuvable) : proposer de réessayer. */
     val hasFailed: State<Boolean> get() = failed
 
+    /** Son coupé par l'utilisateur, pour tout l'écran (la vidéo suivante aussi). */
+    val isMuted: State<Boolean> get() = muted
+
     internal val exo: ExoPlayer get() = active
 
     private fun listen(player: ExoPlayer) {
+        player.volume = if (muted.value) 0f else 1f
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (player === active) playing.value = isPlaying
@@ -145,6 +155,21 @@ class VideoPlayer internal constructor(private val newPlayer: () -> ExoPlayer) {
      */
     fun pause() {
         active.playWhenReady = false
+    }
+
+    /** Coupe ou rétablit le son, sur le lecteur affiché comme sur celui de la vidéo suivante. */
+    fun toggleMute() {
+        muted.value = !muted.value
+        val volume = if (muted.value) 0f else 1f
+        active.volume = volume
+        standby?.volume = volume
+    }
+
+    /** Avancement de la vidéo affichée, de 0 à 1 (0 tant que sa durée est inconnue). */
+    fun progress(): Float {
+        val duration = active.duration
+        if (duration == C.TIME_UNSET || duration <= 0) return 0f
+        return (active.currentPosition.toFloat() / duration).coerceIn(0f, 1f)
     }
 
     /** Appui sur la vidéo : pause ou reprise. */
@@ -265,7 +290,15 @@ private fun buildExoPlayer(context: Context, client: OkHttpClient): ExoPlayer =
         // et quand le casque est débranché.
         .setAudioAttributes(mediaAudio, true)
         .setHandleAudioBecomingNoisy(true)
-        .setMediaSourceFactory(DefaultMediaSourceFactory(OkHttpDataSource.Factory(client)))
+        // Cache disque plafonné : revoir une vidéo ne la retélécharge pas.
+        .setMediaSourceFactory(
+            DefaultMediaSourceFactory(
+                CacheDataSource.Factory()
+                    .setCache(MediaCache.get(context))
+                    .setUpstreamDataSourceFactory(OkHttpDataSource.Factory(client))
+                    .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR),
+            ),
+        )
         .setLoadControl(
             DefaultLoadControl.Builder()
                 .setBufferDurationsMs(MIN_BUFFER_MS, MAX_BUFFER_MS, BUFFER_FOR_PLAYBACK_MS, BUFFER_AFTER_REBUFFER_MS)
@@ -273,6 +306,24 @@ private fun buildExoPlayer(context: Context, client: OkHttpClient): ExoPlayer =
         )
         .build()
         .apply { repeatMode = Player.REPEAT_MODE_ONE }
+
+/**
+ * Cache des segments HLS, partagé par tous les lecteurs de l'app (SimpleCache n'accepte qu'une
+ * instance par dossier). Le moins récemment lu part au-delà de [MEDIA_CACHE_BYTES].
+ */
+@OptIn(UnstableApi::class)
+private object MediaCache {
+    @Volatile
+    private var cache: SimpleCache? = null
+
+    fun get(context: Context): SimpleCache = cache ?: synchronized(this) {
+        cache ?: SimpleCache(
+            File(context.applicationContext.cacheDir, "media"),
+            LeastRecentlyUsedCacheEvictor(MEDIA_CACHE_BYTES),
+            StandaloneDatabaseProvider(context.applicationContext),
+        ).also { cache = it }
+    }
+}
 
 /** Vidéo avec du son : la lecture demande le focus audio, sans jouer sur une autre app. */
 private val mediaAudio: AudioAttributes = AudioAttributes.Builder()
@@ -284,3 +335,4 @@ private const val MIN_BUFFER_MS = 4_000
 private const val MAX_BUFFER_MS = 15_000
 private const val BUFFER_FOR_PLAYBACK_MS = 1_000
 private const val BUFFER_AFTER_REBUFFER_MS = 2_000
+private const val MEDIA_CACHE_BYTES = 200L * 1024 * 1024
