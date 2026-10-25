@@ -36,7 +36,7 @@ func ready(video, author uuid.UUID, title string, tags ...string) events.VideoRe
 
 func videoIDs(t *testing.T, q string) []uuid.UUID {
 	t.Helper()
-	page, err := index.NewPostgres(testdb.Pool).Videos(context.Background(), q, 0, 50)
+	page, err := index.NewPostgres(testdb.Pool).Videos(context.Background(), q, false, 0, 50)
 	require.NoError(t, err)
 	ids := make([]uuid.UUID, 0, len(page.Items))
 	for _, h := range page.Items {
@@ -121,7 +121,7 @@ func TestEngagementRanksAndCountersClamp(t *testing.T) {
 		send(t, events.TypeSocialLikeDeleted, events.SocialLikeDeletedV1{UserID: uuid.NewString(), VideoID: quiet.String(),
 			VideoOwnerID: author.String(), DeletedAt: time.Now()})
 	}
-	page, err := index.NewPostgres(testdb.Pool).Videos(context.Background(), word, 0, 50)
+	page, err := index.NewPostgres(testdb.Pool).Videos(context.Background(), word, false, 0, 50)
 	require.NoError(t, err)
 	require.Zero(t, page.Items[1].Likes, "counters never go below zero")
 	require.Zero(t, page.Items[1].Comments)
@@ -133,7 +133,7 @@ func TestEngagementRanksAndCountersClamp(t *testing.T) {
 		VideoID: late.String(), VideoOwnerID: author.String(), CreatedAt: time.Now()})
 	require.NotContains(t, videoIDs(t, word), late)
 	send(t, events.TypeVideoReady, ready(late, author, "Concert "+word))
-	page, err = index.NewPostgres(testdb.Pool).Videos(context.Background(), word, 0, 50)
+	page, err = index.NewPostgres(testdb.Pool).Videos(context.Background(), word, false, 0, 50)
 	require.NoError(t, err)
 	for _, h := range page.Items {
 		if h.VideoID == late {

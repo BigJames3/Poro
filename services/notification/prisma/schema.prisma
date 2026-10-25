@@ -46,6 +46,9 @@ model Notification {
   // Moves when a grouped notification gains an actor, never when it is read:
   // lists sort on it.
   lastActivityAt DateTime  @default(now()) @map("last_activity_at") @db.Timestamptz(6)
+  // About a photo post (ADR-0020): listed and counted only for a client that
+  // declared photo posts.
+  photoPost      Boolean   @default(false) @map("photo_post")
 
   actors NotificationActor[]
 
@@ -68,6 +71,15 @@ model NotificationActor {
 
   @@id([notificationId, actorId])
   @@map("notification_actors")
+}
+
+// Posts known to be photo posts, from poro.video.ready (ADR-0020). Social
+// events do not say what was liked or commented: this table does.
+model PhotoPost {
+  videoId   String   @id @map("video_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("photo_posts")
 }
 
 // Per-account settings. No row means every default (all true).

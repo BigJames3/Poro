@@ -236,7 +236,7 @@ paths:
                 code: { type: string, pattern: "^[0-9]{6}$" }
                 new_password: { type: string, minLength: 8, maxLength: 128 }
       responses:
-        "204": { description: Password changed, every session ended }
+        "204": { description: "Password changed, every session ended" }
         "400": { $ref: "#/components/responses/InvalidRequest" }
         "403": { $ref: "#/components/responses/Blocked" }
         "422": { $ref: "#/components/responses/CodeRejected" }

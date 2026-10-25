@@ -31,55 +31,70 @@ type Video struct {
 	ThumbnailKey string
 	DurationMs   int
 	PublishedAt  time.Time
+	// MediaType is "video" or "photo" (ADR-0020); empty means video.
+	MediaType string
 }
 
 const visible = `published_at IS NOT NULL AND deleted_at IS NULL AND moderation_status = 'approved'`
 
-// visibleTags locks the video row and returns its hashtags when it is
-// searchable, nil otherwise.
-func visibleTags(ctx context.Context, db DBTX, videoID uuid.UUID) ([]string, error) {
+// visibleTags locks the post row and returns its hashtags when it is
+// searchable (nil otherwise), with the counter of its media type: photo
+// posts are counted apart from videos (ADR-0020).
+func visibleTags(ctx context.Context, db DBTX, videoID uuid.UUID) ([]string, string, error) {
 	var tags []string
 	var shown bool
-	err := db.QueryRow(ctx, `SELECT hashtags, `+visible+` FROM videos WHERE video_id = $1 FOR UPDATE`, videoID).
-		Scan(&tags, &shown)
+	var mediaType string
+	err := db.QueryRow(ctx, `SELECT hashtags, `+visible+`, media_type FROM videos WHERE video_id = $1 FOR UPDATE`, videoID).
+		Scan(&tags, &shown, &mediaType)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !shown) {
-		return nil, nil
+		return nil, "", nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("visible tags: %w", err)
+		return nil, "", fmt.Errorf("visible tags: %w", err)
 	}
-	return tags, nil
+	if mediaType == MediaPhoto {
+		return tags, "photos_count", nil
+	}
+	return tags, "videos_count", nil
 }
 
-// changeVideo applies change and keeps hashtags.videos_count equal to the
-// number of searchable videos carrying each tag.
+// Media types of a post.
+const (
+	MediaVideo = "video"
+	MediaPhoto = "photo"
+)
+
+// changeVideo applies change and keeps hashtags.videos_count and
+// hashtags.photos_count equal to the number of searchable videos and photo
+// posts carrying each tag.
 func changeVideo(ctx context.Context, db DBTX, videoID uuid.UUID, at time.Time, change func() error) error {
-	before, err := visibleTags(ctx, db, videoID)
+	before, beforeCounter, err := visibleTags(ctx, db, videoID)
 	if err != nil {
 		return err
 	}
 	if err := change(); err != nil {
 		return err
 	}
-	after, err := visibleTags(ctx, db, videoID)
+	after, afterCounter, err := visibleTags(ctx, db, videoID)
 	if err != nil {
 		return err
 	}
+	// The counter is a column name chosen above, never client input.
 	for _, tag := range distinct(after) {
-		if slices.Contains(before, tag) {
+		if slices.Contains(before, tag) && beforeCounter == afterCounter {
 			continue
 		}
-		if _, err := db.Exec(ctx, `INSERT INTO hashtags (tag, videos_count, last_used_at) VALUES ($1, 1, $2)
-			ON CONFLICT (tag) DO UPDATE SET videos_count = hashtags.videos_count + 1,
+		if _, err := db.Exec(ctx, `INSERT INTO hashtags (tag, `+afterCounter+`, last_used_at) VALUES ($1, 1, $2)
+			ON CONFLICT (tag) DO UPDATE SET `+afterCounter+` = hashtags.`+afterCounter+` + 1,
 				last_used_at = GREATEST(hashtags.last_used_at, EXCLUDED.last_used_at)`, tag, at); err != nil {
 			return fmt.Errorf("count hashtag: %w", err)
 		}
 	}
 	for _, tag := range distinct(before) {
-		if slices.Contains(after, tag) {
+		if slices.Contains(after, tag) && beforeCounter == afterCounter {
 			continue
 		}
-		if _, err := db.Exec(ctx, `UPDATE hashtags SET videos_count = GREATEST(videos_count - 1, 0) WHERE tag = $1`, tag); err != nil {
+		if _, err := db.Exec(ctx, `UPDATE hashtags SET `+beforeCounter+` = GREATEST(`+beforeCounter+` - 1, 0) WHERE tag = $1`, tag); err != nil {
 			return fmt.Errorf("uncount hashtag: %w", err)
 		}
 	}
@@ -103,13 +118,18 @@ func UpsertReadyVideo(ctx context.Context, db DBTX, v Video) error {
 	if tags == nil {
 		tags = []string{}
 	}
+	mediaType := v.MediaType
+	if mediaType == "" {
+		mediaType = MediaVideo
+	}
 	return changeVideo(ctx, db, v.VideoID, v.PublishedAt, func() error {
-		_, err := db.Exec(ctx, `INSERT INTO videos (video_id, author_id, title, description, hashtags, thumbnail_key, duration_ms, published_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		_, err := db.Exec(ctx, `INSERT INTO videos (video_id, author_id, title, description, hashtags, thumbnail_key, duration_ms, published_at,
+				media_type)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 			ON CONFLICT (video_id) DO UPDATE SET author_id = EXCLUDED.author_id, title = EXCLUDED.title,
 				description = EXCLUDED.description, hashtags = EXCLUDED.hashtags, thumbnail_key = EXCLUDED.thumbnail_key,
-				duration_ms = EXCLUDED.duration_ms, published_at = EXCLUDED.published_at`,
-			v.VideoID, v.AuthorID, v.Title, v.Description, tags, v.ThumbnailKey, v.DurationMs, v.PublishedAt)
+				duration_ms = EXCLUDED.duration_ms, published_at = EXCLUDED.published_at, media_type = EXCLUDED.media_type`,
+			v.VideoID, v.AuthorID, v.Title, v.Description, tags, v.ThumbnailKey, v.DurationMs, v.PublishedAt, mediaType)
 		if err != nil {
 			return fmt.Errorf("upsert video: %w", err)
 		}

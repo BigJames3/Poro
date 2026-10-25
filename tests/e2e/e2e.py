@@ -296,8 +296,9 @@ def put_image(upload, raw, content_type=None):
 
 
 def photo_posts_closed(seller):
-    """By default (PHOTO_POSTS_ENABLED=false) photo posts accept nothing, before
-    authentication, and the video routes are untouched (ADR-0020)."""
+    """Switched off (PHOTO_POSTS_ENABLED=false, run with E2E_PHOTO_POSTS=0) photo
+    posts accept nothing, before authentication, and the video routes are
+    untouched (ADR-0020)."""
     body = {"images": [{"content_type": "image/jpeg", "size_bytes": len(JPEG)}]}
     for client in (seller, Client("anonymous")):
         for path in ("/api/v1/videos/photo-uploads", f"/api/v1/videos/photo-uploads/{uuid.uuid4()}/complete"):
@@ -309,13 +310,13 @@ def photo_posts_closed(seller):
 
 
 def photo_posts(seller):
-    """Photo posts (ADR-0020), with PHOTO_POSTS_ENABLED=true: signed PUTs to the real
-    storage, content checked at complete, processed by the media-worker (EXIF
-    orientation applied, no metadata kept), no photo for a client without the
-    capability."""
+    """Photo posts (ADR-0020), open by default: signed PUTs to the real storage,
+    content checked at complete, processed by the media-worker (EXIF orientation
+    applied, no metadata kept), no photo for a client without the capability.
+    Returns the ready post, deleted by photo_posts_everywhere."""
     jpeg, png, webp = ((IMAGES / name).read_bytes() for name in ("jpeg_o6.jpg", "png_alpha.png", "webp_o6.webp"))
     images = [("image/jpeg", jpeg), ("image/png", png), ("image/webp", webp)]
-    init = photo_post(seller, images, "Marché de Treichville")
+    init = photo_post(seller, images, f"Marché de Treichville #photo{RUN}")
     pid = init["video_id"]
     check(len(init["images"]) == 3 and init["expires_in"] == 3600, f"photo upload session: {init}")
     first = init["images"][0]
@@ -368,6 +369,66 @@ def photo_posts(seller):
     seller.call(*get, expect=404)  # ready, still invisible without the capability
     plain = seller.call("GET", "/api/v1/videos", query={"limit": 50})
     check(all(v["media_type"] == "video" for v in plain["items"]), "a ready photo post leaked to a client without the capability")
+    return post
+
+
+def photo_posts_everywhere(seller, buyer, post):
+    """Step 2d (ADR-0020 § 5): feed, search, social and notifications show a photo
+    post only to a client that declared photo posts; the others never see it, and
+    a cursor issued with photos is refused without them. The buyer follows the
+    seller (social step)."""
+    pid = post["id"]
+    first = post["images"][0]
+
+    def in_for_you():
+        page = buyer.call("GET", "/api/v1/feed/for-you", query={"limit": 30}, headers=PHOTOS)
+        return next((i for i in page["items"] if i["video_id"] == pid), None)
+    item = wait_for("photo post in the For You feed", in_for_you, timeout=60)
+    check(item["media_type"] == "photo" and item["hls_url"] == "" and len(item["images"]) == 3,
+          f"feed item of a photo post: {item}")
+    check((item["images"][0]["width"], item["images"][0]["height"]) == (32, 64), f"feed image 1: {item['images'][0]}")
+    for path in ("/api/v1/feed/for-you", "/api/v1/feed/following", "/api/v1/feed/trending"):
+        plain = buyer.call("GET", path, query={"limit": 30})
+        check(all(i["media_type"] == "video" for i in plain["items"]), f"{path} leaked a photo post")
+    guest = Client("guest").call("GET", "/api/v1/feed/public/trending", query={"limit": 30}, auth=False)
+    check(all(i["media_type"] == "video" for i in guest["items"]), "public trending leaked a photo post")
+    page = buyer.call("GET", "/api/v1/feed/for-you", query={"limit": 1}, headers=PHOTOS)
+    if page["next_cursor"]:
+        buyer.call("GET", "/api/v1/feed/for-you", query={"limit": 1, "cursor": page["next_cursor"]}, expect=400)
+
+    tag = f"photo{RUN}"
+    found = wait_for("photo post indexed", lambda: [v for v in buyer.call(
+        "GET", "/api/v1/search?type=videos", query={"q": "Treichville " + tag}, headers=PHOTOS)["items"] if v["video_id"] == pid], timeout=60)
+    check(found[0]["media_type"] == "photo", f"search hit of a photo post: {found[0]}")
+    plain = buyer.call("GET", "/api/v1/search?type=videos", query={"q": "Treichville " + tag})
+    check(all(v["video_id"] != pid for v in plain["items"]), "search leaked a photo post")
+    tags = buyer.call("GET", "/api/v1/search?type=hashtags", query={"q": tag})
+    check(all(h["tag"] != tag for h in tags["items"]), f"a tag of photo posts alone leaked: {tags}")
+    tags = buyer.call("GET", "/api/v1/search?type=hashtags", query={"q": tag}, headers=PHOTOS)
+    check(any(h["tag"] == tag and h["videos_count"] == 1 for h in tags["items"]), f"tag of the photo post: {tags}")
+
+    like = ("PUT", "/api/v1/videos/{videoId}/like", f"/api/v1/videos/{pid}/like")
+
+    def liked():  # social learns of the post from poro.video.ready: 404 until then
+        status, _, _ = http("PUT", BASE + like[2], None, {"Authorization": f"Bearer {buyer.token}"})
+        return status in (200, 204) or None
+    wait_for("photo post likeable", liked, timeout=60)
+    buyer.call(*like, expect=(200, 204))  # a like is idempotent
+    likes = ("GET", "/api/v1/users/{userId}/likes", f"/api/v1/users/{buyer.user['id']}/likes")
+    check(any(i["video_id"] == pid for i in buyer.call(*likes, query={"limit": 50}, headers=PHOTOS)["items"]),
+          "liked photo post missing with the capability")
+    check(all(i["video_id"] != pid for i in buyer.call(*likes, query={"limit": 50})["items"]), "liked photo post leaked")
+
+    def photo_note():
+        page = seller.call("GET", "/api/v1/notifications", query={"limit": 50}, headers=PHOTOS)
+        return [n for n in page["items"] if n["entity_id"] == pid]
+    notes = wait_for("notifications about the photo post", photo_note, timeout=60)
+    check(all(n["data"].get("media_type") == "photo" for n in notes), f"photo notifications: {notes}")
+    plain = seller.call("GET", "/api/v1/notifications", query={"limit": 50})
+    check(all(n["entity_id"] != pid for n in plain["items"]), "a photo notification leaked")
+    with_photos = seller.call("GET", "/api/v1/notifications/unread-count", headers=PHOTOS)["count"]
+    without = seller.call("GET", "/api/v1/notifications/unread-count")["count"]
+    check(with_photos >= without, f"unread counts: {with_photos} with photos, {without} without")
 
     seller.call("DELETE", "/api/v1/videos/{id}", f"/api/v1/videos/{pid}", expect=204)
 
@@ -624,11 +685,16 @@ def main():
     step("avatar upload", avatar, seller)
     seller.call("POST", "/api/v1/users/me/creator", expect=(200, 201))
     video_id = step("video upload and processing", videos, seller)
-    if os.environ.get("E2E_PHOTO_POSTS") == "1":
-        step("photo posts (enabled)", photo_posts, seller)
+    # Photo posts are open by default; E2E_PHOTO_POSTS=0 checks a server where
+    # PHOTO_POSTS_ENABLED=false.
+    photo = None
+    if os.environ.get("E2E_PHOTO_POSTS") == "0":
+        step("photo posts switched off", photo_posts_closed, seller)
     else:
-        step("photo posts closed by default", photo_posts_closed, seller)
+        photo = step("photo posts", photo_posts, seller)
     comment, reply = step("likes, comments, follows", social, seller, buyer, video_id)
+    if photo is not None:
+        step("photo posts across feed, search, social, notifications", photo_posts_everywhere, seller, buyer, photo)
     step("feeds", feeds, buyer, video_id)
     step("search", search, buyer, seller_name, f"Danse e2e {RUN}")
     step("notifications", notifications, seller)

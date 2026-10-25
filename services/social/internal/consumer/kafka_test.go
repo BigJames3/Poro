@@ -68,7 +68,7 @@ func TestUserDeletedOverKafkaErasesTheAccount(t *testing.T) {
 
 	video, owner, fan := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
 	require.NoError(t, repository.EnsureUser(ctx, testdb.Pool, owner))
-	require.NoError(t, repository.MarkVideoReady(ctx, testdb.Pool, video, owner, time.Now()))
+	require.NoError(t, repository.MarkVideoReady(ctx, testdb.Pool, video, owner, "video", time.Now()))
 	svc := service.New(testdb.Pool, zap.NewNop())
 	_, err := svc.LikeVideo(ctx, fan, video)
 	require.NoError(t, err)

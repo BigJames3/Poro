@@ -59,7 +59,10 @@ export interface VideoReadyV1 {
   video_id: string;
   user_id: string;
   title?: string;
+  description?: string;
   ready_at: string;
+  /** "video" or "photo" (ADR-0020); absent on events published before photo posts. */
+  media_type?: string;
 }
 
 export interface VideoDeletedV1 {

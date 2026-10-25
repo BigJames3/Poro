@@ -61,13 +61,14 @@ func ListVideoLikes(ctx context.Context, db DBTX, videoID uuid.UUID, after *curs
 	return collectLikes(rows)
 }
 
-// ListUserLikes returns the ready videos a user likes, newest like first.
-func ListUserLikes(ctx context.Context, db DBTX, userID uuid.UUID, after *cursor.Position, limit int) ([]Like, error) {
+// ListUserLikes returns the ready posts a user likes, newest like first,
+// among mediaTypes: videos only for a client without photo posts (ADR-0020).
+func ListUserLikes(ctx context.Context, db DBTX, userID uuid.UUID, mediaTypes []string, after *cursor.Position, limit int) ([]Like, error) {
 	ts, id := keyset(after)
 	rows, err := db.Query(ctx, `SELECT l.id, l.user_id, l.video_id, l.created_at FROM likes l
-		JOIN videos_projection v ON v.video_id = l.video_id AND v.status = $5
+		JOIN videos_projection v ON v.video_id = l.video_id AND v.status = $5 AND v.media_type = ANY($6)
 		WHERE l.user_id = $1 AND ($2::timestamptz IS NULL OR (l.created_at, l.id) < ($2::timestamptz, $3::uuid))
-		ORDER BY l.created_at DESC, l.id DESC LIMIT $4`, userID, ts, id, limit, model.VideoReady)
+		ORDER BY l.created_at DESC, l.id DESC LIMIT $4`, userID, ts, id, limit, model.VideoReady, mediaTypes)
 	if err != nil {
 		return nil, fmt.Errorf("list user likes: %w", err)
 	}

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -19,7 +20,25 @@ type Video struct {
 	HLSKey       string
 	DurationMs   int
 	PublishedAt  time.Time
+	// MediaType is "video" or "photo" (ADR-0020); empty means video.
+	MediaType string
+	// Images are the pictures of a photo post, in order; empty for a video.
+	Images []Image
 }
+
+// Image is one processed picture of a photo post, as object keys.
+type Image struct {
+	ImageKey     string `json:"image_key"`
+	ThumbnailKey string `json:"thumbnail_key"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
+}
+
+// Media types of a post.
+const (
+	MediaVideo = "video"
+	MediaPhoto = "photo"
+)
 
 // UpsertReadyVideo records a ready video. A deleted video (or its tombstone)
 // stays deleted.
@@ -28,14 +47,28 @@ func UpsertReadyVideo(ctx context.Context, db DBTX, v Video) error {
 	if hashtags == nil {
 		hashtags = []string{}
 	}
-	_, err := db.Exec(ctx, `INSERT INTO videos (video_id, author_id, title, hashtags, thumbnail_key, hls_key, duration_ms, published_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	mediaType := v.MediaType
+	if mediaType == "" {
+		mediaType = MediaVideo
+	}
+	images := v.Images
+	if images == nil {
+		images = []Image{}
+	}
+	rawImages, err := json.Marshal(images)
+	if err != nil {
+		return fmt.Errorf("encode images: %w", err)
+	}
+	_, err = db.Exec(ctx, `INSERT INTO videos (video_id, author_id, title, hashtags, thumbnail_key, hls_key, duration_ms, published_at,
+			media_type, images)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (video_id) DO UPDATE SET
 			author_id = EXCLUDED.author_id, title = EXCLUDED.title, hashtags = EXCLUDED.hashtags,
 			thumbnail_key = EXCLUDED.thumbnail_key, hls_key = EXCLUDED.hls_key,
-			duration_ms = EXCLUDED.duration_ms, published_at = EXCLUDED.published_at
+			duration_ms = EXCLUDED.duration_ms, published_at = EXCLUDED.published_at,
+			media_type = EXCLUDED.media_type, images = EXCLUDED.images
 		WHERE videos.deleted_at IS NULL`,
-		v.VideoID, v.AuthorID, v.Title, hashtags, v.ThumbnailKey, v.HLSKey, v.DurationMs, v.PublishedAt)
+		v.VideoID, v.AuthorID, v.Title, hashtags, v.ThumbnailKey, v.HLSKey, v.DurationMs, v.PublishedAt, mediaType, rawImages)
 	if err != nil {
 		return fmt.Errorf("upsert video: %w", err)
 	}

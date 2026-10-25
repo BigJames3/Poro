@@ -1,6 +1,6 @@
 # ADR-0020 — Publications photo dans le service vidéo
 
-- Statut : accepté (contrat validé le 2026-10-24) ; étape 2b (service `video`) implémentée, étapes 2c à 5 à venir
+- Statut : accepté (contrat validé le 2026-10-24) ; étapes 2b (service `video`), 2c (media-worker) et 2d (consommateurs) implémentées, publications photo ouvertes par défaut ; étapes 3 à 5 (Android) en cours
 - Date : 2026-10-24
 - Complète : [ADR-0007](0007-pipeline-video.md), [ADR-0009](0009-feed-v1.md),
   [ADR-0015](0015-controle-acces-stockage-objet.md), [ADR-0018](0018-effacement-du-compte-dans-les-services.md)
@@ -260,7 +260,7 @@ ready ──► modération : removed (quarantaine) / restored (Reveal)
 ### Étape 2b (service `video`, PR #75)
 
 - Migration `000003_photo_posts`, routes `POST /api/v1/videos/photo-uploads` et `…/{id}/complete`, PUT présigné, annulation, balayage, effacement de compte et filtre de capacité sur `GET /api/v1/videos` et `GET /api/v1/videos/{id}`.
-- **Routes photo fermées par défaut** : `PHOTO_POSTS_ENABLED` (service `video`, défaut `false`, `docker-compose.yml` et `.env.example`).
+- **Routes photo fermées par défaut à cette étape** : `PHOTO_POSTS_ENABLED` (service `video`, défaut `false` jusqu'à l'étape 2d, puis `true`).
   - Fermées, `POST /api/v1/videos/photo-uploads` et `…/{id}/complete` répondent 404 `photo_posts_disabled` avant toute authentification ou limite de débit, et n'acceptent rien.
   - Les routes vidéo n'en dépendent pas.
   - L'annulation (`DELETE /uploads/{id}`), la lecture et la suppression restent ouvertes, pour qu'aucun objet déjà stocké ne reste bloqué.
@@ -289,7 +289,28 @@ ready ──► modération : removed (quarantaine) / restored (Reveal)
   3. la publication est encore `processing` et non supprimée : sinon le worker l'ignore.
 
   Le rejeu est idempotent, car chaque identifiant d'événement n'est traité qu'une fois, et la revalidation s'applique comme pour un premier traitement.
-- **Le drapeau reste fermé jusqu'à la validation de l'étape 2d.** Une photo prête publie `poro.video.ready`. Or le fil, la recherche, social et notification ne savent pas encore réserver les photos aux clients `photo-posts` : ouvrir le drapeau avant 2d ferait apparaître des photos aux anciennes versions.
+- Le drapeau est resté fermé jusqu'à l'étape 2d : une photo prête publie `poro.video.ready`, et les consommateurs ne savaient pas encore réserver les photos aux clients `photo-posts`.
+
+### Étape 2d (feed, search, social, notification)
+
+- **Analyse de l'en-tête partagée** : `packages/shared-go/capability` (Go) et `services/notification/src/common/capabilities.ts`. Jetons séparés par des virgules, insensibles à la casse ; jeton inconnu ignoré ; sans en-tête, vidéos seules.
+- **feed** (migration `000003_photo_posts`) :
+  - colonnes `media_type` (défaut `video`) et `images JSONB` (défaut `[]`) ; un événement sans `media_type` est une vidéo, une photo sans images ou un type inconnu part en DLQ ;
+  - les six requêtes (Abonnements, Tendances, hydratation de « Pour toi » et ses trois sources de candidats) filtrent `media_type = ANY(...)` ;
+  - clés de cache de page 1 et clés de session « Pour toi » suffixées par l'ensemble de capacités (`v` ou `vp`) ;
+  - curseurs : ceux des clients `photo-posts` portent un type distinct (`tp`, `sp`, `fp`) et sont refusés sans l'en-tête (400 `invalid_cursor`), et inversement ; ceux des vidéos seules gardent leur forme, donc aucun curseur en cours n'est invalidé au déploiement ;
+  - DTO `Item` : `media_type`, `images[]` (`url`, `thumbnail_url`, `width`, `height`, toujours un tableau), `hls_url` vide pour une photo.
+- **social** (migration `000004_photo_posts`) : `videos_projection.media_type` ; `GET /users/{userId}/likes` filtre par capacité, curseur préfixé `p.` avec photos. J'aime, commentaires et partages d'une photo utilisent les mêmes routes.
+- **search** (migration `000004_photo_posts`) : `videos.media_type` et `hashtags.photos_count`, tenu à jour à chaque changement de visibilité comme `videos_count`. Sans l'en-tête : résultats `videos` sans photo, hashtags comptés sur les vidéos seules, tag porté uniquement par des photos absent (recherche et suggestions). Curseurs `videos` et `hashtags` distincts par capacité. La légende d'une photo est cherchée comme une description.
+- **notification** (migration `20261025120000_photo_posts`) :
+  - table `photo_posts`, remplie par `poro.video.ready` d'une photo, et colonne `notifications.photo_post` ;
+  - liste et `unread-count` filtrés par capacité ; les notifications restent stockées ;
+  - libellés : « Ta publication photo est en ligne », « … a aimé ta publication », « … a commenté ta publication » ; `data.media_type: photo` pour le routage côté app ;
+  - course entre sujets Kafka : un j'aime traité avant le `ready` de sa photo est rattrapé au `ready` (drapeau, `media_type`, libellé). Les curseurs de notification sont des positions de clé sur la requête déjà filtrée : rejoués sans l'en-tête, ils ne renvoient aucune photo.
+- **moderation** : aucun changement, le texte analysé comprend déjà la description (légende) et les hashtags.
+- **Gateway** : `Poro-Capabilities` ajouté aux en-têtes CORS autorisés.
+- **`PHOTO_POSTS_ENABLED` passe à `true` par défaut** (décision du propriétaire du 2026-10-25) : config, `docker-compose.yml` et `.env.example`. `false` referme les deux routes de création (404 `photo_posts_disabled`) sans toucher aux vidéos.
+- **Tests** : Go sur Postgres réel (testcontainers) pour feed, social et search, dont un test par service vérifiant qu'aucune photo n'atteint un client sans l'en-tête, en base comme en cache, et le refus des curseurs croisés ; e2e Jest pour notification (j'aime avant `ready` compris) ; parcours e2e « photo posts across feed, search, social, notifications » sur la pile complète.
 
 ## Tests contractuels et critères d'acceptation
 

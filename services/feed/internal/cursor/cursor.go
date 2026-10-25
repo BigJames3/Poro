@@ -39,6 +39,18 @@ const (
 	kindSession = "f"
 )
 
+// scoped marks the cursors of a client that declared photo posts (ADR-0020).
+// A cursor is only accepted with the capabilities it was issued for: replayed
+// without the header, a photo cursor is invalid and never served. Video-only
+// cursors keep their original form, so cursors issued before photo posts
+// stay valid.
+func scoped(kind string, photoPosts bool) string {
+	if photoPosts {
+		return kind + "p"
+	}
+	return kind
+}
+
 func encode(kind, value, id string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(kind + "|" + value + "|" + id))
 }
@@ -56,16 +68,16 @@ func decode(s, kind string) (string, string, error) {
 }
 
 // EncodeTime packs a time position.
-func EncodeTime(p Time) string {
-	return encode(kindTime, p.At.UTC().Format(time.RFC3339Nano), p.VideoID.String())
+func EncodeTime(p Time, photoPosts bool) string {
+	return encode(scoped(kindTime, photoPosts), p.At.UTC().Format(time.RFC3339Nano), p.VideoID.String())
 }
 
 // DecodeTime unpacks a time position; "" is the first page and returns nil.
-func DecodeTime(s string) (*Time, error) {
+func DecodeTime(s string, photoPosts bool) (*Time, error) {
 	if s == "" {
 		return nil, nil
 	}
-	value, id, err := decode(s, kindTime)
+	value, id, err := decode(s, scoped(kindTime, photoPosts))
 	if err != nil {
 		return nil, err
 	}
@@ -81,16 +93,16 @@ func DecodeTime(s string) (*Time, error) {
 }
 
 // EncodeScore packs a score position. The float round-trips exactly.
-func EncodeScore(p Score) string {
-	return encode(kindScore, strconv.FormatFloat(p.Score, 'g', -1, 64), p.VideoID.String())
+func EncodeScore(p Score, photoPosts bool) string {
+	return encode(scoped(kindScore, photoPosts), strconv.FormatFloat(p.Score, 'g', -1, 64), p.VideoID.String())
 }
 
 // DecodeScore unpacks a score position; "" is the first page and returns nil.
-func DecodeScore(s string) (*Score, error) {
+func DecodeScore(s string, photoPosts bool) (*Score, error) {
 	if s == "" {
 		return nil, nil
 	}
-	value, id, err := decode(s, kindScore)
+	value, id, err := decode(s, scoped(kindScore, photoPosts))
 	if err != nil {
 		return nil, err
 	}
@@ -106,16 +118,16 @@ func DecodeScore(s string) (*Score, error) {
 }
 
 // EncodeSession packs a For You position.
-func EncodeSession(p Session) string {
-	return encode(kindSession, strconv.Itoa(p.Offset), p.ID)
+func EncodeSession(p Session, photoPosts bool) string {
+	return encode(scoped(kindSession, photoPosts), strconv.Itoa(p.Offset), p.ID)
 }
 
 // DecodeSession unpacks a For You position; "" starts a new session and returns nil.
-func DecodeSession(s string) (*Session, error) {
+func DecodeSession(s string, photoPosts bool) (*Session, error) {
 	if s == "" {
 		return nil, nil
 	}
-	value, id, err := decode(s, kindSession)
+	value, id, err := decode(s, scoped(kindSession, photoPosts))
 	if err != nil {
 		return nil, err
 	}

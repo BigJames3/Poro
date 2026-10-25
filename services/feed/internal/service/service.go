@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/poro/shared-go/capability"
 	"github.com/poro/shared-go/httpx"
 
 	"github.com/poro/feed/internal/cursor"
@@ -42,66 +43,69 @@ func New(pool *pgxpool.Pool, sessions *session.Store, cache *session.Cache, publ
 	return &Feed{pool: pool, sessions: sessions, cache: cache, public: public, log: log}
 }
 
-// Following returns the videos of followed accounts, newest first. Page 1 is
-// cached for a minute per viewer.
-func (f *Feed) Following(ctx context.Context, viewer uuid.UUID, rawCursor string, limit int) (*dto.Page, error) {
-	after, err := cursor.DecodeTime(rawCursor)
+// Following returns the posts of followed accounts, newest first. Page 1 is
+// cached for a minute per viewer and capability scope. photoPosts: the client
+// declared photo posts (ADR-0020); otherwise it receives videos only.
+func (f *Feed) Following(ctx context.Context, viewer uuid.UUID, photoPosts bool, rawCursor string, limit int) (*dto.Page, error) {
+	after, err := cursor.DecodeTime(rawCursor, photoPosts)
 	if err != nil {
 		return nil, errCursor
 	}
 	limit = model.PageSize(limit)
 	key := ""
 	if after == nil {
-		key = "following:" + viewer.String() + ":" + strconv.Itoa(limit)
+		key = "following:" + viewer.String() + ":" + strconv.Itoa(limit) + ":" + capability.Scope(photoPosts)
 	}
 	return f.cached(ctx, key, func() (*dto.Page, error) {
-		rows, err := repository.FollowingPage(ctx, f.pool, viewer, after, limit+1)
+		rows, err := repository.FollowingPage(ctx, f.pool, viewer, capability.MediaTypes(photoPosts), after, limit+1)
 		if err != nil {
 			return nil, err
 		}
 		return f.page(rows, limit, func(it repository.Item) string {
-			return cursor.EncodeTime(cursor.Time{At: it.PublishedAt, VideoID: it.VideoID})
+			return cursor.EncodeTime(cursor.Time{At: it.PublishedAt, VideoID: it.VideoID}, photoPosts)
 		}), nil
 	})
 }
 
 // Trending returns the best scores of the last 72 hours. Page 1 is cached for
-// a minute for everyone.
-func (f *Feed) Trending(ctx context.Context, rawCursor string, limit int) (*dto.Page, error) {
-	after, err := cursor.DecodeScore(rawCursor)
+// a minute for everyone with the same capability scope.
+func (f *Feed) Trending(ctx context.Context, photoPosts bool, rawCursor string, limit int) (*dto.Page, error) {
+	after, err := cursor.DecodeScore(rawCursor, photoPosts)
 	if err != nil {
 		return nil, errCursor
 	}
 	limit = model.PageSize(limit)
 	key := ""
 	if after == nil {
-		key = "trending:" + strconv.Itoa(limit)
+		key = "trending:" + strconv.Itoa(limit) + ":" + capability.Scope(photoPosts)
 	}
 	return f.cached(ctx, key, func() (*dto.Page, error) {
-		rows, err := repository.TrendingPage(ctx, f.pool, after, limit+1)
+		rows, err := repository.TrendingPage(ctx, f.pool, capability.MediaTypes(photoPosts), after, limit+1)
 		if err != nil {
 			return nil, err
 		}
 		return f.page(rows, limit, func(it repository.Item) string {
-			return cursor.EncodeScore(cursor.Score{Score: it.TrendingScore, VideoID: it.VideoID})
+			return cursor.EncodeScore(cursor.Score{Score: it.TrendingScore, VideoID: it.VideoID}, photoPosts)
 		}), nil
 	})
 }
 
 // ForYou serves a 200-video session built once and paged from Redis. An
 // expired or unknown session starts a new one instead of failing.
-func (f *Feed) ForYou(ctx context.Context, viewer uuid.UUID, rawCursor string, limit int) (*dto.Page, error) {
-	pos, err := cursor.DecodeSession(rawCursor)
+func (f *Feed) ForYou(ctx context.Context, viewer uuid.UUID, photoPosts bool, rawCursor string, limit int) (*dto.Page, error) {
+	pos, err := cursor.DecodeSession(rawCursor, photoPosts)
 	if err != nil {
 		return nil, errCursor
 	}
 	limit = model.PageSize(limit)
+	scope := capability.Scope(photoPosts)
+	mediaTypes := capability.MediaTypes(photoPosts)
 
 	var ids []uuid.UUID
 	var sessionID string
 	offset := 0
 	if pos != nil {
-		loaded, ok, err := f.sessions.Load(ctx, viewer, pos.ID)
+		loaded, ok, err := f.sessions.Load(ctx, viewer, scope, pos.ID)
 		if err != nil {
 			return nil, errUnavailable.WithCause(err)
 		}
@@ -110,22 +114,22 @@ func (f *Feed) ForYou(ctx context.Context, viewer uuid.UUID, rawCursor string, l
 		}
 	}
 	if sessionID == "" {
-		if ids, err = f.buildSession(ctx, viewer); err != nil {
+		if ids, err = f.buildSession(ctx, viewer, mediaTypes); err != nil {
 			return nil, errInternal.WithCause(err)
 		}
-		if sessionID, err = f.sessions.Create(ctx, viewer, ids); err != nil {
+		if sessionID, err = f.sessions.Create(ctx, viewer, scope, ids); err != nil {
 			return nil, errUnavailable.WithCause(err)
 		}
 	}
 
 	end := min(offset+limit, len(ids))
-	rows, err := repository.Hydrate(ctx, f.pool, ids[offset:end])
+	rows, err := repository.Hydrate(ctx, f.pool, mediaTypes, ids[offset:end])
 	if err != nil {
 		return nil, errInternal.WithCause(err)
 	}
 	out := &dto.Page{Items: f.items(rows)}
 	if end < len(ids) {
-		next := cursor.EncodeSession(cursor.Session{ID: sessionID, Offset: end})
+		next := cursor.EncodeSession(cursor.Session{ID: sessionID, Offset: end}, photoPosts)
 		out.NextCursor = &next
 	}
 	return out, nil
@@ -133,16 +137,16 @@ func (f *Feed) ForYou(ctx context.Context, viewer uuid.UUID, rawCursor string, l
 
 // buildSession mixes 60% following, 30% trending and 10% discovery, or 70%
 // trending and 30% discovery when the viewer follows nobody who posted.
-func (f *Feed) buildSession(ctx context.Context, viewer uuid.UUID) ([]uuid.UUID, error) {
-	following, err := repository.FollowingCandidates(ctx, f.pool, viewer, model.FollowingCandidates)
+func (f *Feed) buildSession(ctx context.Context, viewer uuid.UUID, mediaTypes []string) ([]uuid.UUID, error) {
+	following, err := repository.FollowingCandidates(ctx, f.pool, viewer, mediaTypes, model.FollowingCandidates)
 	if err != nil {
 		return nil, err
 	}
-	trending, err := repository.TrendingCandidates(ctx, f.pool, model.TrendingCandidates)
+	trending, err := repository.TrendingCandidates(ctx, f.pool, mediaTypes, model.TrendingCandidates)
 	if err != nil {
 		return nil, err
 	}
-	discovery, err := repository.DiscoveryCandidates(ctx, f.pool, viewer, model.DiscoveryMaxAge,
+	discovery, err := repository.DiscoveryCandidates(ctx, f.pool, viewer, mediaTypes, model.DiscoveryMaxAge,
 		model.DiscoveryMaxFollowers, model.DiscoveryCandidates)
 	if err != nil {
 		return nil, err
@@ -208,9 +212,20 @@ func (f *Feed) items(rows []repository.Item) []dto.Item {
 		if hashtags == nil {
 			hashtags = []string{}
 		}
+		images := make([]dto.Image, len(r.Images))
+		for j, img := range r.Images {
+			images[j] = dto.Image{
+				URL: f.url(img.ImageKey), ThumbnailURL: f.url(img.ThumbnailKey), Width: img.Width, Height: img.Height,
+			}
+		}
+		mediaType := r.MediaType
+		if mediaType == "" {
+			mediaType = capability.MediaVideo
+		}
 		out[i] = dto.Item{
-			VideoID: r.VideoID.String(), Title: r.Title, Hashtags: hashtags, DurationMs: r.DurationMs,
-			PublishedAt: r.PublishedAt, ThumbnailURL: f.public(r.ThumbnailKey), HLSURL: f.public(r.HLSKey),
+			VideoID: r.VideoID.String(), MediaType: mediaType, Images: images,
+			Title: r.Title, Hashtags: hashtags, DurationMs: r.DurationMs,
+			PublishedAt: r.PublishedAt, ThumbnailURL: f.url(r.ThumbnailKey), HLSURL: f.url(r.HLSKey),
 			Stats: dto.Stats{Likes: r.Likes, Comments: r.Comments, Shares: r.Shares},
 			Author: dto.Author{
 				ID: r.AuthorID.String(), Username: r.Username, DisplayName: r.DisplayName, AvatarURL: r.AvatarURL,
@@ -218,4 +233,13 @@ func (f *Feed) items(rows []repository.Item) []dto.Item {
 		}
 	}
 	return out
+}
+
+// url is the client URL of an object key; an empty key (the HLS of a photo
+// post) stays empty instead of pointing at the bucket root.
+func (f *Feed) url(key string) string {
+	if key == "" {
+		return ""
+	}
+	return f.public(key)
 }

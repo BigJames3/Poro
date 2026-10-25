@@ -59,13 +59,19 @@ interface Draft {
   data: Record<string, string>;
   /** Grouped drafts fold every actor of the same group_key into one row. */
   grouped: boolean;
-  render: (actor: string, others: number) => Message;
+  /** photo: the post is a photo post (ADR-0020), for its wording. */
+  render: (actor: string, others: number, photo: boolean) => Message;
 }
 
 /** A push to send once the transaction has committed. */
 interface PendingPush {
   userId: string;
   message: PushMessage;
+}
+
+/** A poro.video.ready of a photo post; an event without media_type is a video. */
+function isPhotoEvent(data: Data): boolean {
+  return data.media_type === 'photo';
 }
 
 function uuidField(data: Data, field: string): string {
@@ -241,6 +247,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
           await tx.notification.deleteMany({
             where: { videoId: uuidField(data, 'video_id') },
           });
+          await tx.photoPost.deleteMany({ where: { videoId: uuidField(data, 'video_id') } });
           return;
         case TYPE_SOCIAL_COMMENT_DELETED:
           await tx.notification.deleteMany({
@@ -257,6 +264,9 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
           await this.shopUpdated(tx, data);
           return;
         default:
+          if (env.type === TYPE_VIDEO_READY && isPhotoEvent(data)) {
+            await this.photoPostReady(tx, uuidField(data, 'video_id'));
+          }
           for (const draft of await this.drafts(tx, env.type, data)) {
             const pending = await this.write(tx, draft);
             if (pending) {
@@ -308,7 +318,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
         groupKey: `like:${videoId}:${hourBucket(createdAt)}`,
         data: { video_id: videoId },
         grouped: true,
-        render: (actor, others) => messages.like(actor, others),
+        render: (actor, others, photo) => messages.like(actor, others, photo),
       },
     ];
   }
@@ -350,7 +360,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
         ...base,
         userId: ownerId,
         type: 'comment',
-        render: (actor) => messages.comment(actor, excerpt),
+        render: (actor, _others, photo) => messages.comment(actor, excerpt, photo),
       });
     }
     return drafts;
@@ -377,6 +387,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
   private videoReadyDrafts(data: Data): Draft[] {
     const videoId = uuidField(data, 'video_id');
     const title = optionalString(data, 'title', 100) ?? undefined;
+    const photo = isPhotoEvent(data);
     return [
       {
         userId: uuidField(data, 'user_id'),
@@ -388,7 +399,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
         groupKey: `video_ready:${videoId}`,
         data: { video_id: videoId },
         grouped: false,
-        render: () => messages.videoReady(title),
+        render: () => (photo ? messages.photoReady() : messages.videoReady(title)),
       },
     ];
   }
@@ -483,6 +494,27 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
   }
 
   /** Writes draft and returns the push to send, if any. */
+  /**
+   * Records a photo post, and marks the notifications already written about
+   * it: a like processed before poro.video.ready (another topic, no ordering)
+   * is hidden from clients without photo posts all the same.
+   */
+  private async photoPostReady(tx: Tx, videoId: string): Promise<void> {
+    await tx.photoPost.createMany({ data: [{ videoId }], skipDuplicates: true });
+    // Same marks as a notification written after the event: the flag, the
+    // media type the app routes on, and the wording of the stored text.
+    await tx.$executeRaw`
+      UPDATE notifications
+      SET photo_post = true,
+          data = data || '{"media_type":"photo"}'::jsonb,
+          body = replace(body, 'ta vidéo', 'ta publication')
+      WHERE video_id = ${videoId}::uuid AND NOT photo_post`;
+  }
+
+  private async isPhotoPost(tx: Tx, videoId: string | null): Promise<boolean> {
+    return videoId !== null && (await tx.photoPost.count({ where: { videoId } })) > 0;
+  }
+
   private async write(tx: Tx, draft: Draft): Promise<PendingPush | undefined> {
     if (draft.actorId === draft.userId) {
       return undefined;
@@ -508,9 +540,11 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
             select: { displayName: true, username: true },
           }),
     );
+    const photo = await this.isPhotoPost(tx, draft.videoId);
+    const data = photo ? { ...draft.data, media_type: 'photo' } : draft.data;
     const now = new Date();
     const id = uuidv7(now.getTime());
-    const message = draft.render(actor, 0);
+    const message = draft.render(actor, 0, photo);
     const { count } = await tx.notification.createMany({
       data: [
         {
@@ -519,13 +553,14 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
           type: draft.type,
           title: message.title,
           body: message.body,
-          data: draft.data,
+          data,
           actorId: draft.actorId,
           actorCount: 1,
           entityType: draft.entityType,
           entityId: draft.entityId,
           videoId: draft.videoId,
           groupKey: draft.groupKey,
+          photoPost: photo,
           createdAt: now,
           lastActivityAt: now,
         },
@@ -546,12 +581,12 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
         userId: draft.userId,
         message: {
           ...message,
-          data: { ...draft.data, notification_id: id, type: draft.type },
+          data: { ...data, notification_id: id, type: draft.type },
         },
       };
     }
     if (draft.grouped && draft.actorId !== null) {
-      await this.addActor(tx, draft, draft.actorId, actor, now);
+      await this.addActor(tx, draft, draft.actorId, actor, now, photo);
     }
     return undefined;
   }
@@ -566,6 +601,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
     actorId: string,
     actor: string,
     now: Date,
+    photo: boolean,
   ): Promise<void> {
     const existing = await tx.notification.findUnique({
       where: {
@@ -586,7 +622,7 @@ export class NotificationDispatcher implements OnApplicationBootstrap, OnApplica
     const actorCount = await tx.notificationActor.count({
       where: { notificationId: existing.id },
     });
-    const message = draft.render(actor, actorCount - 1);
+    const message = draft.render(actor, actorCount - 1, photo);
     await tx.notification.update({
       where: { id: existing.id },
       data: {

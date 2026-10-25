@@ -168,9 +168,27 @@ func decodeVideoReady(env events.Envelope) (applyFunc, error) {
 	if published.IsZero() {
 		return nil, errors.New("published_at or ready_at is required")
 	}
+	mediaType := d.MediaType
+	switch mediaType {
+	case "":
+		// Events published before photo posts are videos.
+		mediaType = repository.MediaVideo
+	case repository.MediaVideo:
+	case repository.MediaPhoto:
+		if len(d.Images) == 0 {
+			return nil, errors.New("photo post without images")
+		}
+	default:
+		return nil, fmt.Errorf("unsupported media_type %q", d.MediaType)
+	}
+	images := make([]repository.Image, len(d.Images))
+	for i, img := range d.Images {
+		images[i] = repository.Image{ImageKey: img.ImageKey, ThumbnailKey: img.ThumbnailKey, Width: img.Width, Height: img.Height}
+	}
 	v := repository.Video{
 		VideoID: ids[0], AuthorID: ids[1], Title: d.Title, Hashtags: d.Hashtags,
 		ThumbnailKey: d.ThumbnailKey, HLSKey: d.HLSKey, DurationMs: d.DurationMs, PublishedAt: published,
+		MediaType: mediaType, Images: images,
 	}
 	return func(ctx context.Context, tx pgx.Tx) error {
 		if err := repository.UpsertReadyVideo(ctx, tx, v); err != nil {

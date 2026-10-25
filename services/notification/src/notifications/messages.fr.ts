@@ -47,22 +47,27 @@ function quote(excerpt: string): string {
   return `« ${cut} »`;
 }
 
+/** What was liked or commented: a video, or a photo post (ADR-0020). */
+function post(photo: boolean): string {
+  return photo ? 'ta publication' : 'ta vidéo';
+}
+
 export const messages = {
-  like(actor: string, others: number): Message {
+  like(actor: string, others: number, photo = false): Message {
     if (others <= 0) {
-      return { title: 'Nouveau j’aime', body: `${actor} a aimé ta vidéo` };
+      return { title: 'Nouveau j’aime', body: `${actor} a aimé ${post(photo)}` };
     }
     const rest = others === 1 ? '1 autre personne' : `${others} autres personnes`;
     return {
       title: 'Nouveaux j’aime',
-      body: `${actor} et ${rest} ont aimé ta vidéo`,
+      body: `${actor} et ${rest} ont aimé ${post(photo)}`,
     };
   },
 
-  comment(actor: string, excerpt: string): Message {
+  comment(actor: string, excerpt: string, photo = false): Message {
     return {
       title: 'Nouveau commentaire',
-      body: `${actor} a commenté ta vidéo : ${quote(excerpt)}`,
+      body: `${actor} a commenté ${post(photo)} : ${quote(excerpt)}`,
     };
   },
 
@@ -75,6 +80,14 @@ export const messages = {
 
   follow(actor: string): Message {
     return { title: 'Nouvel abonné', body: `${actor} a commencé à te suivre` };
+  },
+
+  /** A photo post has no title: the caption is not quoted. */
+  photoReady(): Message {
+    return {
+      title: 'Ta publication photo est en ligne',
+      body: 'Elle est maintenant visible par tous.',
+    };
   },
 
   videoReady(title: string | undefined): Message {

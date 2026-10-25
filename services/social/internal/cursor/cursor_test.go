@@ -35,3 +35,19 @@ func TestDecodeRejectsForeignCursors(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalid, c)
 	}
 }
+
+func TestScopedCursorsAreBoundToCapabilities(t *testing.T) {
+	raw := Encode(Position{CreatedAt: time.Now(), ID: uuid.New()})
+	for _, photos := range []bool{false, true} {
+		scoped := Scope(raw, photos)
+		got, err := Unscope(scoped, photos)
+		require.NoError(t, err)
+		require.Equal(t, raw, got)
+		_, err = Unscope(scoped, !photos)
+		require.ErrorIs(t, err, ErrInvalid)
+	}
+	require.Equal(t, raw, Scope(raw, false), "video-only cursors keep their form")
+	got, err := Unscope("", true)
+	require.NoError(t, err)
+	require.Empty(t, got)
+}
