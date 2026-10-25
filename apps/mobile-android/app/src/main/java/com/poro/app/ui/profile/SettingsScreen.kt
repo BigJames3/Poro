@@ -29,6 +29,7 @@ import com.poro.app.data.auth.SessionDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.BackTopBar
 import com.poro.app.ui.common.Loadable
+import com.poro.app.ui.theme.PoroSpacing
 
 @Composable
 fun SettingsScreen(
@@ -47,9 +48,9 @@ fun SettingsScreen(
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
             item { SectionTitle(stringResource(R.string.settings_devices)) }
             when (val sessions = state.sessions) {
-                Loadable.Loading -> item { CircularProgressIndicator(Modifier.padding(16.dp)) }
+                Loadable.Loading -> item { CircularProgressIndicator(Modifier.padding(PoroSpacing.L)) }
                 is Loadable.Failed -> item {
-                    Column(Modifier.padding(16.dp)) {
+                    Column(Modifier.padding(PoroSpacing.L)) {
                         ErrorMessageText(sessions.error)
                         TextButton(onClick = onRetrySessions) { Text(stringResource(R.string.action_retry)) }
                     }
@@ -63,7 +64,7 @@ fun SettingsScreen(
                             OutlinedButton(
                                 onClick = onRevokeOthers,
                                 enabled = !state.revokingOthers,
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(min = 48.dp),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = PoroSpacing.L).heightIn(min = 48.dp),
                             ) {
                                 Text(stringResource(R.string.settings_sign_out_others))
                             }
@@ -71,8 +72,8 @@ fun SettingsScreen(
                     }
                 }
             }
-            state.error?.let { item { ErrorMessageText(it, Modifier.padding(16.dp)) } }
-            item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
+            state.error?.let { item { ErrorMessageText(it, Modifier.padding(PoroSpacing.L)) } }
+            item { HorizontalDivider(Modifier.padding(vertical = PoroSpacing.S)) }
             item { SectionTitle(stringResource(R.string.settings_account)) }
             item { SettingsAction(stringResource(R.string.settings_notifications), onNotifications) }
             item { SettingsAction(stringResource(R.string.settings_addresses), onAddresses) }
@@ -94,7 +95,7 @@ private fun SectionTitle(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp).semantics { heading() },
+        modifier = Modifier.padding(horizontal = PoroSpacing.L, vertical = PoroSpacing.M).semantics { heading() },
     )
 }
 
@@ -127,7 +128,7 @@ private fun SettingsAction(
     enabled: Boolean = true,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalArrangement = Arrangement.Center) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = PoroSpacing.S), verticalArrangement = Arrangement.Center) {
         TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.heightIn(min = 48.dp)) {
             Text(text, color = color)
         }

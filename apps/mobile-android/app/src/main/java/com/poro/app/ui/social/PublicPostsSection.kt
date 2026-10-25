@@ -23,13 +23,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.poro.app.R
 import com.poro.app.data.video.VideoDto
-import com.poro.app.ui.auth.ErrorMessageText
+import com.poro.app.ui.common.EmptyState
+import com.poro.app.ui.common.ErrorRetry
+import com.poro.app.ui.common.SectionHeader
+import com.poro.app.ui.theme.PoroSpacing
 
 /**
  * Grille des publications d'un compte (3 par ligne), dans le défilement de son profil public.
@@ -41,18 +42,14 @@ fun PublicPostsSection(
     onOpen: (VideoDto) -> Unit,
     onLoadMore: () -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            stringResource(R.string.profile_posts_title),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.semantics { heading() },
-        )
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(PoroSpacing.XS)) {
+        SectionHeader(stringResource(R.string.profile_posts_title))
         if (state.videosStarted && !state.videosLoading && state.videos.isEmpty() && state.videosError == null) {
-            Text(stringResource(R.string.profile_posts_empty), style = MaterialTheme.typography.bodyMedium)
+            EmptyState(stringResource(R.string.profile_posts_empty))
         }
         val photoLabel = stringResource(R.string.post_photo_label)
         state.videos.chunked(COLUMNS).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(PoroSpacing.XS)) {
                 row.forEach { video ->
                     val label = video.headline.ifBlank { if (video.isPhoto) photoLabel else "" }
                     Box(
@@ -69,7 +66,7 @@ fun PublicPostsSection(
                                 photoLabel,
                                 color = Color.White,
                                 style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.align(Alignment.TopEnd).background(Color.Black.copy(alpha = 0.6f)).padding(4.dp),
+                                modifier = Modifier.align(Alignment.TopEnd).background(Color.Black.copy(alpha = 0.6f)).padding(PoroSpacing.XS),
                             )
                         }
                     }
@@ -78,12 +75,9 @@ fun PublicPostsSection(
             }
         }
         if (state.videosLoading) {
-            CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally).padding(8.dp))
+            CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally).padding(PoroSpacing.S))
         }
-        state.videosError?.let {
-            ErrorMessageText(it)
-            TextButton(onClick = onLoadMore) { Text(stringResource(R.string.action_retry)) }
-        }
+        state.videosError?.let { ErrorRetry(it, onLoadMore, Modifier.fillMaxWidth()) }
         if (state.canLoadMoreVideos) TextButton(onClick = onLoadMore) { Text(stringResource(R.string.my_videos_more)) }
     }
 }

@@ -58,6 +58,7 @@ import com.poro.app.data.video.VideoDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.toErrorMessage
 import com.poro.app.ui.player.LocalVideoPreview
+import com.poro.app.ui.theme.PoroSpacing
 import com.poro.app.ui.theme.brandButtonColors
 
 @Composable
@@ -87,8 +88,8 @@ fun UploadScreen(
     }
     val pickPhotos = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+        verticalArrangement = Arrangement.spacedBy(PoroSpacing.L),
     ) {
         Text(
             stringResource(R.string.upload_title),
@@ -188,8 +189,8 @@ private fun UploadStatusCard(
     if (upload == UploadState.Idle) return
     Card(Modifier.fillMaxWidth()) {
         Column(
-            Modifier.padding(16.dp).semantics { liveRegion = LiveRegionMode.Polite },
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.padding(PoroSpacing.L).semantics { liveRegion = LiveRegionMode.Polite },
+            verticalArrangement = Arrangement.spacedBy(PoroSpacing.S),
         ) {
             when (upload) {
                 is UploadState.Uploading -> {
@@ -274,7 +275,7 @@ private fun PhotoForm(
     }
     if (form.photos.isNotEmpty()) {
         Text(stringResource(R.string.upload_photo_count, form.photos.size), style = MaterialTheme.typography.bodyMedium)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
             itemsIndexed(form.photos, key = { _, uri -> uri }) { index, uri ->
                 PhotoTile(uri, index, form.photos.size, enabled = !form.preparing, onRemove = onRemove, onMove = onMove)
             }

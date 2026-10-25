@@ -44,7 +44,8 @@ class OrdersViewModel(private val orders: OrderRepository, private val asSeller:
 
     fun loadMore() {
         val current = _state.value
-        if (current.loading || (current.started && current.nextCursor == null)) return
+        // Après une erreur, la même page est redemandée (la première aussi).
+        if (current.loading || (current.started && current.nextCursor == null && current.error == null)) return
         _state.update { it.copy(loading = true, started = true, error = null) }
         viewModelScope.launch {
             val result = if (asSeller) orders.sellerOrders(current.nextCursor) else orders.orders(current.nextCursor)

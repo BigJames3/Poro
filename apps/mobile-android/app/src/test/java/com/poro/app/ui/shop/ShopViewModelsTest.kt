@@ -3,6 +3,7 @@ package com.poro.app.ui.shop
 import com.poro.app.R
 import com.poro.app.core.network.ApiErrorCodes
 import com.poro.app.core.network.ApiResult
+import com.poro.app.core.network.PageDto
 import com.poro.app.data.order.CartDto
 import com.poro.app.data.order.CartLine
 import com.poro.app.data.order.CartShop
@@ -272,5 +273,21 @@ class ShopViewModelsTest {
         vm.removeLogo()
         runCurrent()
         assertTrue("deleteLogo" in shops.calls)
+    }
+
+    @Test
+    fun `a failed first page of orders can be retried`() = runTest {
+        orders.orders = ApiResult.Failure(503, ApiErrorCodes.UNAVAILABLE, "down", null, null)
+        val vm = OrdersViewModel(orders, asSeller = false)
+        runCurrent()
+        assertTrue(vm.state.value.error != null)
+        assertFalse(vm.state.value.isEmpty)
+
+        orders.orders = ApiResult.Success(PageDto(listOf(OrderDto("o1")), null))
+        vm.loadMore()
+        runCurrent()
+
+        assertEquals(listOf("o1"), vm.state.value.orders.map { it.orderId })
+        assertTrue(vm.state.value.error == null)
     }
 }

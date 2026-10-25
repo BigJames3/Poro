@@ -16,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.data.feed.Author
 import com.poro.app.data.feed.FeedImage
@@ -26,6 +25,7 @@ import com.poro.app.data.video.VideoDto
 import com.poro.app.ui.common.Loadable
 import com.poro.app.ui.common.LoadableContent
 import com.poro.app.ui.player.VideoPlayer
+import com.poro.app.ui.theme.PoroSpacing
 
 /** Une vidéo plein écran ; une vidéo pas encore prête (ou retirée) n'affiche que son statut. */
 @Composable
@@ -65,11 +65,11 @@ fun VideoScreen(
                     stringResource(videoStatusText(video)),
                     color = Color.White,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.align(Alignment.Center).padding(32.dp),
+                    modifier = Modifier.align(Alignment.Center).padding(PoroSpacing.XXL),
                 )
             }
         }
-        IconButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
+        IconButton(onClick = onBack, modifier = Modifier.padding(PoroSpacing.S)) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.action_back), tint = Color.White)
         }
     }

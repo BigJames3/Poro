@@ -55,9 +55,12 @@ import com.poro.app.data.feed.FeedKind
 import com.poro.app.ui.auth.ErrorMessage
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
+import com.poro.app.ui.common.EmptyState
 import com.poro.app.ui.common.displayNameOf
 import com.poro.app.ui.player.VideoPlayer
 import com.poro.app.ui.player.VideoSurface
+import com.poro.app.ui.theme.PoroSpacing
+import com.poro.app.ui.theme.extraColors
 
 /**
  * Fil plein écran : une vidéo par page, défilement vertical. [actions] dessine la colonne
@@ -82,25 +85,24 @@ fun FeedScreen(
                 VideoPager(list.items, list.position, player, onItemShown, onOpenAuthor, actions)
             }
             list.error != null -> Column(
-                Modifier.fillMaxSize().padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+                Modifier.fillMaxSize().padding(PoroSpacing.XL),
+                verticalArrangement = Arrangement.spacedBy(PoroSpacing.L, Alignment.CenterVertically),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 ErrorMessageText(list.error)
                 OutlinedButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
             }
-            list.isEmpty -> Text(
+            list.isEmpty -> EmptyState(
                 stringResource(if (state.kind == FeedKind.Following) R.string.feed_following_empty else R.string.feed_empty),
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.Center).padding(32.dp),
+                color = MaterialTheme.extraColors.onMedia,
+                modifier = Modifier.align(Alignment.Center),
             )
             else -> {
                 val loading = stringResource(R.string.loading)
                 CircularProgressIndicator(Modifier.align(Alignment.Center).semantics { contentDescription = loading })
             }
         }
-        Column(Modifier.fillMaxWidth().padding(top = 8.dp, start = 8.dp, end = 8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(top = PoroSpacing.S, start = PoroSpacing.S, end = PoroSpacing.S)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.weight(1f), horizontalArrangement = Arrangement.Center) {
                     state.kinds.forEach { kind -> FeedTab(kind, selected = kind == state.kind, onClick = { onSelect(kind) }) }
@@ -119,9 +121,9 @@ private fun MoreFailed(error: ErrorMessage, onRetry: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp)
+            .padding(top = PoroSpacing.S)
             .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .padding(horizontal = PoroSpacing.M, vertical = PoroSpacing.XS)
             .semantics { liveRegion = LiveRegionMode.Polite },
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -254,13 +256,13 @@ fun VideoPage(
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))))
-                .padding(16.dp),
+                .padding(PoroSpacing.L),
         ) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(PoroSpacing.S),
                         modifier = Modifier.heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onOpenAuthor),
                     ) {
                         Avatar(item.author.avatarUrl, item.author.displayName ?: item.author.username, size = 36.dp)
@@ -292,9 +294,9 @@ private fun PlaybackFailed(onRetry: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier
             .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(12.dp))
-            .padding(16.dp)
+            .padding(PoroSpacing.L)
             .semantics { liveRegion = LiveRegionMode.Polite },
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(PoroSpacing.S),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(stringResource(R.string.video_playback_failed), color = Color.White, textAlign = TextAlign.Center)

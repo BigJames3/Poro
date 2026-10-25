@@ -63,3 +63,9 @@ fun BackTopBar(title: String, onBack: () -> Unit, actions: @Composable () -> Uni
 @Composable
 fun displayNameOf(displayName: String?, username: String?): String =
     displayName?.takeIf { it.isNotBlank() } ?: username?.let { "@$it" } ?: stringResource(R.string.member_fallback)
+
+/** Titre de section dans un écran défilant, annoncé comme titre par TalkBack. */
+@Composable
+fun SectionHeader(text: String, modifier: Modifier = Modifier) {
+    Text(text, style = MaterialTheme.typography.titleMedium, modifier = modifier.semantics { heading() })
+}

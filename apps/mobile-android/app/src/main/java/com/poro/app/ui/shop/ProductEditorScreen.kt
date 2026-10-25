@@ -44,6 +44,7 @@ import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.common.BackTopBar
 import com.poro.app.ui.common.TextLimitHint
+import com.poro.app.ui.theme.PoroSpacing
 
 class ProductEditorActions(
     val onTitleChange: (String) -> Unit,
@@ -71,8 +72,8 @@ fun ProductEditorScreen(state: ProductEditorUiState, currency: String, onBack: (
             return@Scaffold
         }
         Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+            verticalArrangement = Arrangement.spacedBy(PoroSpacing.M),
         ) {
             state.status?.let { Text(stringResource(productStatusLabel(it)), style = MaterialTheme.typography.titleSmall) }
             OutlinedTextField(
@@ -104,7 +105,7 @@ fun ProductEditorScreen(state: ProductEditorUiState, currency: String, onBack: (
             // Photos, publication et suppression : une fois le produit créé.
             if (state.productId == null) return@Column
             Text(stringResource(R.string.product_photos), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
                 state.images.forEachIndexed { i, image ->
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         AsyncImage(
@@ -150,7 +151,7 @@ fun ProductEditorScreen(state: ProductEditorUiState, currency: String, onBack: (
 
 @Composable
 private fun VariantFields(index: Int, variant: VariantDraft, currency: String, canRemove: Boolean, actions: ProductEditorActions) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
         OutlinedTextField(
             value = variant.title,
             onValueChange = { actions.onVariantChange(index, variant.copy(title = it.take(60))) },
@@ -159,7 +160,7 @@ private fun VariantFields(index: Int, variant: VariantDraft, currency: String, c
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
             OutlinedTextField(
                 value = variant.price,
                 onValueChange = { actions.onVariantChange(index, variant.copy(price = it.take(15))) },

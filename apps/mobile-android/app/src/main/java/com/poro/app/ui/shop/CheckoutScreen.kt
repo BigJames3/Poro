@@ -31,7 +31,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.core.format.Formats
 import com.poro.app.data.order.AddressDto
@@ -39,6 +38,7 @@ import com.poro.app.data.order.PreviewDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.theme.PoroSpacing
 
 @Composable
 fun CheckoutScreen(
@@ -63,8 +63,8 @@ fun CheckoutScreen(
             return@Scaffold
         }
         Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+            verticalArrangement = Arrangement.spacedBy(PoroSpacing.M),
         ) {
             if (preview == null) {
                 DeliveryFields(state, onFormChange, onUseAddress, onSaveAddressChange, onManageAddresses)
@@ -98,7 +98,7 @@ private fun DeliveryFields(
     val form = state.form
     if (state.addresses.isNotEmpty()) {
         Text(stringResource(R.string.checkout_saved_addresses), style = MaterialTheme.typography.titleSmall)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
             state.addresses.forEach { address ->
                 AssistChip(onClick = { onUseAddress(address) }, label = { Text(address.label ?: "${address.fullName}, ${address.city}") })
             }

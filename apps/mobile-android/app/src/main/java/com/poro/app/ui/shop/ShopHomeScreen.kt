@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.SubmitButton
+import com.poro.app.ui.theme.PoroSpacing
 
 @Composable
 fun ShopHomeScreen(
@@ -43,22 +44,22 @@ fun ShopHomeScreen(
     onSearchCatalog: () -> Unit,
 ) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+        verticalArrangement = Arrangement.spacedBy(PoroSpacing.L),
     ) {
         Text(stringResource(R.string.shop_home_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
         OutlinedButton(onClick = onCart, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             BadgedBox(badge = { if (state.cartCount > 0) Badge { Text(state.cartCount.toString()) } }) {
                 Icon(Icons.Filled.ShoppingCart, contentDescription = null)
             }
-            Text(stringResource(R.string.cart_title_count, state.cartCount), modifier = Modifier.padding(start = 12.dp))
+            Text(stringResource(R.string.cart_title_count, state.cartCount), modifier = Modifier.padding(start = PoroSpacing.M))
         }
         OutlinedButton(onClick = onOrders, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Text(stringResource(R.string.orders_title))
         }
         OutlinedButton(onClick = onSearchCatalog, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
             Icon(Icons.Filled.Search, contentDescription = null)
-            Text(stringResource(R.string.shop_search_catalog), modifier = Modifier.padding(start = 12.dp))
+            Text(stringResource(R.string.shop_search_catalog), modifier = Modifier.padding(start = PoroSpacing.M))
         }
         Text(stringResource(R.string.shop_find_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         Text(stringResource(R.string.shop_find_hint), style = MaterialTheme.typography.bodyMedium)

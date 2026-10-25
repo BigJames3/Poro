@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.ui.quantityString
+import com.poro.app.ui.theme.PoroSpacing
 import com.poro.app.ui.theme.brandButtonColors
 
 /** Mise en page commune des écrans de connexion : titre annoncé comme tel, contenu défilant. */
@@ -36,8 +37,8 @@ fun AuthForm(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+        verticalArrangement = Arrangement.spacedBy(PoroSpacing.L),
     ) {
         Text(title, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
         subtitle?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }

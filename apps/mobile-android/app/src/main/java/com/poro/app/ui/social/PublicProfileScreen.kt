@@ -45,6 +45,7 @@ import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.BackTopBar
 import com.poro.app.ui.common.displayNameOf
+import com.poro.app.ui.theme.PoroSpacing
 import com.poro.app.ui.theme.brandButtonColors
 
 @Composable
@@ -83,8 +84,8 @@ fun PublicProfileScreen(
             return@Scaffold
         }
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+            verticalArrangement = Arrangement.spacedBy(PoroSpacing.M),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Avatar(profile?.avatarUrl, profile?.displayName ?: profile?.username, size = 96.dp)
@@ -118,7 +119,7 @@ fun PublicProfileScreen(
  */
 @Composable
 fun FollowCounts(stats: UserStatsDto, onFollowers: () -> Unit, onFollowing: () -> Unit, modifier: Modifier = Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(PoroSpacing.S)) {
         FollowCount(stringResource(R.string.profile_followers, Formats.count(stats.followers)), onFollowers)
         FollowCount(stringResource(R.string.profile_following, Formats.count(stats.following)), onFollowing)
     }
@@ -133,7 +134,7 @@ private fun FollowCount(label: String, onClick: () -> Unit) {
             .clip(MaterialTheme.shapes.small)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) {}
-            .padding(horizontal = 8.dp),
+            .padding(horizontal = PoroSpacing.S),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, style = MaterialTheme.typography.titleSmall)

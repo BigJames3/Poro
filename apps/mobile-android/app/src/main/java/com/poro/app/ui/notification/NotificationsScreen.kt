@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,8 +34,10 @@ import com.poro.app.core.format.Formats
 import com.poro.app.data.notification.NotificationDto
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.common.EmptyState
 import com.poro.app.ui.common.ErrorRetry
 import com.poro.app.ui.quantityString
+import com.poro.app.ui.theme.PoroSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,9 +60,9 @@ fun NotificationsScreen(
         PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(Modifier.fillMaxSize()) {
                 items(state.items, key = { it.id }) { notification -> NotificationRow(notification) { onOpen(notification) } }
-                if (state.isEmpty) item { Text(stringResource(R.string.notifications_empty), modifier = Modifier.padding(16.dp)) }
-                state.error?.let { item { ErrorRetry(it, onRetry, Modifier.fillMaxWidth().padding(16.dp)) } }
-                if (state.loading) item { CircularProgressIndicator(Modifier.padding(16.dp)) }
+                if (state.isEmpty) item { EmptyState(stringResource(R.string.notifications_empty), icon = Icons.Outlined.Notifications) }
+                state.error?.let { item { ErrorRetry(it, onRetry, Modifier.fillMaxWidth().padding(PoroSpacing.L)) } }
+                if (state.loading) item { CircularProgressIndicator(Modifier.padding(PoroSpacing.L)) }
                 if (state.canLoadMore) item { LaunchedEffect(state.items.size) { onLoadMore() } }
             }
         }

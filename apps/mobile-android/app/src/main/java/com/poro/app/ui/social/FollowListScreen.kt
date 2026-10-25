@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,14 +17,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.data.social.FollowEntryDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.BackTopBar
+import com.poro.app.ui.common.EmptyState
 import com.poro.app.ui.common.displayNameOf
+import com.poro.app.ui.theme.PoroSpacing
 
 /** Abonnés ou abonnements d'un compte ; chaque ligne ouvre le profil public. */
 @Composable
@@ -41,11 +41,8 @@ fun FollowListScreen(
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
             if (state.endReached && state.items.isEmpty() && state.error == null) {
                 item {
-                    Text(
+                    EmptyState(
                         stringResource(if (kind == FollowListKind.Followers) R.string.follow_list_empty_followers else R.string.follow_list_empty_following),
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
                     )
                 }
             }
@@ -61,11 +58,11 @@ fun FollowListScreen(
                     },
                 )
             }
-            state.error?.let { item { ErrorMessageText(it, Modifier.padding(16.dp)) } }
+            state.error?.let { item { ErrorMessageText(it, Modifier.padding(PoroSpacing.L)) } }
             if (!state.endReached && state.error == null) {
                 item {
                     LaunchedEffect(state.items.size) { onLoadMore() }
-                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    Box(Modifier.fillMaxWidth().padding(PoroSpacing.L), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 }
             }
         }

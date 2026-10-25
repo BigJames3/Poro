@@ -33,6 +33,7 @@ import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.BackTopBar
 import com.poro.app.ui.common.LoadableContent
+import com.poro.app.ui.theme.PoroSpacing
 
 @Composable
 fun ShopScreen(state: ShopUiState, onBack: () -> Unit, onRetry: () -> Unit, onLoadMore: () -> Unit, onOpenProduct: (ProductDto) -> Unit) {
@@ -41,7 +42,7 @@ fun ShopScreen(state: ShopUiState, onBack: () -> Unit, onRetry: () -> Unit, onLo
         LoadableContent(state.shop, onRetry, Modifier.padding(padding)) { shop ->
             LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.fillMaxSize().padding(padding)) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(PoroSpacing.L), horizontalArrangement = Arrangement.spacedBy(PoroSpacing.M), verticalAlignment = Alignment.CenterVertically) {
                         Avatar(shop.logoUrl, shop.name, size = 64.dp)
                         Column {
                             Text("@${shop.handle}", style = MaterialTheme.typography.bodyMedium)
@@ -51,10 +52,10 @@ fun ShopScreen(state: ShopUiState, onBack: () -> Unit, onRetry: () -> Unit, onLo
                 }
                 items(state.products, key = { it.productId }) { product -> ProductCard(product) { onOpenProduct(product) } }
                 if (state.started && !state.loading && state.products.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) { Text(stringResource(R.string.shop_no_products), Modifier.padding(16.dp)) }
+                    item(span = { GridItemSpan(maxLineSpan) }) { Text(stringResource(R.string.shop_no_products), Modifier.padding(PoroSpacing.L)) }
                 }
-                state.error?.let { item(span = { GridItemSpan(maxLineSpan) }) { ErrorMessageText(it, Modifier.padding(16.dp)) } }
-                if (state.loading) item(span = { GridItemSpan(maxLineSpan) }) { CircularProgressIndicator(Modifier.padding(16.dp)) }
+                state.error?.let { item(span = { GridItemSpan(maxLineSpan) }) { ErrorMessageText(it, Modifier.padding(PoroSpacing.L)) } }
+                if (state.loading) item(span = { GridItemSpan(maxLineSpan) }) { CircularProgressIndicator(Modifier.padding(PoroSpacing.L)) }
                 if (state.canLoadMore) item(span = { GridItemSpan(maxLineSpan) }) { LaunchedEffect(state.products.size) { onLoadMore() } }
             }
         }
@@ -65,7 +66,7 @@ fun ShopScreen(state: ShopUiState, onBack: () -> Unit, onRetry: () -> Unit, onLo
 @Composable
 fun ProductCard(product: ProductDto, onClick: () -> Unit) {
     val minPrice = product.variants.minOfOrNull { it.price }
-    Column(Modifier.padding(8.dp).clickable(role = Role.Button, onClick = onClick)) {
+    Column(Modifier.padding(PoroSpacing.S).clickable(role = Role.Button, onClick = onClick)) {
         AsyncImage(
             product.images.firstOrNull()?.url,
             contentDescription = null,

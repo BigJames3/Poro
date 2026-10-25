@@ -31,6 +31,8 @@ import com.poro.app.R
 import com.poro.app.core.format.Formats
 import com.poro.app.data.social.VideoStatsDto
 import com.poro.app.ui.common.PoroIcons
+import com.poro.app.ui.theme.PoroSpacing
+import com.poro.app.ui.theme.extraColors
 
 /** Colonne d'actions sur une vidéo : j'aime, commentaires, partage, avec leurs compteurs. */
 @Composable
@@ -43,10 +45,10 @@ fun VideoActions(
     /** Null : pas de signalement possible (sa propre vidéo). */
     onReport: (() -> Unit)? = null,
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(PoroSpacing.M), horizontalAlignment = Alignment.CenterHorizontally) {
         ActionButton(
             icon = if (stats.likedByMe) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-            tint = if (stats.likedByMe) Color(0xFFFF3B5C) else Color.White,
+            tint = if (stats.likedByMe) MaterialTheme.extraColors.like else MaterialTheme.extraColors.onMedia,
             count = stats.likes,
             description = stringResource(if (stats.likedByMe) R.string.action_unlike else R.string.action_like, Formats.count(stats.likes)),
             onClick = onLike,

@@ -33,6 +33,7 @@ import com.poro.app.core.phone.PhoneNumber
 import com.poro.app.ui.auth.CodeField
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.quantityString
+import com.poro.app.ui.theme.PoroSpacing
 import com.poro.app.ui.theme.PoroTheme
 import com.poro.app.ui.theme.brandButtonColors
 
@@ -47,8 +48,8 @@ fun OtpVerifyScreen(
 ) {
     val phone = remember(state.phone) { PhoneNumber.fromE164(state.phone)?.masked() ?: state.phone }
     Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+        verticalArrangement = Arrangement.spacedBy(PoroSpacing.L),
     ) {
         Text(
             stringResource(R.string.otp_title),

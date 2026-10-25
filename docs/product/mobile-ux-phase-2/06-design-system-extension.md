@@ -103,6 +103,23 @@ val PoroShapes = Shapes(small = RoundedCornerShape(8.dp), medium = RoundedCorner
 // vérifiée au contraste AA pour chaque paire on*/fond.
 ```
 
+### 2.1 Appliqué (octobre 2026)
+
+Les jetons sont dans `ui/theme/Tokens.kt` :
+
+- `PoroSpacing` : `XS` 4, `S` 8, `M` 12, `L` 16, `XL` 24 et `XXL` 32 dp. `ContentMaxWidth` (600 dp) borne la largeur des formulaires sur tablette. Tous les `padding` et `spacedBy` des écrans prennent ces valeurs ; les écarts hors échelle restent en dp quand ils alignent sur un avatar (40 et 56 dp) ou un texte (2 et 6 dp).
+- `PoroTypography` : l'échelle Material, avec `headlineSmall`, `titleLarge`, `titleMedium` et `labelLarge` en demi-gras.
+- `PoroShapes` : coins de 4, 8, 12, 16 et 28 dp.
+- `MaterialTheme.extraColors` : `like` (le rouge du « j'aime », le seul `Color(0x…)` qui restait dans un écran), `onMedia` et `mediaScrim` pour les textes posés sur une vidéo.
+
+Le thème définit tous les rôles utilisés : les tertiaires (ocre), les rôles d'erreur et les contours chauds. Aucun violet par défaut de Material n'apparaît plus. `ThemeContrastTest` vérifie 4,5:1 pour chaque paire de texte, 3:1 pour les contours, ainsi que le rouge du « j'aime » sur une vidéo assombrie.
+
+Composants partagés (`ui/common`) :
+
+- `EmptyState` : listes et écrans vides ;
+- `ErrorRetry` : message et « Réessayer », repris aussi par `LoadableContent` ;
+- `SectionHeader` : titre de section, annoncé comme tel par TalkBack.
+
 ## 3. Critères d'acceptation du design system
 
 1. Toutes les paires texte/fond utilisées atteignent 4,5:1 (texte normal) ou 3:1 (grand texte, icônes).

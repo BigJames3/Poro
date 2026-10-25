@@ -46,6 +46,7 @@ import com.poro.app.ui.auth.AuthLink
 import com.poro.app.ui.legal.LegalMention
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.quantityString
+import com.poro.app.ui.theme.PoroSpacing
 import com.poro.app.ui.theme.PoroTheme
 import com.poro.app.ui.theme.brandButtonColors
 
@@ -62,8 +63,8 @@ fun PhoneEntryScreen(
     // L'indication n'apparaît qu'une fois assez de chiffres saisis, pas pendant la frappe.
     val showHint = !state.isValid && state.input.count { it in '0'..'9' } >= state.country.nationalLength
     Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+        verticalArrangement = Arrangement.spacedBy(PoroSpacing.L),
     ) {
         Text(
             stringResource(R.string.phone_title),
@@ -71,12 +72,12 @@ fun PhoneEntryScreen(
             modifier = Modifier.semantics { heading() },
         )
         Text(stringResource(R.string.phone_subtitle), style = MaterialTheme.typography.bodyLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+        Row(horizontalArrangement = Arrangement.spacedBy(PoroSpacing.S), verticalAlignment = Alignment.Top) {
             CountryPicker(
                 selected = state.country,
                 enabled = !state.sending,
                 onSelect = onCountryChange,
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = Modifier.padding(top = PoroSpacing.S),
             )
             OutlinedTextField(
                 value = state.input,

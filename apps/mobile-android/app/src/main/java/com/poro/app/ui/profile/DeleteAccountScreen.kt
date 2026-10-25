@@ -33,6 +33,7 @@ import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.auth.PasswordField
 import com.poro.app.ui.common.BackTopBar
 import com.poro.app.ui.quantityString
+import com.poro.app.ui.theme.PoroSpacing
 
 @Composable
 fun DeleteAccountScreen(
@@ -47,8 +48,8 @@ fun DeleteAccountScreen(
 ) {
     Scaffold(topBar = { BackTopBar(stringResource(R.string.delete_title), onBack) }) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(PoroSpacing.XL),
+            verticalArrangement = Arrangement.spacedBy(PoroSpacing.L),
         ) {
             Text(stringResource(R.string.delete_explanation), style = MaterialTheme.typography.bodyLarge)
             state.loadError?.let {
@@ -97,7 +98,7 @@ fun DeleteAccountScreen(
                     .toggleable(value = state.acknowledged, role = Role.Checkbox, onValueChange = onAcknowledgedChange),
             ) {
                 Checkbox(checked = state.acknowledged, onCheckedChange = null)
-                Text(stringResource(R.string.delete_acknowledge), modifier = Modifier.padding(start = 8.dp))
+                Text(stringResource(R.string.delete_acknowledge), modifier = Modifier.padding(start = PoroSpacing.S))
             }
             state.error?.let { ErrorMessageText(it) }
             Button(
