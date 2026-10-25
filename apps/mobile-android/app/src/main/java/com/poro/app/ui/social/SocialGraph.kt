@@ -20,6 +20,7 @@ import com.poro.app.ui.AppNav
 import com.poro.app.ui.CollectEvents
 import com.poro.app.ui.FollowListRoute
 import com.poro.app.ui.PublicProfileRoute
+import com.poro.app.ui.VideoRoute
 import com.poro.app.ui.moderation.ReportHost
 import com.poro.app.ui.moderation.ReportTarget
 import com.poro.app.ui.moderation.rememberMyUserId
@@ -30,7 +31,13 @@ fun NavGraphBuilder.socialGraph(nav: AppNav) {
     composable<PublicProfileRoute> { entry ->
         val route = entry.toRoute<PublicProfileRoute>()
         val vm = poroViewModel {
-            PublicProfileViewModel(route.userId, route.username, nav.container.profileRepository, nav.container.socialRepository)
+            PublicProfileViewModel(
+                route.userId,
+                route.username,
+                nav.container.profileRepository,
+                nav.container.socialRepository,
+                nav.container.videoRepository,
+            )
         }
         val state by vm.state.collectAsStateWithLifecycle()
         var showReport by rememberSaveable { mutableStateOf(false) }
@@ -41,6 +48,8 @@ fun NavGraphBuilder.socialGraph(nav: AppNav) {
             onReport = { showReport = true },
             onOpenFollowers = { nav.openFollowList(route.userId, FollowListKind.Followers) },
             onOpenFollowing = { nav.openFollowList(route.userId, FollowListKind.Following) },
+            onOpenVideo = { nav.controller.navigate(VideoRoute(it.id)) },
+            onLoadMoreVideos = vm::loadMoreVideos,
         )
         if (showReport) ReportHost(nav, ReportTarget(ReportTargetType.User, route.userId), onDismiss = { showReport = false })
     }

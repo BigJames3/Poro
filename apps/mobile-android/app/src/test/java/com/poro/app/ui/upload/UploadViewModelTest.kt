@@ -52,6 +52,7 @@ class UploadViewModelTest {
     private val videos = object : VideoRepository {
         override suspend fun video(id: String) = ApiResult.Success(VideoDto(id))
         override suspend fun mine(cursor: String?) = ApiResult.Success(PageDto<VideoDto>())
+        override suspend fun byUser(userId: String, cursor: String?): ApiResult<PageDto<VideoDto>> = error("unused")
         override suspend fun delete(id: String) = ApiResult.Success(Unit)
     }
     private val started = mutableListOf<String>()
@@ -94,8 +95,6 @@ class UploadViewModelTest {
         val vm = viewModel()
         vm.onVideoPicked("ok")
         runCurrent()
-        assertFalse("titre requis", vm.form.value.canPublish)
-
         vm.onTitleChange("  Match du dimanche ")
         vm.onDescriptionChange("#foot")
         vm.publish()
@@ -105,6 +104,21 @@ class UploadViewModelTest {
         assertNull(vm.form.value.file)
         assertEquals("", vm.form.value.title)
         assertTrue(vm.upload.value is UploadState.Processing)
+    }
+
+    @Test
+    fun `a video can be published without a title`() = runTest(main.dispatcher) {
+        val vm = viewModel()
+        vm.onVideoPicked("ok")
+        runCurrent()
+        assertTrue("le titre est facultatif", vm.form.value.canPublish)
+        vm.onTitleChange("   ")
+        assertTrue(vm.form.value.canPublish)
+
+        vm.publish()
+        runCurrent()
+
+        assertEquals(listOf("ok::null"), started)
     }
 
     @Test

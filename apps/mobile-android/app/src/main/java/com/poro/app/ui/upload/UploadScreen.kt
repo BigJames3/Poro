@@ -194,7 +194,13 @@ private fun UploadStatusCard(
             when (upload) {
                 is UploadState.Uploading -> {
                     val percent = (upload.progress * 100).toInt()
-                    Text(stringResource(R.string.upload_sending, upload.title, percent))
+                    Text(
+                        if (upload.title.isBlank()) {
+                            stringResource(R.string.upload_sending_untitled, percent)
+                        } else {
+                            stringResource(R.string.upload_sending, upload.title, percent)
+                        },
+                    )
                     LinearProgressIndicator(progress = { upload.progress }, modifier = Modifier.fillMaxWidth())
                     Text(stringResource(R.string.upload_keep_open), style = MaterialTheme.typography.bodySmall)
                     TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }

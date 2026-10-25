@@ -10,6 +10,9 @@ interface VideoRepository {
 
     suspend fun mine(cursor: String?): ApiResult<PageDto<VideoDto>>
 
+    /** Publications visibles par tous d'un compte (prêtes, non retirées), pour son profil public. */
+    suspend fun byUser(userId: String, cursor: String?): ApiResult<PageDto<VideoDto>>
+
     suspend fun delete(id: String): ApiResult<Unit>
 }
 
@@ -17,6 +20,9 @@ class DefaultVideoRepository(private val api: VideoApi) : VideoRepository {
     override suspend fun video(id: String): ApiResult<VideoDto> = apiCall { api.video(id) }
 
     override suspend fun mine(cursor: String?): ApiResult<PageDto<VideoDto>> = apiCall { api.mine(cursor, PAGE_SIZE) }
+
+    override suspend fun byUser(userId: String, cursor: String?): ApiResult<PageDto<VideoDto>> =
+        apiCall { api.byUser(userId, cursor, PAGE_SIZE) }
 
     override suspend fun delete(id: String): ApiResult<Unit> = apiCall(ifEmpty = {}) { api.delete(id) }
 

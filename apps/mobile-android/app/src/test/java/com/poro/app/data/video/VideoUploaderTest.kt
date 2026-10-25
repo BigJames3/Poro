@@ -57,6 +57,12 @@ class VideoUploaderTest {
         {"part_number":3,"url":"${storage.url("/p3")}"}]},"error":null,"meta":{}}""",
     )
 
+    private fun resumeResponse(p2: String) = json(
+        200,
+        """{"data":{"video_id":"v1","part_size":4,"uploaded_parts":[{"part_number":1,"etag":"\"e1\""}],
+        "parts":[{"part_number":2,"url":"$p2"},{"part_number":3,"url":"${storage.url("/p3")}"}]},"error":null,"meta":{}}""",
+    )
+
     private fun part(etag: String) = MockResponse().setResponseCode(200).setHeader("ETag", etag)
 
     @Test
@@ -104,20 +110,46 @@ class VideoUploaderTest {
     }
 
     @Test
-    fun `a refused part aborts the upload on the server`() = runTest {
+    fun `a refused part asks once for a fresh URL then aborts the upload on the server`() = runTest {
         api.enqueue(initResponse())
         storage.enqueue(part("\"e1\""))
+        storage.enqueue(MockResponse().setResponseCode(403))
+        api.enqueue(resumeResponse(storage.url("/p2-fresh").toString()))
         storage.enqueue(MockResponse().setResponseCode(403))
         api.enqueue(MockResponse().setResponseCode(204))
 
         val result = uploader.upload(file, "Titre", null) { _, _ -> }
 
         assertEquals(ApiErrorCodes.UPLOAD_REJECTED, (result as ApiResult.Failure).code)
-        api.takeRequest()
+        assertEquals("POST /api/v1/videos/uploads", api.takeRequest().let { "${it.method} ${it.path}" })
+        assertEquals("POST /api/v1/videos/uploads/v1/resume", api.takeRequest().let { "${it.method} ${it.path}" })
         val abort = api.takeRequest()
         assertEquals("DELETE", abort.method)
         assertEquals("/api/v1/videos/uploads/v1", abort.path)
         assertNull("aucune requête vers l'API ne porte de jeton ici", abort.getHeader("Authorization"))
+        val paths = (1..storage.requestCount).map { storage.takeRequest().path }
+        assertEquals(listOf("/p1", "/p2", "/p2-fresh"), paths)
+    }
+
+    @Test
+    fun `an expired part URL is replaced and the upload goes on`() = runTest {
+        api.enqueue(initResponse())
+        storage.enqueue(part("\"e1\""))
+        storage.enqueue(MockResponse().setResponseCode(403))
+        api.enqueue(resumeResponse(storage.url("/p2-fresh").toString()))
+        storage.enqueue(part("\"e2\""))
+        storage.enqueue(part("\"e3\""))
+        api.enqueue(json(200, """{"data":{"id":"v1","status":"processing"},"error":null,"meta":{}}"""))
+
+        val result = uploader.upload(file, "Titre", null) { _, _ -> }
+
+        assertTrue(result.toString(), result is ApiResult.Success)
+        val paths = (1..storage.requestCount).map { storage.takeRequest().path }
+        assertEquals(listOf("/p1", "/p2", "/p2-fresh", "/p3"), paths)
+        api.takeRequest()
+        api.takeRequest()
+        val complete = api.takeRequest().body.readUtf8()
+        assertTrue(complete, complete.contains("\"etag\":\"\\\"e2\\\"\""))
     }
 
     @Test

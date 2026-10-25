@@ -41,6 +41,7 @@ class PhotoPublishViewModelTest {
     private val videos = object : VideoRepository {
         override suspend fun video(id: String) = ApiResult.Success(VideoDto(id))
         override suspend fun mine(cursor: String?) = ApiResult.Success(PageDto<VideoDto>())
+        override suspend fun byUser(userId: String, cursor: String?): ApiResult<PageDto<VideoDto>> = error("unused")
         override suspend fun delete(id: String) = ApiResult.Success(Unit)
     }
 

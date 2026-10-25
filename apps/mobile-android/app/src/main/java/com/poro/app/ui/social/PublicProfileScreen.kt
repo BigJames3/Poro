@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.core.format.Formats
 import com.poro.app.data.social.UserStatsDto
+import com.poro.app.data.video.VideoDto
 import com.poro.app.ui.auth.ErrorMessageText
 import com.poro.app.ui.common.Avatar
 import com.poro.app.ui.common.BackTopBar
@@ -54,6 +55,8 @@ fun PublicProfileScreen(
     onReport: () -> Unit,
     onOpenFollowers: () -> Unit,
     onOpenFollowing: () -> Unit,
+    onOpenVideo: (VideoDto) -> Unit = {},
+    onLoadMoreVideos: () -> Unit = {},
 ) {
     val profile = state.profile
     val name = displayNameOf(profile?.displayName, profile?.username)
@@ -104,6 +107,7 @@ fun PublicProfileScreen(
                 }
             }
             state.error?.let { ErrorMessageText(it) }
+            PublicPostsSection(state, onOpenVideo, onLoadMoreVideos)
         }
     }
 }

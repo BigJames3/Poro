@@ -30,6 +30,8 @@ class MyVideosViewModelTest {
             return ApiResult.Success(PageDto(mine, null))
         }
 
+        override suspend fun byUser(userId: String, cursor: String?): ApiResult<PageDto<VideoDto>> = error("unused")
+
         override suspend fun delete(id: String): ApiResult<Unit> = ApiResult.Success(Unit)
     }
 
