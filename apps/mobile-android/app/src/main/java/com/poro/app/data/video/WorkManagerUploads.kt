@@ -23,6 +23,7 @@ import androidx.work.workDataOf
 import com.poro.app.PoroApp
 import com.poro.app.R
 import com.poro.app.core.media.LocalMedia
+import com.poro.app.core.media.PreparedImage
 import com.poro.app.core.network.ApiErrorCodes
 import com.poro.app.core.network.ApiResult
 import java.io.IOException
@@ -62,6 +63,24 @@ class WorkManagerUploadScheduler(private val context: Context) : UploadScheduler
         workManager.enqueueUniqueWork(UNIQUE_NAME, ExistingWorkPolicy.REPLACE, request)
     }
 
+    /** Même file qu'une vidéo : une seule publication à la fois, quel que soit son type. */
+    override fun enqueuePhotos(images: List<PreparedImage>, caption: String?, label: String) {
+        val request = OneTimeWorkRequestBuilder<PhotoUploadWorker>()
+            .setInputData(
+                workDataOf(
+                    KEY_PATHS to images.map { it.path }.toTypedArray(),
+                    KEY_SIZES to images.map { it.sizeBytes }.toLongArray(),
+                    KEY_TITLE to label,
+                    KEY_DESCRIPTION to caption,
+                ),
+            )
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .addTag(TITLE_TAG_PREFIX + label)
+            .addTag(PHOTOS_TAG)
+            .build()
+        workManager.enqueueUniqueWork(UNIQUE_NAME, ExistingWorkPolicy.REPLACE, request)
+    }
+
     override fun cancel() {
         workManager.cancelUniqueWork(UNIQUE_NAME)
     }
@@ -77,7 +96,7 @@ class WorkManagerUploadScheduler(private val context: Context) : UploadScheduler
             WorkInfo.State.ENQUEUED, WorkInfo.State.RUNNING, WorkInfo.State.BLOCKED ->
                 ScheduledUpload.Running(title, progress.getLong(KEY_SENT, 0), progress.getLong(KEY_TOTAL, 0))
             WorkInfo.State.SUCCEEDED -> outputData.getString(KEY_VIDEO_ID)
-                ?.let { ScheduledUpload.Succeeded(id.toString(), it, title) }
+                ?.let { ScheduledUpload.Succeeded(id.toString(), it, title, photos = PHOTOS_TAG in tags) }
                 ?: ScheduledUpload.Failed(id.toString(), unexpected())
             WorkInfo.State.FAILED -> ScheduledUpload.Failed(id.toString(), outputData.toFailure())
             WorkInfo.State.CANCELLED -> ScheduledUpload.None
@@ -100,12 +119,18 @@ class WorkManagerUploadScheduler(private val context: Context) : UploadScheduler
         const val KEY_MESSAGE = "message"
         const val KEY_REQUEST_ID = "request_id"
         const val KEY_NETWORK = "network"
+        const val KEY_PATHS = "paths"
+        const val KEY_SIZES = "sizes"
+        const val PHOTOS_TAG = "upload-photos"
     }
 }
 
-/** Envoi en cours mémorisé dans les préférences privées de l'app : il survit à l'arrêt du processus. */
-class PrefsUploadSessionStore(context: Context) : UploadSessionStore {
-    private val prefs = context.getSharedPreferences("video_upload_session", Context.MODE_PRIVATE)
+/**
+ * Envoi en cours mémorisé dans les préférences privées de l'app : il survit à l'arrêt du processus.
+ * [name] sépare la mémoire des envois vidéo de celle des publications photo.
+ */
+class PrefsUploadSessionStore(context: Context, name: String = "video_upload_session") : UploadSessionStore {
+    private val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
 
     override fun load(): UploadSession? {
         val videoId = prefs.getString(KEY_VIDEO_ID, null) ?: return null
@@ -206,32 +231,103 @@ class VideoUploadWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
     }
 
-    private fun foregroundInfo(title: String, sent: Long, total: Long): ForegroundInfo {
-        val manager = NotificationManagerCompat.from(applicationContext)
-        manager.createNotificationChannel(
-            NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-                .setName(applicationContext.getString(R.string.upload_channel_name))
-                .build(),
-        )
-        val percent = if (total == 0L) 0 else (sent * 100 / total).toInt()
-        val notification: Notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle(applicationContext.getString(R.string.upload_notification_title))
-            .setContentText(title)
-            .setProgress(100, percent, total == 0L)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            ForegroundInfo(NOTIFICATION_ID, notification)
+    private fun foregroundInfo(title: String, sent: Long, total: Long) = uploadForegroundInfo(applicationContext, title, sent, total)
+
+    private companion object {
+        const val MAX_ATTEMPTS = 5
+    }
+}
+
+private const val CHANNEL_ID = "video_upload"
+private const val NOTIFICATION_ID = 4201
+
+/** Notification de progression d'un envoi (vidéo ou photos), en service de premier plan. */
+private fun uploadForegroundInfo(context: Context, title: String, sent: Long, total: Long): ForegroundInfo {
+    val manager = NotificationManagerCompat.from(context)
+    manager.createNotificationChannel(
+        NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
+            .setName(context.getString(R.string.upload_channel_name))
+            .build(),
+    )
+    val percent = if (total == 0L) 0 else (sent * 100 / total).toInt()
+    val notification: Notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        .setSmallIcon(android.R.drawable.stat_sys_upload)
+        .setContentTitle(context.getString(R.string.upload_notification_title))
+        .setContentText(title)
+        .setProgress(100, percent, total == 0L)
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .build()
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        ForegroundInfo(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+    } else {
+        ForegroundInfo(NOTIFICATION_ID, notification)
+    }
+}
+
+/**
+ * Publication photo par WorkManager : les images préparées sont relues depuis les fichiers privés
+ * de l'app (elles survivent à l'arrêt du processus), puis supprimées une fois l'issue connue.
+ */
+class PhotoUploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+
+    override suspend fun doWork(): Result {
+        val keys = WorkManagerUploadScheduler
+        val paths = inputData.getStringArray(keys.KEY_PATHS) ?: return Result.failure()
+        val sizes = inputData.getLongArray(keys.KEY_SIZES) ?: return Result.failure()
+        if (paths.size != sizes.size || paths.isEmpty()) return Result.failure()
+        val images = paths.indices.map { PreparedImage(paths[it], sizes[it]) }
+        val title = inputData.getString(keys.KEY_TITLE).orEmpty()
+        val total = images.sumOf { it.sizeBytes }
+        val container = (applicationContext as PoroApp).container
+
+        try {
+            setForeground(uploadForegroundInfo(applicationContext, title, 0, total))
+        } catch (e: IllegalStateException) {
+            // Premier plan refusé (app en arrière-plan, Android 12+) : l'envoi continue sans notification.
+        }
+        setProgress(workDataOf(keys.KEY_TITLE to title, keys.KEY_SENT to 0L, keys.KEY_TOTAL to total))
+
+        var lastPercent = -1
+        val result = container.photoUploadClient.upload(images, inputData.getString(keys.KEY_DESCRIPTION)) { sent, all ->
+            setProgressAsync(workDataOf(keys.KEY_TITLE to title, keys.KEY_SENT to sent, keys.KEY_TOTAL to all))
+            val percent = if (all == 0L) 0 else (sent * 100 / all).toInt()
+            if (percent != lastPercent) {
+                lastPercent = percent
+                setForegroundAsync(uploadForegroundInfo(applicationContext, title, sent, all))
+            }
+        }
+        return when (result) {
+            is ApiResult.Success -> {
+                container.imagePreparer.discard(images)
+                Result.success(workDataOf(keys.KEY_VIDEO_ID to result.data.id, keys.KEY_TITLE to title))
+            }
+            is ApiResult.Failure -> {
+                container.imagePreparer.discard(images)
+                Result.failure(
+                    workDataOf(
+                        keys.KEY_TITLE to title,
+                        keys.KEY_STATUS to result.httpStatus,
+                        keys.KEY_CODE to result.code,
+                        keys.KEY_MESSAGE to result.message,
+                        keys.KEY_REQUEST_ID to result.requestId,
+                    ),
+                )
+            }
+            // Réseau perdu : les images restent sur l'appareil, WorkManager relance au retour du réseau.
+            is ApiResult.NetworkError -> if (runAttemptCount < MAX_ATTEMPTS) {
+                Result.retry()
+            } else {
+                container.imagePreparer.discard(images)
+                Result.failure(workDataOf(keys.KEY_TITLE to title, keys.KEY_NETWORK to true))
+            }
         }
     }
 
+    override suspend fun getForegroundInfo(): ForegroundInfo =
+        uploadForegroundInfo(applicationContext, inputData.getString(WorkManagerUploadScheduler.KEY_TITLE).orEmpty(), 0, 0)
+
     private companion object {
-        const val CHANNEL_ID = "video_upload"
-        const val NOTIFICATION_ID = 4201
         const val MAX_ATTEMPTS = 5
     }
 }

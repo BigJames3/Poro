@@ -15,11 +15,13 @@ import com.poro.app.ui.UploadRoute
 import com.poro.app.ui.VideoRoute
 import com.poro.app.ui.poroViewModel
 
-/** Onglet « Publier » : choix de la vidéo, titre, envoi et suivi du traitement. */
+/** Onglet « Publier » : une vidéo ou des photos, légende, envoi et suivi du traitement. */
 fun NavGraphBuilder.uploadGraph(nav: AppNav) {
     composable<UploadRoute> {
         val container = nav.container
-        val vm = poroViewModel { UploadViewModel(container.uploadManager, container.mediaReader, createSavedStateHandle()) }
+        val vm = poroViewModel {
+            UploadViewModel(container.uploadManager, container.mediaReader, createSavedStateHandle(), container.imagePreparer)
+        }
         val form by vm.form.collectAsStateWithLifecycle()
         val upload by vm.upload.collectAsStateWithLifecycle()
         val publish = rememberNotificationPermission(then = vm::publish)
@@ -34,6 +36,11 @@ fun NavGraphBuilder.uploadGraph(nav: AppNav) {
             onCancelUpload = vm::cancelUpload,
             onDismissResult = vm::dismissResult,
             onOpenVideo = { nav.controller.navigate(VideoRoute(it)) },
+            onModeChange = vm::setMode,
+            onPhotosPicked = vm::onPhotosPicked,
+            onRemovePhoto = vm::removePhoto,
+            onMovePhoto = vm::movePhoto,
+            onCaptionChange = vm::onCaptionChange,
         )
     }
 }

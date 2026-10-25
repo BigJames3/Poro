@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.poro.app.R
 import com.poro.app.data.feed.Author
+import com.poro.app.data.feed.FeedImage
 import com.poro.app.data.feed.FeedItem
 import com.poro.app.data.user.ProfileDto
 import com.poro.app.data.video.VideoDto
@@ -39,7 +40,17 @@ fun VideoScreen(
 ) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         LoadableContent(state, onRetry) { video ->
-            if (video.isReady && video.hlsUrl != null) {
+            if (video.isReady && video.isPhoto && video.images.isNotEmpty()) {
+                // Publication photo : le carrousel et sa légende, rien à lire.
+                VideoPage(
+                    item = video.asFeedItem(author),
+                    player = player,
+                    active = true,
+                    onOpenAuthor = { onOpenAuthor(video.userId, author?.username) },
+                    actions = { actions(video) },
+                    description = video.description,
+                )
+            } else if (video.isReady && video.hlsUrl != null) {
                 LaunchedEffect(video.hlsUrl) { player.play(video.hlsUrl) }
                 VideoPage(
                     item = video.asFeedItem(author),
@@ -79,5 +90,7 @@ private fun VideoDto.asFeedItem(author: ProfileDto?) = FeedItem(
     durationMs = durationMs,
     thumbnailUrl = thumbnailUrl,
     hlsUrl = hlsUrl,
+    mediaType = mediaType,
+    images = images.sortedBy { it.position }.map { FeedImage(it.url, it.thumbnailUrl, it.width, it.height) },
     author = Author(id = userId, username = author?.username, displayName = author?.displayName, avatarUrl = author?.avatarUrl),
 )

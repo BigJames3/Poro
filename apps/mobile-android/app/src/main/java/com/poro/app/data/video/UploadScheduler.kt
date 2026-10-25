@@ -1,6 +1,7 @@
 package com.poro.app.data.video
 
 import com.poro.app.core.media.LocalMedia
+import com.poro.app.core.media.PreparedImage
 import com.poro.app.core.network.ApiResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -16,8 +17,11 @@ sealed interface ScheduledUpload {
     /** En attente (réseau) ou en cours ; [totalBytes] 0 tant que l'envoi n'a pas commencé. */
     data class Running(val title: String, val sentBytes: Long, val totalBytes: Long) : ScheduledUpload
 
-    /** Envoyée : la vidéo [videoId] est en traitement côté serveur. [uploadId] identifie l'envoi. */
-    data class Succeeded(val uploadId: String, val videoId: String, val title: String) : ScheduledUpload
+    /**
+     * Envoyée : la publication [videoId] est en traitement côté serveur. [uploadId] identifie
+     * l'envoi ; [photos] : une publication photo.
+     */
+    data class Succeeded(val uploadId: String, val videoId: String, val title: String, val photos: Boolean = false) : ScheduledUpload
 
     data class Failed(val uploadId: String, val failure: ApiResult<Nothing>) : ScheduledUpload
 }
@@ -32,6 +36,9 @@ interface UploadScheduler {
 
     fun enqueue(file: LocalMedia, title: String, description: String?)
 
+    /** Publication photo : [images] déjà préparées, gardées jusqu'à la fin de l'envoi ; [label] l'annonce. */
+    fun enqueuePhotos(images: List<PreparedImage>, caption: String?, label: String)
+
     /** Abandon : les parties déjà envoyées sont annulées côté serveur. */
     fun cancel()
 
@@ -43,6 +50,7 @@ interface UploadScheduler {
 class InProcessUploadScheduler(
     private val client: VideoUploadClient,
     private val scope: CoroutineScope,
+    private val photos: PhotoUploadClient? = null,
 ) : UploadScheduler {
     private val state = MutableStateFlow<ScheduledUpload>(ScheduledUpload.None)
     override val upload: Flow<ScheduledUpload> = state.asStateFlow()
@@ -60,6 +68,24 @@ class InProcessUploadScheduler(
             }
             state.value = when (result) {
                 is ApiResult.Success -> ScheduledUpload.Succeeded(uploadId, result.data.id, title)
+                is ApiResult.Failure -> ScheduledUpload.Failed(uploadId, result)
+                is ApiResult.NetworkError -> ScheduledUpload.Failed(uploadId, result)
+            }
+        }
+    }
+
+    override fun enqueuePhotos(images: List<PreparedImage>, caption: String?, label: String) {
+        val client = photos ?: error("no photo upload client")
+        job?.cancel()
+        val uploadId = (++count).toString()
+        val total = images.sumOf { it.sizeBytes }
+        state.value = ScheduledUpload.Running(label, 0, total)
+        job = scope.launch {
+            val result = client.upload(images, caption) { sent, all ->
+                state.value = ScheduledUpload.Running(label, sent, all)
+            }
+            state.value = when (result) {
+                is ApiResult.Success -> ScheduledUpload.Succeeded(uploadId, result.data.id, label, photos = true)
                 is ApiResult.Failure -> ScheduledUpload.Failed(uploadId, result)
                 is ApiResult.NetworkError -> ScheduledUpload.Failed(uploadId, result)
             }

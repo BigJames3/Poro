@@ -9,7 +9,12 @@ import com.poro.app.core.network.ApiResult
  * Message d'erreur à afficher. [requestId] n'est renseigné que pour les erreurs inattendues :
  * l'utilisateur peut le transmettre au support, qui retrouve la requête dans les logs.
  */
-data class ErrorMessage(@StringRes val text: Int, val requestId: String? = null)
+data class ErrorMessage(
+    @StringRes val text: Int,
+    val requestId: String? = null,
+    /** Argument du texte (`%d`), par exemple le numéro de la photo en cause. */
+    val arg: Int? = null,
+)
 
 /** Traduit un échec de l'API Auth en message français, à partir du code stable du contrat. */
 fun ApiResult<*>.toErrorMessage(): ErrorMessage? = when (this) {
@@ -50,6 +55,7 @@ fun ApiResult<*>.toErrorMessage(): ErrorMessage? = when (this) {
         ApiErrorCodes.AVATAR_INVALID -> ErrorMessage(R.string.error_avatar_invalid)
         ApiErrorCodes.UPLOAD_REJECTED -> ErrorMessage(R.string.error_upload_rejected)
         ApiErrorCodes.MEDIA_UNREADABLE -> ErrorMessage(R.string.upload_error_unreadable)
+        ApiErrorCodes.PHOTO_POSTS_DISABLED -> ErrorMessage(R.string.upload_photo_disabled)
         ApiErrorCodes.VIDEO_NOT_FOUND, ApiErrorCodes.COMMENT_NOT_FOUND, ApiErrorCodes.USER_NOT_FOUND -> ErrorMessage(R.string.error_not_found)
         ApiErrorCodes.COMMENT_INVALID -> ErrorMessage(R.string.error_comment_invalid)
         ApiErrorCodes.TITLE_INVALID -> ErrorMessage(R.string.error_title_invalid)

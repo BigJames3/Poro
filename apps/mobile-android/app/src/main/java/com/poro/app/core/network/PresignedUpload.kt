@@ -35,6 +35,22 @@ class PresignedUploader(private val client: OkHttpClient) {
         return execute(Request.Builder().url(url).post(body).build())
     }
 
+    /**
+     * Une image d'une publication photo : `PUT` présigné avec les en-têtes signés. Le type vient
+     * de `Content-Type` ; la longueur est celle du corps (OkHttp l'écrit, et le stockage refuse
+     * une autre longueur que celle signée).
+     */
+    suspend fun putSigned(url: String, headers: Map<String, String>, bytes: ByteArray): UploadResult {
+        val contentType = headers.entries.firstOrNull { it.key.equals("Content-Type", ignoreCase = true) }?.value
+        val builder = Request.Builder().url(url).put(bytes.toRequestBody(contentType?.toMediaType()))
+        headers.forEach { (name, value) ->
+            if (!name.equals("Content-Type", ignoreCase = true) && !name.equals("Content-Length", ignoreCase = true)) {
+                builder.header(name, value)
+            }
+        }
+        return execute(builder.build())
+    }
+
     /** Une partie d'un envoi multipart S3 (`PUT` présigné) ; l'ETag rendu sert à l'assemblage. */
     suspend fun putPart(url: String, bytes: ByteArray): UploadResult =
         execute(Request.Builder().url(url).put(bytes.toRequestBody()).build())

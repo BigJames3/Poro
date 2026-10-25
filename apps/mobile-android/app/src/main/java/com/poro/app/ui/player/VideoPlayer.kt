@@ -131,12 +131,20 @@ class VideoPlayer internal constructor(private val newPlayer: () -> ExoPlayer) {
      * segments sont chargés (tampon plafonné), pour ne pas gaspiller le forfait si l'on ne glisse pas.
      */
     fun preload(url: String?) {
-        if (url == null || url == currentUrl || url == preloadedUrl) return
+        if (url.isNullOrEmpty() || url == currentUrl || url == preloadedUrl) return
         val player = standby ?: newPlayer().also { listen(it); standby = it }
         preloadedUrl = url
         player.playWhenReady = false
         player.setMediaItem(hlsItem(url))
         player.prepare()
+    }
+
+    /**
+     * Une publication photo est affichée : la vidéo s'arrête, sans oublier où elle en était
+     * (revenir dessus la reprend).
+     */
+    fun pause() {
+        active.playWhenReady = false
     }
 
     /** Appui sur la vidéo : pause ou reprise. */

@@ -81,6 +81,7 @@ object ApiErrorCodes {
     const val INVALID_MEDIA = "invalid_media"
     const val UPLOAD_INCOMPLETE = "upload_incomplete"
     const val PAYLOAD_TOO_LARGE = "payload_too_large"
+    const val PHOTO_POSTS_DISABLED = "photo_posts_disabled"
 
     // Boutiques et commandes (docs/api/shop.openapi.yaml, order.openapi.yaml).
     const val SHOP_NOT_FOUND = "shop_not_found"
