@@ -128,6 +128,29 @@ func TestHandlerMarksReady(t *testing.T) {
 	require.NoError(t, h.Handle(ctx, env), "duplicate event is a no-op")
 }
 
+func TestHandleUntitledVideoAnnouncesItsCaption(t *testing.T) {
+	ctx := context.Background()
+	user, id := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())
+	seedProcessing(t, user, id)
+	_, err := testdb.Pool.Exec(ctx, `UPDATE videos SET title = '' WHERE id = $1`, id)
+	require.NoError(t, err)
+	mem := storage.NewMemory()
+	key := model.SourceKey(user.String(), id.String(), "mp4")
+	mem.PutSource(key, []byte("src"))
+
+	h := worker.New(testdb.Pool, repository.New(testdb.Pool), mem, fakeFF{}, zap.NewNop())
+	require.NoError(t, h.Handle(ctx, uploadedEnv(t, user, id, key)))
+
+	ready := outboxEvent(t, events.TypeVideoReady, id.String())
+	require.NotNil(t, ready)
+	var data events.VideoReadyV1
+	require.NoError(t, ready.DecodeData(&data))
+	require.Equal(t, "Danse #Abidjan #wax", data.Title, "readers show the caption")
+	got, err := repository.New(testdb.Pool).Get(ctx, id)
+	require.NoError(t, err)
+	require.Empty(t, got.Title, "the video itself stays untitled")
+}
+
 func TestHandlerMarksFailedTooLong(t *testing.T) {
 	ctx := context.Background()
 	user, id := uuid.Must(uuid.NewV7()), uuid.Must(uuid.NewV7())

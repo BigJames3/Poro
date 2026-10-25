@@ -23,6 +23,17 @@ type InitResponse struct {
 	Parts    []PartURL `json:"parts"`
 }
 
+// ResumeResponse lets a client finish an interrupted upload: the parts
+// storage already holds, then fresh URLs for the parts still missing.
+type ResumeResponse struct {
+	VideoID       string         `json:"video_id"`
+	UploadID      string         `json:"upload_id"`
+	Key           string         `json:"key"`
+	PartSize      int64          `json:"part_size"`
+	UploadedParts []CompletePart `json:"uploaded_parts"`
+	Parts         []PartURL      `json:"parts"`
+}
+
 type CompleteRequest struct {
 	Parts []CompletePart `json:"parts"`
 }

@@ -137,6 +137,38 @@ func (r *Videos) ListByUser(ctx context.Context, userID uuid.UUID, mediaTypes []
 	return out, rows.Err()
 }
 
+// ListPublicByUser returns a user's publications anyone may see: ready, not
+// removed by moderation, of the given media types, newest first.
+func (r *Videos) ListPublicByUser(ctx context.Context, userID uuid.UUID, mediaTypes []string, cursorTime *time.Time, cursorID *uuid.UUID, limit int) ([]model.Video, error) {
+	var rows pgx.Rows
+	var err error
+	if cursorTime == nil {
+		rows, err = r.pool.Query(ctx, `SELECT `+videoColumns+` FROM videos
+			WHERE user_id = $1 AND deleted_at IS NULL AND media_type = ANY($2)
+			  AND status = 'ready' AND moderation_status <> 'removed'
+			ORDER BY created_at DESC, id DESC LIMIT $3`, userID, mediaTypes, limit)
+	} else {
+		rows, err = r.pool.Query(ctx, `SELECT `+videoColumns+` FROM videos
+			WHERE user_id = $1 AND deleted_at IS NULL AND media_type = ANY($2)
+			  AND status = 'ready' AND moderation_status <> 'removed'
+			  AND (created_at, id) < ($3, $4)
+			ORDER BY created_at DESC, id DESC LIMIT $5`, userID, mediaTypes, *cursorTime, *cursorID, limit)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list public videos: %w", err)
+	}
+	defer rows.Close()
+	var out []model.Video
+	for rows.Next() {
+		v, err := scanVideo(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *v)
+	}
+	return out, rows.Err()
+}
+
 // MarkProcessing moves uploading → processing after multipart complete.
 func (r *Videos) MarkProcessing(ctx context.Context, tx pgx.Tx, id uuid.UUID, size int64) error {
 	tag, err := tx.Exec(ctx, `UPDATE videos SET status = $2, size_bytes = $3, s3_upload_id = NULL, updated_at = now()

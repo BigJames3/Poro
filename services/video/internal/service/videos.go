@@ -288,6 +288,21 @@ func (s *Videos) Get(ctx context.Context, id uuid.UUID, viewer *uuid.UUID, photo
 
 // List returns the caller's publications: videos only, unless photoPosts.
 func (s *Videos) List(ctx context.Context, userID uuid.UUID, rawCursor string, limit int, photoPosts bool) (*dto.ListResponse, error) {
+	return s.list(ctx, rawCursor, limit, func(ts *time.Time, cid *uuid.UUID, n int) ([]model.Video, error) {
+		return s.repo.ListByUser(ctx, userID, MediaTypes(photoPosts), ts, cid, n)
+	})
+}
+
+// ListPublic returns what anyone may see of a user's publications, for their
+// public profile: ready and not removed; videos only, unless photoPosts.
+func (s *Videos) ListPublic(ctx context.Context, userID uuid.UUID, rawCursor string, limit int, photoPosts bool) (*dto.ListResponse, error) {
+	return s.list(ctx, rawCursor, limit, func(ts *time.Time, cid *uuid.UUID, n int) ([]model.Video, error) {
+		return s.repo.ListPublicByUser(ctx, userID, MediaTypes(photoPosts), ts, cid, n)
+	})
+}
+
+// list pages through query, newest first.
+func (s *Videos) list(ctx context.Context, rawCursor string, limit int, query func(*time.Time, *uuid.UUID, int) ([]model.Video, error)) (*dto.ListResponse, error) {
 	if limit <= 0 {
 		limit = model.DefaultListLimit
 	}
@@ -303,7 +318,7 @@ func (s *Videos) List(ctx context.Context, userID uuid.UUID, rawCursor string, l
 		}
 		ts, cid = &t, &id
 	}
-	rows, err := s.repo.ListByUser(ctx, userID, MediaTypes(photoPosts), ts, cid, limit+1)
+	rows, err := query(ts, cid, limit+1)
 	if err != nil {
 		return nil, errInternal.WithCause(err)
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,7 +96,12 @@ func TestInitValidation(t *testing.T) {
 	ctx := context.Background()
 	svc, _ := newSvc(t)
 	user := uuid.Must(uuid.NewV7())
-	_, err := svc.InitUpload(ctx, user, dto.InitRequest{Title: "", ContentType: "video/mp4", SizeBytes: 10})
+	untitled, err := svc.InitUpload(ctx, user, dto.InitRequest{Title: " ", Description: "juste une légende", ContentType: "video/mp4", SizeBytes: 10})
+	require.NoError(t, err, "a title is optional")
+	got, err := svc.Get(ctx, uuid.MustParse(untitled.VideoID), &user, false)
+	require.NoError(t, err)
+	require.Empty(t, got.Title)
+	_, err = svc.InitUpload(ctx, user, dto.InitRequest{Title: strings.Repeat("a", model.MaxTitleRunes+1), ContentType: "video/mp4", SizeBytes: 10})
 	require.Error(t, err)
 	_, err = svc.InitUpload(ctx, user, dto.InitRequest{Title: "ok", ContentType: "video/avi", SizeBytes: 10})
 	require.Error(t, err)

@@ -54,3 +54,18 @@ func TestMemoryPutMedia(t *testing.T) {
 	require.True(t, m.HasSource("s"))
 	require.False(t, m.Has("s"))
 }
+
+func TestMemoryListParts(t *testing.T) {
+	ctx := context.Background()
+	m := NewMemory()
+	id, err := m.CreateMultipart(ctx, "k", "video/mp4")
+	require.NoError(t, err)
+	m.PutPart(id, 3, []byte("ccc"))
+	m.PutPart(id, 1, []byte("a"))
+	parts, err := m.ListParts(ctx, "k", id)
+	require.NoError(t, err)
+	require.Equal(t, []UploadedPart{{Number: 1, ETag: "etag-1", Size: 1}, {Number: 3, ETag: "etag-3", Size: 3}}, parts)
+	require.NoError(t, m.AbortMultipart(ctx, "k", id))
+	_, err = m.ListParts(ctx, "k", id)
+	require.ErrorIs(t, err, ErrMissing)
+}
