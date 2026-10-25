@@ -62,6 +62,12 @@ type Config struct {
 	S3SecretKey        string
 	S3ForcePathStyle   bool
 
+	// PhotoPostsEnabled opens the photo post upload routes (ADR-0020). Off by
+	// default: it stays off until the feed, search, social and notification
+	// services keep photo posts away from clients without the photo-posts
+	// capability (step 2d). Video routes never depend on it.
+	PhotoPostsEnabled bool
+
 	FFmpegBin  string
 	FFprobeBin string
 }
@@ -234,6 +240,8 @@ func read() (*Config, error) {
 		S3SecretKey:        v.GetString("S3_SECRET_ACCESS_KEY"),
 		S3ForcePathStyle:   v.GetBool("S3_FORCE_PATH_STYLE"),
 
+		PhotoPostsEnabled: v.GetBool("PHOTO_POSTS_ENABLED"),
+
 		FFmpegBin:  v.GetString("FFMPEG_BIN"),
 		FFprobeBin: v.GetString("FFPROBE_BIN"),
 	}
@@ -242,6 +250,7 @@ func read() (*Config, error) {
 
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("APP_PORT", "8083")
+	v.SetDefault("PHOTO_POSTS_ENABLED", false)
 	v.SetDefault("LOG_LEVEL", "debug")
 	v.SetDefault("TRUSTED_PROXIES", "")
 

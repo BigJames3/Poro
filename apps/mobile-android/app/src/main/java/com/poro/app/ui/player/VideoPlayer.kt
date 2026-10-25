@@ -166,6 +166,46 @@ fun VideoSurface(player: VideoPlayer, modifier: Modifier = Modifier) {
 }
 
 /**
+ * Aperçu d'une vidéo de l'appareil avant publication (`content://` du sélecteur) : première image
+ * affichée, lecture et durée avec les contrôles standard, pause en arrière-plan. Lecteur propre à
+ * l'aperçu (lecture locale, pas le client réseau), libéré quand la vidéo change ou à la sortie.
+ */
+@OptIn(UnstableApi::class)
+@Composable
+fun LocalVideoPreview(uri: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val player = remember(uri) {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(uri))
+            playWhenReady = false
+            prepare()
+        }
+    }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle, player) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_PAUSE) player.pause() }
+        lifecycle.addObserver(observer)
+        onDispose {
+            lifecycle.removeObserver(observer)
+            player.release()
+        }
+    }
+    AndroidView(
+        modifier = modifier,
+        factory = { viewContext ->
+            PlayerView(viewContext).apply {
+                useController = true
+                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                setShutterBackgroundColor(Color.BLACK)
+                this.player = player
+            }
+        },
+        update = { view -> view.player = player },
+        onRelease = { view -> view.player = null },
+    )
+}
+
+/**
  * Données lues par le client des médias : pas de jeton, réécriture de localhost en debug. Tampon
  * plus court que par défaut (50 s) : des vidéos courtes, des forfaits mobiles chers, et un lecteur
  * de préchargement qui ne doit charger que le début de la vidéo suivante.

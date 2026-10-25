@@ -281,3 +281,11 @@ func TestHandlerFailsAfterBoundedStorageRetries(t *testing.T) {
 		})
 	}
 }
+
+// ffCalled fails the test if the transcoder runs.
+type ffCalled struct{ t *testing.T }
+
+func (f ffCalled) Transcode(context.Context, string, string, string, string) (*transcode.Output, error) {
+	f.t.Fatal("a photo post must never be transcoded")
+	return nil, nil
+}

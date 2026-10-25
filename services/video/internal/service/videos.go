@@ -117,7 +117,7 @@ func (s *Videos) Complete(ctx context.Context, userID, videoID uuid.UUID, req dt
 		}
 		return nil, errInternal.WithCause(err)
 	}
-	if row.UserID != userID.String() {
+	if row.UserID != userID.String() || row.MediaType != model.MediaTypeVideo {
 		return nil, errNotFound
 	}
 	if row.Status != model.StatusUploading || row.S3UploadID == nil {
@@ -192,10 +192,12 @@ func (s *Videos) Complete(ctx context.Context, userID, videoID uuid.UUID, req dt
 	if err != nil {
 		return nil, errInternal.WithCause(err)
 	}
-	return s.view(row, true), nil
+	return s.view(ctx, row), nil
 }
 
-// Abort cancels an in-progress multipart upload.
+// Abort cancels an in-progress upload: a video's multipart upload, or the
+// image sources of a photo post. A photo post whose sources cannot be deleted
+// is kept, so the call can be repeated.
 func (s *Videos) Abort(ctx context.Context, userID, videoID uuid.UUID) error {
 	row, err := s.repo.Get(ctx, videoID)
 	if err != nil {
@@ -212,6 +214,9 @@ func (s *Videos) Abort(ctx context.Context, userID, videoID uuid.UUID) error {
 	}
 	if row.S3UploadID != nil {
 		_ = s.store.AbortMultipart(ctx, row.SourceKey, *row.S3UploadID)
+	}
+	if err := s.deletePhotoSources(ctx, row); err != nil {
+		return errInternal.WithCause(err)
 	}
 	tx, err := s.repo.Pool().Begin(ctx)
 	if err != nil {
@@ -245,6 +250,10 @@ func (s *Videos) SweepAbandonedUploads(ctx context.Context, cutoff time.Time, ba
 				continue
 			}
 		}
+		if err := s.deletePhotoSources(ctx, &row); err != nil {
+			s.log.Warn("delete abandoned photo sources", zap.String("video_id", row.ID), zap.Error(err))
+			continue
+		}
 		switch err := s.repo.DiscardUpload(ctx, row.ID); {
 		case errors.Is(err, repository.ErrNotFound):
 			continue
@@ -256,8 +265,10 @@ func (s *Videos) SweepAbandonedUploads(ctx context.Context, cutoff time.Time, ba
 	return discarded, nil
 }
 
-// Get returns a video. Non-ready videos are only visible to the owner.
-func (s *Videos) Get(ctx context.Context, id uuid.UUID, viewer *uuid.UUID) (*dto.VideoView, error) {
+// Get returns a video or a photo post. Non-ready ones are only visible to the
+// owner; a photo post is not found for a client without the photo-posts
+// capability, whoever asks.
+func (s *Videos) Get(ctx context.Context, id uuid.UUID, viewer *uuid.UUID, photoPosts bool) (*dto.VideoView, error) {
 	row, err := s.repo.Get(ctx, id)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -265,15 +276,18 @@ func (s *Videos) Get(ctx context.Context, id uuid.UUID, viewer *uuid.UUID) (*dto
 		}
 		return nil, errInternal.WithCause(err)
 	}
+	if row.MediaType == model.MediaTypePhoto && !photoPosts {
+		return nil, errNotFound
+	}
 	owner := viewer != nil && viewer.String() == row.UserID
 	if (row.Status != model.StatusReady || row.ModerationStatus == model.ModerationRemoved) && !owner {
 		return nil, errNotFound
 	}
-	return s.view(row, owner), nil
+	return s.view(ctx, row), nil
 }
 
-// List returns the caller's videos.
-func (s *Videos) List(ctx context.Context, userID uuid.UUID, rawCursor string, limit int) (*dto.ListResponse, error) {
+// List returns the caller's publications: videos only, unless photoPosts.
+func (s *Videos) List(ctx context.Context, userID uuid.UUID, rawCursor string, limit int, photoPosts bool) (*dto.ListResponse, error) {
 	if limit <= 0 {
 		limit = model.DefaultListLimit
 	}
@@ -289,7 +303,7 @@ func (s *Videos) List(ctx context.Context, userID uuid.UUID, rawCursor string, l
 		}
 		ts, cid = &t, &id
 	}
-	rows, err := s.repo.ListByUser(ctx, userID, ts, cid, limit+1)
+	rows, err := s.repo.ListByUser(ctx, userID, MediaTypes(photoPosts), ts, cid, limit+1)
 	if err != nil {
 		return nil, errInternal.WithCause(err)
 	}
@@ -300,7 +314,7 @@ func (s *Videos) List(ctx context.Context, userID uuid.UUID, rawCursor string, l
 			out.NextCursor = &c
 			break
 		}
-		out.Items = append(out.Items, *s.view(&row, true))
+		out.Items = append(out.Items, *s.view(ctx, &row))
 	}
 	return out, nil
 }
@@ -319,6 +333,10 @@ func (s *Videos) Delete(ctx context.Context, userID, videoID uuid.UUID) error {
 	}
 	if row.Status == model.StatusUploading && row.S3UploadID != nil {
 		_ = s.store.AbortMultipart(ctx, row.SourceKey, *row.S3UploadID)
+	}
+	// Photo originals may carry GPS coordinates: they go before the post.
+	if err := s.deletePhotoSources(ctx, row); err != nil {
+		return errInternal.WithCause(err)
 	}
 	tx, err := s.repo.Pool().Begin(ctx)
 	if err != nil {
@@ -353,9 +371,21 @@ func DeletedEvent(videoID, userID string, deletedAt time.Time) (events.Envelope,
 	}, deletedAt)
 }
 
-func (s *Videos) view(row *model.Video, owner bool) *dto.VideoView {
+// deletePhotoSources deletes the image sources of a photo post; nothing for a video.
+func (s *Videos) deletePhotoSources(ctx context.Context, row *model.Video) error {
+	if row.MediaType != model.MediaTypePhoto {
+		return nil
+	}
+	images, err := s.repo.Images(ctx, row.ID)
+	if err != nil {
+		return err
+	}
+	return s.deleteImageSources(ctx, images)
+}
+
+func (s *Videos) view(ctx context.Context, row *model.Video) *dto.VideoView {
 	v := &dto.VideoView{
-		ID: row.ID, UserID: row.UserID, Title: row.Title, Description: row.Description,
+		ID: row.ID, UserID: row.UserID, MediaType: row.MediaType, Title: row.Title, Description: row.Description,
 		Status: row.Status, ModerationStatus: row.ModerationStatus, CreatedAt: row.CreatedAt,
 	}
 	// A removed video keeps no media URL: its objects are in quarantine.
@@ -374,9 +404,33 @@ func (s *Videos) view(row *model.Video, owner bool) *dto.VideoView {
 				Name: r.Name, Bandwidth: r.Bandwidth, Width: r.Width, Height: r.Height,
 			})
 		}
+		if row.MediaType == model.MediaTypePhoto {
+			v.Images = s.imageViews(ctx, row.ID)
+		}
 	}
-	_ = owner
 	return v
+}
+
+// imageViews lists the processed pictures of a ready photo post. An image
+// the worker has not written yet is left out; a read failure only drops the
+// pictures, never the post.
+func (s *Videos) imageViews(ctx context.Context, postID string) []dto.ImageView {
+	images, err := s.repo.Images(ctx, postID)
+	if err != nil {
+		s.log.Warn("list photo images", zap.String("video_id", postID), zap.Error(err))
+		return nil
+	}
+	out := make([]dto.ImageView, 0, len(images))
+	for _, img := range images {
+		if img.ImageKey == nil || img.ThumbnailKey == nil || img.Width == nil || img.Height == nil {
+			continue
+		}
+		out = append(out, dto.ImageView{
+			Position: img.Position, URL: s.public(*img.ImageKey), ThumbnailURL: s.public(*img.ThumbnailKey),
+			Width: *img.Width, Height: *img.Height,
+		})
+	}
+	return out
 }
 
 func (s *Videos) dropRow(ctx context.Context, userID, videoID uuid.UUID) error {

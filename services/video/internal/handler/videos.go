@@ -58,6 +58,40 @@ func (h *Videos) Complete(c *fiber.Ctx) error {
 	return httpx.WriteData(c, fiber.StatusOK, out)
 }
 
+// InitPhoto serves POST /api/v1/videos/photo-uploads.
+func (h *Videos) InitPhoto(c *fiber.Ctx) error {
+	user, err := h.requireUser(c)
+	if err != nil {
+		return err
+	}
+	var req dto.InitPhotoRequest
+	if err := c.BodyParser(&req); err != nil {
+		return httpx.NewAPIError(fiber.StatusBadRequest, "invalid_request", "invalid request")
+	}
+	out, err := h.svc.InitPhotoUpload(c.UserContext(), user, req)
+	if err != nil {
+		return err
+	}
+	return httpx.WriteData(c, fiber.StatusCreated, out)
+}
+
+// CompletePhoto serves POST /api/v1/videos/photo-uploads/:id/complete.
+func (h *Videos) CompletePhoto(c *fiber.Ctx) error {
+	user, err := h.requireUser(c)
+	if err != nil {
+		return err
+	}
+	id, err := parseID(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.svc.CompletePhotoUpload(c.UserContext(), user, id)
+	if err != nil {
+		return err
+	}
+	return httpx.WriteData(c, fiber.StatusOK, out)
+}
+
 func (h *Videos) Abort(c *fiber.Ctx) error {
 	user, err := h.requireUser(c)
 	if err != nil {
@@ -82,7 +116,7 @@ func (h *Videos) Get(c *fiber.Ctx) error {
 	if claims, ok := h.principal(c); ok {
 		viewer = &claims.UserID
 	}
-	out, err := h.svc.Get(c.UserContext(), id, viewer)
+	out, err := h.svc.Get(c.UserContext(), id, viewer, PhotoPosts(c))
 	if err != nil {
 		return err
 	}
@@ -95,7 +129,7 @@ func (h *Videos) List(c *fiber.Ctx) error {
 		return err
 	}
 	limit := c.QueryInt("limit", 0)
-	out, err := h.svc.List(c.UserContext(), user, c.Query("cursor"), limit)
+	out, err := h.svc.List(c.UserContext(), user, c.Query("cursor"), limit, PhotoPosts(c))
 	if err != nil {
 		return err
 	}

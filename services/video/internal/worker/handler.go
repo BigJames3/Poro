@@ -112,6 +112,14 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 	if row.Status != model.StatusProcessing {
 		return kafka.Permanent(fmt.Errorf("unexpected status %s", row.Status))
 	}
+	// A photo post is never transcoded: its images are processed instead
+	// (ADR-0020). The row is the authority; the event field is a hint.
+	if row.MediaType == model.MediaTypePhoto {
+		return h.handlePhoto(ctx, env, row, videoID, userID)
+	}
+	if data.MediaType == model.MediaTypePhoto {
+		return kafka.Permanent(fmt.Errorf("video %s announced as a photo post", videoID))
+	}
 
 	work, err := os.MkdirTemp("", "poro-video-")
 	if err != nil {

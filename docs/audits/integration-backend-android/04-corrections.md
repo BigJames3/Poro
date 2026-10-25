@@ -103,3 +103,48 @@ sauvegarde corrigés au passage :
 Vérifications : tests JVM (225, 0 échec), parcours de bout en bout locaux 104/104 routes de l'app,
 test instrumenté `FollowUiTest` (job `mobile-instrumented`).
 
+## Module « Publier », phase 1 : défauts de l'envoi vidéo
+
+Diagnostic du 2026-10-24 (parcours vidéo réel de bout en bout ; publication d'images absente du
+backend, traitée dans les phases suivantes). Quatre défauts corrigés :
+
+- **« Réessayer » ne réessayait pas** : le bouton fermait seulement l'erreur, et le formulaire était
+  vidé dès la mise en file. Désormais la vidéo, le titre et la description restent jusqu'à la
+  confirmation du serveur ; « Réessayer » relance le même envoi après une erreur réseau, un refus
+  du stockage ou une erreur serveur, jamais après un refus de contenu (« Modifier la publication »).
+- **Doublon possible à la reprise** : si la réponse à `complete` se perdait, l'app annulait puis
+  publiait une seconde fois. Vérifié sur la pile réelle : un `complete` rejoué reçoit 409 et la
+  vidéo est déjà `processing`. Sur réseau, 5xx ou 409, la session est gardée sans rien annuler ;
+  l'essai suivant relit la vidéo au lieu de la republier.
+- **Aucun aperçu** : la vidéo choisie est maintenant lisible dans l'écran (Media3, contrôles standard).
+- **Accès au fichier perdu** : autorisation retirée ou fichier supprimé donnent un message
+  explicite (« Choisissez-la à nouveau ») et le bouton « Choisir à nouveau la vidéo » ; le titre et
+  la description sont conservés. Avant : plantage du worker et erreur générique.
+
+## Module « Publier », étape 2b : publications photo dans le service vidéo (ADR-0020)
+
+Backend seul : aucune modification Android, du fil ni du worker de traitement (étapes 2c à 4).
+
+- Migration `000003_photo_posts` : `videos.media_type` (`video` par défaut, rien n'est réécrit) et table `video_images`. Testée sur des vidéos de chaque état (`TestPhotoPostsMigration`) et sur la base locale réelle (33 vidéos, empreinte identique avant et après). Le retour arrière refuse de s'exécuter tant qu'une photo existe.
+- Routes `POST /api/v1/videos/photo-uploads` et `…/{id}/complete` : URL PUT présignées à taille et type signés (refus vérifié sur SeaweedFS 4.45), contenu réel vérifié à la finalisation (octets magiques JPEG, PNG, WebP ; HEIC refusé), aucune publication partielle, `complete` rejoué en 409, panne du stockage distinguée d'une image manquante.
+- Filtre de capacité : sans `Poro-Capabilities: photo-posts`, `GET /api/v1/videos` et `GET /api/v1/videos/{id}` ne renvoient jamais de photo, même à son auteur.
+- Routes photo **fermées par défaut** (`PHOTO_POSTS_ENABLED=false`) : 404 `photo_posts_disabled` avant toute authentification, routes vidéo inchangées. Elles ne s'ouvriront qu'après validation de l'étape 2c.
+- En défense en profondeur, le worker laisse une photo en `processing` et envoie son événement en DLQ (30 jours, rejeu sous conditions décrites dans l'ADR-0020) ; l'étape 2c devra revalider le contenu au traitement.
+- Originaux photo supprimés à l'annulation, au refus, à la suppression, au balayage et à l'effacement du compte.
+
+## Module « Publier », étape 2c : traitement des photos par le media-worker (ADR-0020)
+
+- Paquet `internal/imaging` (décodeurs Go, `golang.org/x/image` v0.47.0) :
+  - revalidation du contenu relu (taille, octets magiques, type déclaré, 40 Mpx lus dans l'en-tête) avant tout décodage, car l'URL PUT reste valide 1 h ;
+  - orientation EXIF 1 à 8 (JPEG, PNG, WebP) ;
+  - transparence aplatie sur blanc ;
+  - JPEG 2048 px qualité 85 et miniature 540 px ;
+  - aucune métadonnée conservée.
+- Worker : tout ou rien.
+  - Aucune écriture publique avant que toutes les images soient valides.
+  - `ready`, les images et `poro.video.ready` dans une seule transaction.
+  - Quarantaine de ce qui était écrit en cas de panne du stockage.
+  - Sources supprimées après traitement.
+- Vérifié sur fichiers réels (Pillow) portant l'orientation et des coordonnées GPS. Deux défauts volontaires (rotation désactivée, écriture publique anticipée) sont détectés par les tests.
+- `PHOTO_POSTS_ENABLED` reste fermé jusqu'à l'étape 2d.
+

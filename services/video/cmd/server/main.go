@@ -150,6 +150,8 @@ func run() error {
 		Metrics: m.Handler(),
 		JWT:     jwt,
 		Limiter: middleware.NewLimiter(limiter),
+
+		PhotoPostsEnabled: cfg.PhotoPostsEnabled,
 	})
 
 	consumerDone := make(chan struct{})
@@ -174,7 +176,8 @@ func run() error {
 	addr := ":" + cfg.AppPort
 	errCh := make(chan error, 1)
 	go func() { errCh <- app.Listen(addr) }()
-	log.Info("video service started", zap.String("port", cfg.AppPort), zap.String("env", cfg.AppEnv), zap.String("version", version))
+	log.Info("video service started", zap.String("port", cfg.AppPort), zap.String("env", cfg.AppEnv), zap.String("version", version),
+		zap.Bool("photo_posts_enabled", cfg.PhotoPostsEnabled))
 
 	var listenErr error
 	select {

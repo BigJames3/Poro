@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"io"
 )
 
@@ -13,8 +14,13 @@ type CompletedPart struct {
 
 // Object holds HeadObject metadata.
 type Object struct {
-	Size int64
+	Size        int64
+	ContentType string
 }
+
+// ErrMissing is returned by HeadSource when the object does not exist, so a
+// caller can tell an upload the client never sent from a storage failure.
+var ErrMissing = errors.New("object missing")
 
 // Storage is the object-store operations the video pipeline needs. It spans
 // three buckets: the private source bucket holds the original uploads, the
@@ -28,7 +34,13 @@ type Storage interface {
 	// any other size, so a client cannot store more than it declared.
 	PresignPart(ctx context.Context, key, uploadID string, part int32, size int64) (url string, err error)
 	CompleteMultipart(ctx context.Context, key, uploadID string, parts []CompletedPart) error
+	// PresignPut signs a single-object PUT of a photo post image. The URL
+	// signs the exact length and Content-Type: storage refuses any other body
+	// or type, so a client cannot store more than it declared. headers are
+	// the request headers the client must send unchanged.
+	PresignPut(ctx context.Context, key, contentType string, size int64) (url string, headers map[string]string, err error)
 	AbortMultipart(ctx context.Context, key, uploadID string) error
+	// HeadSource returns ErrMissing when the object does not exist.
 	HeadSource(ctx context.Context, key string) (Object, error)
 	GetSourceRange(ctx context.Context, key string, start, end int64) ([]byte, error)
 	GetSource(ctx context.Context, key string, dest io.Writer) error
