@@ -21,6 +21,24 @@ func Title(raw string) (string, string) {
 	return s, ""
 }
 
+// DisplayTitle is what readers show as a video's title: the title, or else
+// the first non-empty line of the description, cut to MaxTitleRunes.
+func DisplayTitle(title, description string) string {
+	if title != "" {
+		return title
+	}
+	for _, line := range strings.Split(description, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			runes := []rune(line)
+			if len(runes) > model.MaxTitleRunes {
+				return strings.TrimSpace(string(runes[:model.MaxTitleRunes-1])) + "…"
+			}
+			return line
+		}
+	}
+	return ""
+}
+
 // Description returns a caption body. Empty is allowed.
 func Description(raw string) (string, string) {
 	s := strings.TrimSpace(raw)

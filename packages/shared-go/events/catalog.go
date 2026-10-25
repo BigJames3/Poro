@@ -101,7 +101,9 @@ type VideoRenditionV1 struct {
 
 // VideoReadyV1 is published by the media-worker after HLS and a thumbnail exist.
 // Title, Description, Hashtags and PublishedAt were added after the first
-// release: consumers must accept events without them.
+// release: consumers must accept events without them. Title is the title to
+// display: for a video posted without one, the first line of its description.
+// A photo post's is empty.
 type VideoReadyV1 struct {
 	VideoID      string             `json:"video_id"`
 	UserID       string             `json:"user_id"`

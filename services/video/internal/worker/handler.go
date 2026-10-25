@@ -169,7 +169,8 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		VideoID: videoID.String(), UserID: userID.String(), DurationMs: out.DurationMs,
 		Width: out.Width, Height: out.Height, HLSKey: hlsKey, ThumbnailKey: thumbKey,
 		Renditions: toEventRenditions(out.Renditions), ReadyAt: now,
-		Title: row.Title, Description: row.Description, Hashtags: text.Hashtags(row.Description),
+		// The title is optional: readers get the caption's first line instead.
+		Title: text.DisplayTitle(row.Title, row.Description), Description: row.Description, Hashtags: text.Hashtags(row.Description),
 		PublishedAt: now,
 	}
 	ev, err := events.New(events.TypeVideoReady, 1, "media-worker", videoID.String(), ready, now)
