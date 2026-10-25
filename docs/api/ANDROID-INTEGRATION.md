@@ -81,11 +81,17 @@ gateway (`/health` mis à part).
 
 Upload direct vers le stockage, sans passer par l'API :
 
-1. `POST /api/v1/videos/uploads` (taille, type) → identifiant et URL présignées, une par partie
-   de 8 Mio.
+1. `POST /api/v1/videos/uploads` (taille, type ; titre facultatif) → identifiant et URL
+   présignées, une par partie de 8 Mio. Sans titre, le fil, la recherche et les notifications
+   affichent la première ligne de la description.
 2. `PUT` de chaque partie sur son URL. Garder l'`ETag` de chaque réponse. Réessayer une partie
    qui échoue, pas tout le fichier.
 3. `POST /api/v1/videos/uploads/{id}/complete` avec la liste des parties.
+
+   Envoi interrompu (coupure, processus arrêté, URL expirée au bout d'une heure) :
+   `POST /api/v1/videos/uploads/{id}/resume` liste les parties que le stockage a déjà reçues,
+   avec leur `ETag`, et signe de nouvelles URL pour les autres. On n'envoie que celles-là, puis
+   `complete` avec toutes les parties. Un 409 veut dire que l'envoi n'est plus ouvert : recommencer.
 4. La vidéo passe `processing`, puis `ready` ou `failed` (`too_long` au-delà de 3 min,
    `invalid_media`, `transcode_failed`). Interroger `GET /api/v1/videos/{id}` avec un intervalle
    croissant, ou attendre la notification.
@@ -93,6 +99,10 @@ Upload direct vers le stockage, sans passer par l'API :
 Formats acceptés : MP4/MOV (H.264, HEVC, MPEG-4, AV1) et WebM (VP8, VP9, AV1) ; 4096 px au plus
 par côté ; 256 Mio et 3 minutes au plus. Les autres fichiers sont refusés (ADR-0007). Lecture :
 HLS (`master.m3u8`), à lire avec ExoPlayer/Media3.
+
+Le profil public d'un compte liste ses publications prêtes avec
+`GET /api/v1/videos/users/{userId}` (sans connexion ; les publications photo seulement avec
+`Poro-Capabilities: photo-posts`).
 
 Avatars et images de boutique suivent le même principe : URL présignée, upload, puis
 confirmation (`docs/api/user.openapi.yaml`, `shop.openapi.yaml`).
