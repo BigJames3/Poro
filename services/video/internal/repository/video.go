@@ -259,6 +259,37 @@ func (r *Videos) MarkReady(ctx context.Context, tx pgx.Tx, id uuid.UUID, duratio
 	return nil
 }
 
+// MarkPhotoReady records the processed images of a photo post and makes it
+// ready, all in tx: either every image is recorded or none. Only a
+// processing, live post changes; otherwise ErrNotFound.
+func (r *Videos) MarkPhotoReady(ctx context.Context, tx pgx.Tx, id uuid.UUID, images []model.Image) error {
+	if len(images) == 0 || images[0].ThumbnailKey == nil || images[0].Width == nil || images[0].Height == nil {
+		return fmt.Errorf("mark photo ready: no processed image")
+	}
+	tag, err := tx.Exec(ctx, `UPDATE videos SET status = $2, thumbnail_key = $3, width = $4, height = $5,
+		failure_code = NULL, last_error = NULL, updated_at = now()
+		WHERE id = $1 AND status = $6 AND media_type = $7 AND deleted_at IS NULL`,
+		id, model.StatusReady, *images[0].ThumbnailKey, *images[0].Width, *images[0].Height,
+		model.StatusProcessing, model.MediaTypePhoto)
+	if err != nil {
+		return fmt.Errorf("mark photo ready: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrNotFound
+	}
+	for _, img := range images {
+		tag, err := tx.Exec(ctx, `UPDATE video_images SET image_key = $3, thumbnail_key = $4, width = $5, height = $6
+			WHERE video_id = $1 AND position = $2`, id, img.Position, img.ImageKey, img.ThumbnailKey, img.Width, img.Height)
+		if err != nil {
+			return fmt.Errorf("record image %d: %w", img.Position, err)
+		}
+		if tag.RowsAffected() != 1 {
+			return fmt.Errorf("record image %d: not found", img.Position)
+		}
+	}
+	return nil
+}
+
 // SetModeration records a moderation decision, deleted or not, and returns
 // the row. An unknown video is ErrNotFound.
 func (r *Videos) SetModeration(ctx context.Context, id uuid.UUID, status string, at time.Time) (*model.Video, error) {

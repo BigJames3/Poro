@@ -116,6 +116,19 @@ type VideoReadyV1 struct {
 	Description  string             `json:"description"`
 	Hashtags     []string           `json:"hashtags"`
 	PublishedAt  time.Time          `json:"published_at"`
+	// MediaType and Images were added with photo posts (ADR-0020). A photo
+	// post has no HLS: HLSKey is empty, DurationMs 0, ThumbnailKey is the
+	// thumbnail of image 1. An event without MediaType is a video.
+	MediaType string         `json:"media_type,omitempty"`
+	Images    []VideoImageV1 `json:"images,omitempty"`
+}
+
+// VideoImageV1 is one processed picture of a ready photo post, in order.
+type VideoImageV1 struct {
+	ImageKey     string `json:"image_key"`
+	ThumbnailKey string `json:"thumbnail_key"`
+	Width        int    `json:"width"`
+	Height       int    `json:"height"`
 }
 
 // Failure codes on VideoFailedV1. Never include FFmpeg stderr or file paths.

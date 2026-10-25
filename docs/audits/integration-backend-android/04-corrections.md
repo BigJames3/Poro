@@ -115,3 +115,19 @@ Backend seul : aucune modification Android, du fil ni du worker de traitement (�
 - En défense en profondeur, le worker laisse une photo en `processing` et envoie son événement en DLQ (30 jours, rejeu sous conditions décrites dans l'ADR-0020) ; l'étape 2c devra revalider le contenu au traitement.
 - Originaux photo supprimés à l'annulation, au refus, à la suppression, au balayage et à l'effacement du compte.
 
+## Module « Publier », étape 2c : traitement des photos par le media-worker (ADR-0020)
+
+- Paquet `internal/imaging` (décodeurs Go, `golang.org/x/image` v0.47.0) :
+  - revalidation du contenu relu (taille, octets magiques, type déclaré, 40 Mpx lus dans l'en-tête) avant tout décodage, car l'URL PUT reste valide 1 h ;
+  - orientation EXIF 1 à 8 (JPEG, PNG, WebP) ;
+  - transparence aplatie sur blanc ;
+  - JPEG 2048 px qualité 85 et miniature 540 px ;
+  - aucune métadonnée conservée.
+- Worker : tout ou rien.
+  - Aucune écriture publique avant que toutes les images soient valides.
+  - `ready`, les images et `poro.video.ready` dans une seule transaction.
+  - Quarantaine de ce qui était écrit en cas de panne du stockage.
+  - Sources supprimées après traitement.
+- Vérifié sur fichiers réels (Pillow) portant l'orientation et des coordonnées GPS. Deux défauts volontaires (rotation désactivée, écriture publique anticipée) sont détectés par les tests.
+- `PHOTO_POSTS_ENABLED` reste fermé jusqu'à l'étape 2d.
+

@@ -216,8 +216,9 @@ paths:
         500 and deletes nothing either. Called again once processing, it
         answers 409 `conflict`: read the post with GET /api/v1/videos/{id}
         (with the capability) to learn its state. Counts against the
-        `complete` rate limit. Until step 2c ships the image processing, a
-        completed photo post stays `processing`.
+        `complete` rate limit. The media-worker then reads every image
+        again and revalidates it before decoding (the PUT URL lasts an hour),
+        so a file replaced after complete fails the whole post.
       parameters:
         - $ref: "#/components/parameters/VideoID"
       responses:

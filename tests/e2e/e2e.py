@@ -270,10 +270,11 @@ def upload_video(client, title, description):
 
 
 PHOTOS = {"Poro-Capabilities": "photo-posts"}
-# Magic bytes are all step 2b checks (ADR-0020); decoding comes with step 2c.
+# Real phone-like pictures (EXIF orientation 6 and GPS), from the worker's own fixtures.
+IMAGES = ROOT / "services/video/internal/imaging/testdata"
+# Magic bytes only: enough for the checks of complete, never decodable.
 JPEG = bytes([0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10]) + b"JFIF" + bytes(50)
 PNG = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + bytes(50)
-WEBP = b"RIFF\x24\x00\x00\x00WEBPVP8 " + bytes(50)
 HEIC = b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic" + bytes(50)
 
 
@@ -308,23 +309,25 @@ def photo_posts_closed(seller):
 
 
 def photo_posts(seller):
-    """Photo posts in the video service (step 2b), with PHOTO_POSTS_ENABLED=true:
-    signed PUTs to the real storage, content checked at complete, no photo for a
-    client without the capability."""
-    images = [("image/jpeg", JPEG), ("image/png", PNG), ("image/webp", WEBP)]
+    """Photo posts (ADR-0020), with PHOTO_POSTS_ENABLED=true: signed PUTs to the real
+    storage, content checked at complete, processed by the media-worker (EXIF
+    orientation applied, no metadata kept), no photo for a client without the
+    capability."""
+    jpeg, png, webp = ((IMAGES / name).read_bytes() for name in ("jpeg_o6.jpg", "png_alpha.png", "webp_o6.webp"))
+    images = [("image/jpeg", jpeg), ("image/png", png), ("image/webp", webp)]
     init = photo_post(seller, images, "Marché de Treichville")
     pid = init["video_id"]
     check(len(init["images"]) == 3 and init["expires_in"] == 3600, f"photo upload session: {init}")
     first = init["images"][0]
-    check(put_image(first, JPEG, "image/png") == 403, "storage accepted another Content-Type than signed")
-    check(put_image(first, JPEG + b"\x00") == 403, "storage accepted another length than signed")
+    check(put_image(first, jpeg, "image/png") == 403, "storage accepted another Content-Type than signed")
+    check(put_image(first, jpeg + b"\x00") == 403, "storage accepted another length than signed")
     for upload, (_, raw) in zip(init["images"][:2], images):
         check(put_image(upload, raw) == 200, "storage refused the signed PUT")
     complete = ("POST", "/api/v1/videos/photo-uploads/{id}/complete", f"/api/v1/videos/photo-uploads/{pid}/complete")
     seller.call(*complete, expect=400)  # third image missing: nothing deleted
-    check(put_image(init["images"][2], WEBP) == 200, "storage refused the third image")
+    check(put_image(init["images"][2], webp) == 200, "storage refused the third image")
     post = seller.call(*complete)
-    check(post["media_type"] == "photo" and post["status"] == "processing", f"completed photo post: {post}")
+    check(post["media_type"] == "photo" and post["status"] in ("processing", "ready"), f"completed photo post: {post}")
     seller.call(*complete, expect=409)  # a replayed complete changes nothing
 
     get = ("GET", "/api/v1/videos/{id}", f"/api/v1/videos/{pid}")
@@ -349,10 +352,28 @@ def photo_posts(seller):
     left = photo_post(seller, [("image/png", PNG)])
     seller.call("DELETE", "/api/v1/videos/uploads/{id}", f"/api/v1/videos/uploads/{left['video_id']}", expect=204)
 
-    # Until step 2c the media-worker dead-letters photo posts: never failed, never ready.
-    time.sleep(3)
-    check(seller.call(*get, headers=PHOTOS)["status"] == "processing", "the worker touched a photo post")
+    def ready():
+        p = seller.call(*get, headers=PHOTOS)
+        check(p["status"] != "failed", f"photo post failed: {p}")
+        return p if p["status"] == "ready" else None
+    post = wait_for("photo post ready", ready, timeout=60)
+    check([i["position"] for i in post["images"]] == [1, 2, 3], f"images of the ready post: {post['images']}")
+    first = post["images"][0]
+    check((first["width"], first["height"]) == (32, 64), f"EXIF orientation 6 not applied: {first}")
+    status, raw, _ = http("GET", first["url"])
+    check(status == 200 and raw[:3] == b"\xff\xd8\xff", f"public image 1: {status}")
+    check(b"Exif" not in raw and b"GPS" not in raw, "the public image kept EXIF or GPS data")
+    status, _, _ = http("GET", first["thumbnail_url"])
+    check(status == 200, f"public thumbnail 1: {status}")
+    seller.call(*get, expect=404)  # ready, still invisible without the capability
+    plain = seller.call("GET", "/api/v1/videos", query={"limit": 50})
+    check(all(v["media_type"] == "video" for v in plain["items"]), "a ready photo post leaked to a client without the capability")
+
     seller.call("DELETE", "/api/v1/videos/{id}", f"/api/v1/videos/{pid}", expect=204)
+
+    def withdrawn():
+        return http("GET", first["url"])[0] != 200 or None
+    wait_for("deleted photo post's images withdrawn", withdrawn, timeout=30)
 
 
 def videos(seller):
@@ -604,7 +625,7 @@ def main():
     seller.call("POST", "/api/v1/users/me/creator", expect=(200, 201))
     video_id = step("video upload and processing", videos, seller)
     if os.environ.get("E2E_PHOTO_POSTS") == "1":
-        step("photo posts (step 2b, enabled)", photo_posts, seller)
+        step("photo posts (enabled)", photo_posts, seller)
     else:
         step("photo posts closed by default", photo_posts_closed, seller)
     comment, reply = step("likes, comments, follows", social, seller, buyer, video_id)
