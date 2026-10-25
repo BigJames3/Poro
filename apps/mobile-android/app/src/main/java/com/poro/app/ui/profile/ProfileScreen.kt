@@ -1,6 +1,7 @@
 package com.poro.app.ui.profile
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,8 +46,25 @@ fun ProfileScreen(
     onVerifyEmail: () -> Unit,
     modifier: Modifier = Modifier,
     extra: @Composable (MyAccount) -> Unit = {},
+    topEnd: @Composable () -> Unit = {},
 ) {
-    LoadableContent(state.content, onRetry, modifier) { me ->
+    Box(modifier) {
+        ProfileContent(state, onRetry, onEdit, onSettings, onBecomeCreator, onVerifyEmail, extra)
+        Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) { topEnd() }
+    }
+}
+
+@Composable
+private fun ProfileContent(
+    state: ProfileUiState,
+    onRetry: () -> Unit,
+    onEdit: () -> Unit,
+    onSettings: () -> Unit,
+    onBecomeCreator: () -> Unit,
+    onVerifyEmail: () -> Unit,
+    extra: @Composable (MyAccount) -> Unit,
+) {
+    LoadableContent(state.content, onRetry) { me ->
         val profile = me.profile
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),

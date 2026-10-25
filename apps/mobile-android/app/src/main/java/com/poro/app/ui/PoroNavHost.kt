@@ -2,19 +2,28 @@ package com.poro.app.ui
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -26,10 +35,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -111,25 +125,38 @@ private fun PoroNavGraph(
     val destination = backStack?.destination
     val currentTab = destination?.let { current -> TopLevelTab.entries.firstOrNull { it.matches(current) } }
 
+    // Pastilles (non lues, panier) : relues à chaque onglet affiché et au retour dans l'app.
+    val badgesVm = poroViewModel { TabBadgesViewModel(container.notificationRepository, container.orderRepository) }
+    val badges by badgesVm.badges.collectAsStateWithLifecycle()
+    LaunchedEffect(currentTab) { if (currentTab != null) badgesVm.refresh() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { if (currentTab != null) badgesVm.refresh() }
+
+    val onTab: (TopLevelTab) -> Unit = { tab ->
+        navController.navigate(tab.route) {
+            // Un onglet garde sa pile et son défilement quand on y revient.
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+    // Tablette ou téléphone en paysage : rail à gauche plutôt que barre en bas.
+    val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+    val wide = windowWidth >= WIDE_SCREEN_DP.dp
+    // Hors vidéo plein écran, le contenu garde une largeur lisible sur grand écran.
+    val media = destination?.isMediaScreen() ?: true
+
     Scaffold(
         modifier = modifier,
         // Les barres système sont déjà gérées par le Scaffold de MainActivity.
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            if (currentTab != null) {
+            if (currentTab != null && !wide) {
                 NavigationBar {
                     TopLevelTab.entries.forEach { tab ->
                         NavigationBarItem(
                             selected = tab == currentTab,
-                            onClick = {
-                                navController.navigate(tab.route) {
-                                    // Un onglet garde sa pile et son défilement quand on y revient.
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(tab.icon, contentDescription = null) },
+                            onClick = { onTab(tab) },
+                            icon = { TabIcon(tab, badges) },
                             label = { Text(stringResource(tab.label)) },
                         )
                     }
@@ -137,42 +164,89 @@ private fun PoroNavGraph(
             }
         },
     ) { padding ->
-        NavHost(navController = navController, startDestination = start, modifier = Modifier.padding(padding)) {
-            authGraph(nav)
-            feedGraph(
-                nav,
-                onOpenAuthor = { userId, username -> nav.controller.navigate(PublicProfileRoute(userId, username)) },
-                feedActions = { item ->
-                    SocialVideoActions(
-                        nav, item.videoId, item.title, VideoStatsDto(item.videoId, item.stats.likes, item.stats.comments, item.stats.shares),
-                        ownerId = item.author.id.ifEmpty { null },
-                    )
-                },
-                videoActions = { video -> SocialVideoActions(nav, video.id, video.title, VideoStatsDto(video.id), ownerId = video.userId.ifEmpty { null }) },
-                feedTopEnd = { FeedNotificationBell(nav) },
-                guestActions = { item ->
-                    VideoActions(
-                        VideoStatsDto(item.videoId, item.stats.likes, item.stats.comments, item.stats.shares),
-                        onLike = nav::signInPrompt,
-                        onComments = nav::signInPrompt,
-                        onShare = nav::signInPrompt,
-                    )
-                },
-                onFeedItems = { items -> PrefetchVideoStats(nav, items.map { it.videoId }) },
-            )
-            searchGraph(nav)
-            notificationGraph(nav, onOpenOrder = { orderId, asSeller -> nav.controller.navigate(OrderRoute(orderId, asSeller)) })
-            shopGraph(nav)
-            legalGraph(nav)
-            socialGraph(nav)
-            uploadGraph(nav)
-            profileGraph(nav) { me ->
-                MyFollowCounts(nav, me.profile.userId)
-                MyVideos(nav)
+        Row(Modifier.fillMaxSize().padding(padding)) {
+            if (currentTab != null && wide) {
+                NavigationRail {
+                    TopLevelTab.entries.forEach { tab ->
+                        NavigationRailItem(
+                            selected = tab == currentTab,
+                            onClick = { onTab(tab) },
+                            icon = { TabIcon(tab, badges) },
+                            label = { Text(stringResource(tab.label)) },
+                        )
+                    }
+                }
+            }
+            val hostModifier = if (media || !wide) {
+                Modifier.weight(1f).fillMaxHeight()
+            } else {
+                Modifier.weight(1f).fillMaxHeight().wrapContentWidth(Alignment.CenterHorizontally).widthIn(max = MAX_CONTENT_WIDTH_DP.dp)
+            }
+            NavHost(navController = navController, startDestination = start, modifier = hostModifier) {
+                authGraph(nav)
+                feedGraph(
+                    nav,
+                    onOpenAuthor = { userId, username -> nav.controller.navigate(PublicProfileRoute(userId, username)) },
+                    feedActions = { item ->
+                        SocialVideoActions(
+                            nav, item.videoId, item.title, VideoStatsDto(item.videoId, item.stats.likes, item.stats.comments, item.stats.shares),
+                            ownerId = item.author.id.ifEmpty { null },
+                        )
+                    },
+                    videoActions = { video -> SocialVideoActions(nav, video.id, video.title, VideoStatsDto(video.id), ownerId = video.userId.ifEmpty { null }) },
+                    feedTopEnd = { FeedNotificationBell(nav) },
+                    guestActions = { item ->
+                        VideoActions(
+                            VideoStatsDto(item.videoId, item.stats.likes, item.stats.comments, item.stats.shares),
+                            onLike = nav::signInPrompt,
+                            onComments = nav::signInPrompt,
+                            onShare = nav::signInPrompt,
+                        )
+                    },
+                    onFeedItems = { items -> PrefetchVideoStats(nav, items.map { it.videoId }) },
+                )
+                searchGraph(nav)
+                notificationGraph(nav, onOpenOrder = { orderId, asSeller -> nav.controller.navigate(OrderRoute(orderId, asSeller)) })
+                shopGraph(nav)
+                legalGraph(nav)
+                socialGraph(nav)
+                uploadGraph(nav)
+                profileGraph(nav, profileTopEnd = { FeedNotificationBell(nav, tint = MaterialTheme.colorScheme.onSurface) }) { me ->
+                    MyFollowCounts(nav, me.profile.userId)
+                    MyVideos(nav)
+                }
             }
         }
     }
 }
+
+/** Icône d'onglet et sa pastille ; TalkBack lit le nombre avec le nom de l'onglet. */
+@Composable
+private fun TabIcon(tab: TopLevelTab, badges: TabBadges) {
+    val count = when (tab) {
+        TopLevelTab.Profile -> badges.unreadNotifications
+        TopLevelTab.Shop -> badges.cartItems
+        else -> 0
+    }
+    val description = when {
+        count == 0 -> null
+        tab == TopLevelTab.Profile -> quantityString(R.plurals.notifications_unread, count)
+        else -> quantityString(R.plurals.cart_items, count)
+    }
+    BadgedBox(badge = { if (count > 0) Badge { Text(badgeText(count)) } }) {
+        Icon(tab.icon, contentDescription = description)
+    }
+}
+
+/** Écrans de vidéo plein écran : ni largeur bornée, ni marge. */
+private fun NavDestination.isMediaScreen(): Boolean =
+    hasRoute<HomeRoute>() || hasRoute<GuestFeedRoute>() || hasRoute<VideoRoute>()
+
+/** Largeur à partir de laquelle la navigation passe en rail (Material : classe « medium »). */
+private const val WIDE_SCREEN_DP = 600
+
+/** Largeur maximale du contenu hors vidéo sur grand écran. */
+private const val MAX_CONTENT_WIDTH_DP = 840
 
 /** Pendant la lecture des jetons au démarrage (quelques dizaines de millisecondes). */
 @Composable

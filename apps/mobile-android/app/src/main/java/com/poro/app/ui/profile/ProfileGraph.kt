@@ -24,9 +24,14 @@ import com.poro.app.ui.poroViewModel
 
 /**
  * Profil, modification, paramètres et suppression du compte. [profileExtra] : contenu d'autres
- * fonctionnalités affiché sur le profil (compteurs, vidéos publiées).
+ * fonctionnalités affiché sur le profil (compteurs, vidéos publiées) ; [profileTopEnd] : action
+ * en haut à droite (la cloche des notifications).
  */
-fun NavGraphBuilder.profileGraph(nav: AppNav, profileExtra: @Composable (MyAccount) -> Unit = {}) {
+fun NavGraphBuilder.profileGraph(
+    nav: AppNav,
+    profileTopEnd: @Composable () -> Unit = {},
+    profileExtra: @Composable (MyAccount) -> Unit = {},
+) {
     val container = nav.container
 
     composable<ProfileRoute> { entry ->
@@ -42,6 +47,7 @@ fun NavGraphBuilder.profileGraph(nav: AppNav, profileExtra: @Composable (MyAccou
             onBecomeCreator = vm::becomeCreator,
             onVerifyEmail = { nav.controller.navigate(EmailVerifyRoute(codeAlreadySent = false)) },
             extra = profileExtra,
+            topEnd = profileTopEnd,
         )
     }
     composable<EditProfileRoute> {
