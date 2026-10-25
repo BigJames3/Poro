@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -36,6 +38,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
@@ -46,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.poro.app.R
+import com.poro.app.data.feed.FeedImage
 import com.poro.app.data.feed.FeedItem
 import com.poro.app.data.feed.FeedKind
 import com.poro.app.ui.auth.ErrorMessage
@@ -163,11 +167,13 @@ private fun VideoPager(
     // préparée ensuite, dans le même flux, pour ne jamais écraser celle qui va être lue.
     LaunchedEffect(pager) {
         var shownPage = -1
-        snapshotFlow { pager.settledPage to currentItems.getOrNull(pager.settledPage + 1)?.hlsUrl }.collect { (page, nextUrl) ->
+        snapshotFlow { pager.settledPage to currentItems.getOrNull(pager.settledPage + 1)?.playableUrl }.collect { (page, nextUrl) ->
             if (page != shownPage) {
                 shownPage = page
                 currentOnItemShown(page)
-                currentItems.getOrNull(page)?.hlsUrl?.let(player::play)
+                // Une publication photo ne joue rien : la vidéo précédente s'arrête.
+                val url = currentItems.getOrNull(page)?.playableUrl
+                if (url != null) player.play(url) else player.pause()
             }
             player.preload(nextUrl)
         }
@@ -197,22 +203,36 @@ fun VideoPage(
     val isBuffering by player.isBuffering
     val hasFailed by player.hasFailed
     val author = displayNameOf(item.author.displayName, item.author.username)
-    val spoken = stringResource(R.string.feed_video_description, item.title, author)
+    val spoken = if (item.isPhoto) {
+        stringResource(R.string.feed_photo_description, author, item.images.size)
+    } else {
+        stringResource(R.string.feed_video_description, item.title, author)
+    }
+    // Une publication photo se parcourt en glissant de côté : toucher ne lit ni ne met en pause.
+    val playToggle = if (item.isPhoto) {
+        Modifier
+    } else {
+        Modifier.clickable(role = Role.Button, onClickLabel = stringResource(R.string.feed_play_pause)) { player.toggle() }
+    }
     Box(
         Modifier
             .fillMaxSize()
-            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.feed_play_pause)) { player.toggle() }
+            .then(playToggle)
             .semantics { contentDescription = spoken },
     ) {
-        AsyncImage(
-            model = item.thumbnailUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-        )
-        if (active) VideoSurface(player, Modifier.fillMaxSize())
+        if (item.isPhoto) {
+            PhotoCarousel(item.images, Modifier.fillMaxSize())
+        } else {
+            AsyncImage(
+                model = item.thumbnailUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (active) VideoSurface(player, Modifier.fillMaxSize())
+        }
         when {
-            !active -> Unit
+            !active || item.isPhoto -> Unit
             hasFailed -> PlaybackFailed(onRetry = player::retry, modifier = Modifier.align(Alignment.Center))
             isBuffering -> {
                 val loading = stringResource(R.string.loading)
@@ -280,6 +300,44 @@ private fun PlaybackFailed(onRetry: () -> Unit, modifier: Modifier = Modifier) {
         Text(stringResource(R.string.video_playback_failed), color = Color.White, textAlign = TextAlign.Center)
         OutlinedButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) {
             Text(stringResource(R.string.action_retry), color = Color.White)
+        }
+    }
+}
+
+/** URL HLS d'une vidéo ; null pour une publication photo, qui ne se lit pas. */
+private val FeedItem.playableUrl: String?
+    get() = hlsUrl?.takeIf { it.isNotEmpty() && !isPhoto }
+
+/**
+ * Carrousel d'une publication photo : une image par page, en entier sur fond noir, et des points
+ * qui disent où l'on en est. Glisser de côté change d'image, glisser vers le haut de publication.
+ */
+@Composable
+fun PhotoCarousel(images: List<FeedImage>, modifier: Modifier = Modifier) {
+    val pager = rememberPagerState(pageCount = { images.size })
+    Box(modifier.background(Color.Black)) {
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+            val label = stringResource(R.string.feed_photo_page, page + 1, images.size)
+            AsyncImage(
+                model = images[page].url,
+                contentDescription = label,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (images.size > 1) {
+            Row(
+                Modifier.align(Alignment.TopCenter).padding(top = 64.dp).clearAndSetSemantics {},
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                repeat(images.size) { index ->
+                    Box(
+                        Modifier
+                            .size(if (index == pager.currentPage) 8.dp else 6.dp)
+                            .background(Color.White.copy(alpha = if (index == pager.currentPage) 1f else 0.5f), CircleShape),
+                    )
+                }
+            }
         }
     }
 }

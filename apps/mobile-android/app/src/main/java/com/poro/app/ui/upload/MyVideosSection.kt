@@ -62,7 +62,8 @@ fun MyVideosSection(
         state.videos.chunked(COLUMNS).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 row.forEach { video ->
-                    val label = video.title + if (!video.isReady) ", " + stringResource(videoStatusText(video)) else ""
+                    val name = video.title.ifBlank { if (video.isPhoto) stringResource(R.string.post_photo_label) else "" }
+                    val label = name + if (!video.isReady) ", " + stringResource(videoStatusText(video)) else ""
                     Box(
                         Modifier
                             .weight(1f)
@@ -76,6 +77,14 @@ fun MyVideosSection(
                             .semantics { contentDescription = label },
                     ) {
                         AsyncImage(video.thumbnailUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                        if (video.isPhoto && video.isReady) {
+                            Text(
+                                stringResource(R.string.post_photo_label),
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.align(Alignment.TopEnd).background(Color.Black.copy(alpha = 0.6f)).padding(4.dp),
+                            )
+                        }
                         if (!video.isReady) {
                             Text(
                                 stringResource(statusLabel(video)),

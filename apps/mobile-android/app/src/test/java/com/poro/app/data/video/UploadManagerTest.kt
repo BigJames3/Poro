@@ -1,6 +1,7 @@
 package com.poro.app.data.video
 
 import com.poro.app.core.media.LocalMedia
+import com.poro.app.core.media.PreparedImage
 import com.poro.app.core.network.ApiErrorCodes
 import com.poro.app.core.network.ApiResult
 import com.poro.app.core.network.PageDto
@@ -91,6 +92,9 @@ class UploadManagerTest {
         val calls = mutableListOf<String>()
         override val upload: Flow<ScheduledUpload> = flow
         override fun enqueue(file: LocalMedia, title: String, description: String?) { calls += "enqueue:$title" }
+        override fun enqueuePhotos(images: List<PreparedImage>, caption: String?, label: String) {
+            calls += "photos:${images.size}:$label"
+        }
         override fun cancel() { calls += "cancel" }
         override fun clear() { calls += "clear" }
     }
@@ -123,5 +127,22 @@ class UploadManagerTest {
         scheduler.flow.value = ScheduledUpload.Succeeded("w2", "v2", "Finale")
         runCurrent()
         assertEquals("v2", (manager.state.value as UploadState.Processing).video.id)
+    }
+
+    @Test
+    fun `a photo post uses the same queue and is followed as a photo post`() = runTest {
+        val scheduler = FakeScheduler(ScheduledUpload.None)
+        val manager = UploadManager(scheduler, FakeVideos(VideoDto.STATUS_READY), backgroundScope, pollDelaysMs = listOf(1))
+        runCurrent()
+        val images = listOf(PreparedImage("/p/1.jpg", 300), PreparedImage("/p/2.jpg", 200))
+
+        assertTrue(manager.startPhotos(images, "Marché", "Marché"))
+        assertEquals(500L, (manager.state.value as UploadState.Uploading).totalBytes)
+        assertFalse("une seule publication à la fois", manager.start(file, "Match", null))
+        assertEquals(listOf("photos:2:Marché"), scheduler.calls)
+
+        scheduler.flow.value = ScheduledUpload.Succeeded("w1", "p1", "Marché", photos = true)
+        runCurrent()
+        assertTrue((manager.state.value as UploadState.Processing).video.isPhoto)
     }
 }

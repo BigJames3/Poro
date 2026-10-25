@@ -13,7 +13,7 @@ import com.poro.app.R
 /** Texte d'erreur annoncé par TalkBack dès qu'il apparaît. */
 @Composable
 fun ErrorMessageText(error: ErrorMessage, modifier: Modifier = Modifier) {
-    val text = stringResource(error.text)
+    val text = error.arg?.let { stringResource(error.text, it) } ?: stringResource(error.text)
     val full = error.requestId?.let { text + "\n" + stringResource(R.string.error_reference, it) } ?: text
     Text(
         text = full,

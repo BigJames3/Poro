@@ -31,15 +31,25 @@ interface VideoApi {
     @POST("api/v1/videos/uploads/{id}/complete")
     suspend fun completeUpload(@Path("id") id: String, @Body body: CompleteUpload): Response<ApiEnvelope<VideoDto>>
 
-    /** 204 sans corps. */
+    /** 204 sans corps ; annule aussi une publication photo pas encore finalisée. */
     @DELETE("api/v1/videos/uploads/{id}")
     suspend fun abortUpload(@Path("id") id: String): Response<ApiEnvelope<Unit>>
+
+    /** Publication photo (ADR-0020) : une URL PUT signée (taille et type) par image. */
+    @POST("api/v1/videos/photo-uploads")
+    suspend fun initPhotoUpload(@Body body: InitPhotoUploadRequest): Response<ApiEnvelope<InitPhotoUpload>>
+
+    /** Vérifie les images envoyées et passe la publication en traitement ; rejoué : 409. */
+    @POST("api/v1/videos/photo-uploads/{id}/complete")
+    suspend fun completePhotoUpload(@Path("id") id: String): Response<ApiEnvelope<VideoDto>>
 }
 
 @Serializable
 data class VideoDto(
     val id: String,
     @SerialName("user_id") val userId: String = "",
+    /** `video` ou `photo` (publication photo, avec ses [images] et sans HLS). */
+    @SerialName("media_type") val mediaType: String = MEDIA_VIDEO,
     val title: String = "",
     val description: String = "",
     /** `uploading`, `processing`, `ready` ou `failed`. */
@@ -52,8 +62,11 @@ data class VideoDto(
     @SerialName("hls_url") val hlsUrl: String? = null,
     @SerialName("thumbnail_url") val thumbnailUrl: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
+    /** Images d'une publication photo prête, dans l'ordre. */
+    val images: List<ImageDto> = emptyList(),
 ) {
     val isReady: Boolean get() = status == STATUS_READY && moderationStatus != MODERATION_REMOVED
+    val isPhoto: Boolean get() = mediaType == MEDIA_PHOTO
 
     companion object {
         const val STATUS_UPLOADING = "uploading"
@@ -61,8 +74,48 @@ data class VideoDto(
         const val STATUS_READY = "ready"
         const val STATUS_FAILED = "failed"
         const val MODERATION_REMOVED = "removed"
+        const val MEDIA_VIDEO = "video"
+        const val MEDIA_PHOTO = "photo"
     }
 }
+
+/** Une image traitée : JPEG de 2048 px au plus et sa miniature de 540 px. */
+@Serializable
+data class ImageDto(
+    val position: Int = 0,
+    val url: String,
+    @SerialName("thumbnail_url") val thumbnailUrl: String = url,
+    val width: Int = 0,
+    val height: Int = 0,
+)
+
+@Serializable
+data class InitPhotoUploadRequest(
+    val images: List<PhotoSpec>,
+    /** Légende facultative (500 caractères, hashtags compris). */
+    val description: String? = null,
+)
+
+@Serializable
+data class PhotoSpec(
+    @SerialName("content_type") val contentType: String,
+    @SerialName("size_bytes") val sizeBytes: Long,
+)
+
+/** URL de chaque image, à envoyer avec exactement les [PhotoTarget.headers] signés. */
+@Serializable
+data class InitPhotoUpload(
+    @SerialName("video_id") val videoId: String,
+    @SerialName("expires_in") val expiresIn: Long = 0,
+    val images: List<PhotoTarget>,
+)
+
+@Serializable
+data class PhotoTarget(
+    val position: Int,
+    val url: String,
+    val headers: Map<String, String> = emptyMap(),
+)
 
 @Serializable
 data class InitUploadRequest(

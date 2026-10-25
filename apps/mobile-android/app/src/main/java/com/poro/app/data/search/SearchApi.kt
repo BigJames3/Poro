@@ -61,6 +61,8 @@ data class SearchPage<T>(
 @Serializable
 data class VideoHit(
     @SerialName("video_id") val videoId: String,
+    /** `video` ou `photo` (publication photo : sans durée, titre vide). */
+    @SerialName("media_type") val mediaType: String = "video",
     val title: String = "",
     val hashtags: List<String> = emptyList(),
     @SerialName("thumbnail_url") val thumbnailUrl: String? = null,
@@ -68,7 +70,9 @@ data class VideoHit(
     @SerialName("published_at") val publishedAt: String? = null,
     val stats: ItemStats = ItemStats(),
     val author: HitAuthor = HitAuthor(),
-)
+) {
+    val isPhoto: Boolean get() = mediaType == "photo"
+}
 
 @Serializable
 data class HitAuthor(

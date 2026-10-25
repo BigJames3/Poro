@@ -47,6 +47,7 @@ class NetworkModule(
     private val refreshApi: RefreshApi by lazy { buildRetrofit(baseUrl, baseClient).create(RefreshApi::class.java) }
 
     val apiClient: OkHttpClient = baseClient.newBuilder()
+        .addInterceptor(CapabilitiesInterceptor())
         .addInterceptor(AuthInterceptor(tokens))
         .authenticator(TokenAuthenticator(tokens, { refreshApi }, onSessionExpired))
         .build()

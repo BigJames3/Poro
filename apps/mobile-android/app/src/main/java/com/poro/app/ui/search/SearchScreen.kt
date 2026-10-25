@@ -145,12 +145,18 @@ private fun VideoRow(video: VideoHit, onClick: () -> Unit) {
             AsyncImage(video.thumbnailUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(video.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // Une publication photo n'a pas de titre : on l'annonce comme telle.
+            Text(
+                video.title.ifBlank { if (video.isPhoto) stringResource(R.string.post_photo_label) else "" },
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
             Text(displayNameOf(video.author.displayName, video.author.username), style = MaterialTheme.typography.bodySmall)
             Text(
                 listOfNotNull(
                     stringResource(R.string.search_likes, Formats.count(video.stats.likes)),
-                    video.durationMs?.let { Formats.duration(it) },
+                    video.durationMs?.takeIf { !video.isPhoto }?.let { Formats.duration(it) },
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

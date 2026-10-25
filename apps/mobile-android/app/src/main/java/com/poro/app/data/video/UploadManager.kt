@@ -1,6 +1,7 @@
 package com.poro.app.data.video
 
 import com.poro.app.core.media.LocalMedia
+import com.poro.app.core.media.PreparedImage
 import com.poro.app.core.network.ApiResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -64,6 +65,18 @@ class UploadManager(
         return true
     }
 
+    /**
+     * Démarre une publication photo ([images] préparées, dans l'ordre) ; refusé (false) si un
+     * autre envoi est en cours. [label] s'affiche pendant l'envoi (légende ou « Photo »).
+     */
+    fun startPhotos(images: List<PreparedImage>, caption: String?, label: String): Boolean {
+        if (isBusy) return false
+        stopFollowing()
+        _state.value = UploadState.Uploading(label, 0, images.sumOf { it.sizeBytes })
+        scheduler.enqueuePhotos(images, caption, label)
+        return true
+    }
+
     /** Abandonne l'envoi en cours (les parties envoyées sont annulées côté serveur). */
     fun cancel() {
         stopFollowing()
@@ -102,7 +115,8 @@ class UploadManager(
             }
             is ScheduledUpload.Succeeded -> if (followedVideoId != upload.videoId) {
                 followedVideoId = upload.videoId
-                val video = VideoDto(id = upload.videoId, title = upload.title, status = VideoDto.STATUS_PROCESSING)
+                val video = VideoDto(id = upload.videoId, title = upload.title, status = VideoDto.STATUS_PROCESSING,
+                    mediaType = if (upload.photos) VideoDto.MEDIA_PHOTO else VideoDto.MEDIA_VIDEO)
                 _state.value = UploadState.Processing(video)
                 processing = scope.launch { followProcessing(video) }
             }

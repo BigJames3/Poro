@@ -94,6 +94,9 @@
     <string name="feed_following_empty">Abonnez-vous à des créateurs pour voir leurs vidéos ici.</string>
     <string name="feed_video_description">Vidéo : %1$s, par %2$s</string>
     <string name="feed_play_pause">Lire ou mettre en pause</string>
+    <string name="feed_photo_description">Publication photo de %1$s, %2$d photos</string>
+    <string name="feed_photo_page">Photo %1$d sur %2$d</string>
+    <string name="post_photo_label">Photos</string>
     <string name="video_processing">Vidéo en cours de traitement. Elle sera visible dans quelques minutes.</string>
     <string name="video_failed">Le traitement de cette vidéo a échoué.</string>
     <string name="video_removed">Cette vidéo a été retirée par la modération.</string>
@@ -135,7 +138,26 @@
     <string name="profile_following">%1$s abonnements</string>
 
     <!-- Publication -->
-    <string name="upload_title">Publier une vidéo</string>
+    <string name="upload_title">Publier</string>
+    <string name="upload_mode_video">Vidéo</string>
+    <string name="upload_mode_photo">Photos</string>
+    <string name="upload_photo_rules">1 à 10 photos (JPEG, PNG, WebP, ou HEIC si l’appareil sait le lire). Elles sont réduites à 2048 px avant l’envoi.</string>
+    <string name="upload_photo_pick">Choisir des photos</string>
+    <string name="upload_photo_add">Ajouter des photos</string>
+    <string name="upload_photo_count">%1$d / 10 photos</string>
+    <string name="upload_photo_item">Photo %1$d sur %2$d</string>
+    <string name="upload_photo_remove">Retirer la photo %1$d</string>
+    <string name="upload_photo_move_left">Avancer la photo %1$d</string>
+    <string name="upload_photo_move_right">Reculer la photo %1$d</string>
+    <string name="upload_photo_caption">Légende (facultative)</string>
+    <string name="upload_photo_too_many">10 photos au plus : les suivantes n’ont pas été ajoutées.</string>
+    <string name="upload_photo_preparing">Préparation des photos…</string>
+    <string name="upload_photo_unsupported">La photo %1$d ne peut pas être lue sur cet appareil (format non pris en charge). Retirez-la ou choisissez-en une autre.</string>
+    <string name="upload_photo_unreadable">La photo %1$d n’est plus accessible (supprimée ou autorisation perdue). Retirez-la ou choisissez-la à nouveau.</string>
+    <string name="upload_photo_invalid">Une photo a été refusée (format ou contenu non valide). Retirez-la ou choisissez-en une autre.</string>
+    <string name="upload_photo_disabled">Les publications photo ne sont pas disponibles pour le moment.</string>
+    <string name="upload_photo_ready">Vos photos sont en ligne !</string>
+    <string name="upload_photo_processing">Photos en cours de traitement. Elles seront visibles dans un instant.</string>
     <string name="upload_rules">MP4, MOV ou WebM, 3 minutes et 256 Mo au plus.</string>
     <string name="upload_pick">Choisir une vidéo</string>
     <string name="upload_pick_other">Choisir une autre vidéo</string>

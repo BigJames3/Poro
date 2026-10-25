@@ -3,7 +3,9 @@ package com.poro.app
 import android.content.Context
 import com.poro.app.core.legal.LegalTextSource
 import com.poro.app.core.legal.RawLegalTextSource
+import com.poro.app.core.media.BitmapImagePreparer
 import com.poro.app.core.media.ContentResolverMediaReader
+import com.poro.app.core.media.LocalImagePreparer
 import com.poro.app.core.media.LocalMediaReader
 import com.poro.app.core.network.NetworkModule
 import com.poro.app.core.network.PresignedUploader
@@ -32,12 +34,14 @@ import com.poro.app.data.social.SocialRepository
 import com.poro.app.data.user.DefaultProfileRepository
 import com.poro.app.data.user.ProfileRepository
 import com.poro.app.data.video.DefaultVideoRepository
+import com.poro.app.data.video.PhotoUploadClient
+import com.poro.app.data.video.PhotoUploader
 import com.poro.app.data.video.PrefsUploadSessionStore
 import com.poro.app.data.video.UploadManager
+import com.poro.app.data.video.VideoRepository
 import com.poro.app.data.video.VideoUploadClient
 import com.poro.app.data.video.VideoUploader
 import com.poro.app.data.video.WorkManagerUploadScheduler
-import com.poro.app.data.video.VideoRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -99,6 +103,17 @@ class AppContainer(context: Context) {
     val shopRepository: ShopRepository = DefaultShopRepository(network.api(), uploader)
 
     val orderRepository: OrderRepository = DefaultOrderRepository(network.api())
+
+    /** Photos préparées (orientation, 2048 px, JPEG 92) et gardées jusqu'à la fin de l'envoi. */
+    val imagePreparer: LocalImagePreparer = BitmapImagePreparer(context)
+
+    /** Publication photo, exécutée par le worker WorkManager. */
+    val photoUploadClient: PhotoUploadClient = PhotoUploader(
+        network.api(),
+        uploader,
+        imagePreparer,
+        sessions = PrefsUploadSessionStore(context, name = "photo_upload_session"),
+    )
 
     /** Envoi d'une vidéo, exécuté par le worker WorkManager. */
     val videoUploadClient: VideoUploadClient =

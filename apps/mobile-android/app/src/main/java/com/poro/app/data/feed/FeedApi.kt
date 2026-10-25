@@ -28,6 +28,9 @@ interface FeedApi {
 @Serializable
 data class FeedItem(
     @SerialName("video_id") val videoId: String,
+    /** `video` ou `photo` : une publication photo n'a pas de HLS, ses images sont dans [images]. */
+    @SerialName("media_type") val mediaType: String = "video",
+    val images: List<FeedImage> = emptyList(),
     val title: String = "",
     val hashtags: List<String> = emptyList(),
     @SerialName("duration_ms") val durationMs: Long = 0,
@@ -36,6 +39,17 @@ data class FeedItem(
     @SerialName("hls_url") val hlsUrl: String? = null,
     val stats: ItemStats = ItemStats(),
     val author: Author = Author(),
+) {
+    val isPhoto: Boolean get() = mediaType == "photo" && images.isNotEmpty()
+}
+
+/** Une image d'une publication photo : JPEG de 2048 px au plus et sa miniature de 540 px. */
+@Serializable
+data class FeedImage(
+    val url: String,
+    @SerialName("thumbnail_url") val thumbnailUrl: String = url,
+    val width: Int = 0,
+    val height: Int = 0,
 )
 
 @Serializable
