@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build context: repository root (needs packages/shared-go).
 
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 WORKDIR /src
 COPY packages/shared-go /src/packages/shared-go
@@ -12,7 +12,7 @@ RUN go mod download
 COPY services/social /src/services/social
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/social ./cmd/server
 
-FROM alpine:3.22
+FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates wget && adduser -D -u 10001 app
 
