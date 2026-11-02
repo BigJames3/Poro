@@ -4,13 +4,13 @@ version = "1.0.0"
 description = "PORO moderation service: reports, rule-based filter and moderator queue"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-  "fastapi==0.143.0",
+  "fastapi==0.162.0",
   "uvicorn[standard]==0.54.0",
-  "pydantic==2.13.5",
-  "sqlalchemy[asyncio]==2.1.4",
+  "pydantic==2.14.2",
+  "sqlalchemy[asyncio]==2.1.6",
   "asyncpg==0.32.0",
-  "alembic==1.20.0",
-  "aiokafka==0.14.0",
+  "alembic==1.20.1",
+  "aiokafka==0.15.0",
   "pyjwt[crypto]==2.15.1",
   "redis==8.1.0",
   "prometheus-client==0.26.0",
@@ -20,13 +20,13 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "pytest==9.1.1",
-  "pytest-asyncio==1.4.0",
+  "pytest==9.2.0",
+  "pytest-asyncio==1.4.1",
   "pytest-cov==7.1.0",
   "testcontainers[postgres,kafka]==4.15.0",
-  "fakeredis==2.39.0",
-  "ruff==0.16.10",
-  "mypy==2.4.0",
+  "fakeredis==2.40.0",
+  "ruff==0.17.3",
+  "mypy==2.4.1",
   "types-pyyaml==6.0.12.20260906",
   "pip-audit==2.10.1",
 ]
