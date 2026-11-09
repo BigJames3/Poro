@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build context: repository root (needs packages/shared-go).
 
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 WORKDIR /src
 COPY packages/shared-go /src/packages/shared-go
